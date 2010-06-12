@@ -69,3 +69,19 @@
 // 	\sync,
 // 	funcCmd: { t.stop },
 
+
+
+// SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
+// 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0|
+// 	var harm = \harm.kr((1..5)),
+// 		amps = \amps.kr((1..5).reciprocal),
+// 		decays = \decays.kr(1 ! 5),
+// 		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+// 			* EnvGen.kr(Env.linen(attack, time, decay)),
+// 		// Klank(decay) - Klank(attack) is like a bank of Formlets
+// 		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
+// 			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack);
+// 	sig = Limiter.ar(sig + filt);
+// 	DetectSilence.ar(sig, 0.001, doneAction: 2);
+// 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+// }).add;
