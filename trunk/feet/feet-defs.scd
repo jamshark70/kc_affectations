@@ -254,24 +254,9 @@ SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
 
-// SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
-// 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0|
-// 	var harm = \harm.kr((1..5)),
-// 		amps = \amps.kr((1..5).reciprocal),
-// 		decays = \decays.kr(1 ! 5),
-// 		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
-// 			* EnvGen.kr(Env.linen(attack, time, decay)),
-// 		// Klank(decay) - Klank(attack) is like a bank of Formlets
-// 		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
-// 			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack);
-// 	sig = Limiter.ar(sig + filt);
-// 	DetectSilence.ar(sig, 0.001, doneAction: 2);
-// 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
-// }).add;
-
 SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
-//		filtAmp = 1,
+		filtAmp = 1,
 		shapebuf = -1, shapeXf = 1, chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
 		lpfreq = 2000, lprq = 1|
 	var harm = \harm.kr((1..5)),
@@ -284,7 +269,7 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
 			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack),
 		shaped, dly, cfreqRand = chorusFreq * 0.2;
-	sig = (sig + Limiter.ar(filt)); // * filtAmp;
+	sig = sig + (Limiter.ar(filt) * filtAmp);
 	shaped = Select.ar(shapebuf < 0, [Shaper.ar(shapebuf, sig), sig]);
 	sig = XFade2.ar(sig, shaped, shapeXf);
 	dly = sig;
@@ -475,10 +460,12 @@ PR(\abstractProcess).clone {
 			Pbind(
 				\instrument, Pseq(#[bufGrainPanKlank, rest]),
 				\delta, Pseq([1, parms[\dur] - 1], 1),
-				\amp, parms[\numWalkers].reciprocal, // ~amp.(i, parms),
+// 				\amp, parms[\numWalkers].reciprocal, // ~amp.(i, parms),
+				\amp, ~amp.(i, parms),
 				\filtAttack, BPStream(\klankAttack),
 				\filtDecay, BPStream(\accDecay),
 //				\filtAmp, parms[\numWalkers].reciprocal,
+// 				\filtAmp, BPStream(\filtAmp),
 				\ffreq, BPStream(\combFreq),
 				\lpfreq, ~hiFilt,
 				\chorusAmt, BPStream(\syncopChorusAmt),
@@ -494,6 +481,7 @@ PR(\abstractProcess).clone {
 				\filtAttack, BPStream(\klankAttack),
 				\filtDecay, BPStream(\accDecay),
 //				\filtAmp, parms[\numWalkers].reciprocal,
+// 				\filtAmp, BPStream(\filtAmp),
 				// ~def uses ffreq; klank synth uses lpfreq
 				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
 				\lpfreq, ~hiFilt,
@@ -502,20 +490,19 @@ PR(\abstractProcess).clone {
 			)
 		},
 		stepsacc: { |i, parms|
-			Pbind(~gestures[\accsteps].value(i, parms, Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank])),
-				\amp, Pkey(\amp) * -5.dbamp)
-// 			Pbindf(~gestures[\accsteps].value(i, parms),
-// 				\instrument, Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank])
-// 			)
+			Pbindf(~gestures[\accsteps].value(i, parms, Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank]))/*,
+				\amp, Pkey(\amp) * -5.dbamp*/)
 		},
 		stepsaccUnpitched: { |i, parms|
 			Pbindf(~gestures[\accsteps].value(i, parms,
 				Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank])),
-				\filtDecay, Pkey(\filtAttack),
-				\amp, Pkey(\amp) * 5.dbamp
+				\filtDecay, Pkey(\filtAttack)//,
+//				\amp, Pkey(\amp) * 5.dbamp
 			)
 		},
 
+// filtAmp will NOT help with unpitched variants
+// because filtAttack == filtDecay cancels out the filter!
 		accstepsUnpitched: { |i, parms|
 			Pbindf(~gestures[\accsteps].value(i, parms),
 				\filtDecay, Pkey(\filtAttack),
@@ -634,8 +621,8 @@ PR(\abstractProcess).clone {
 	~mode = \g;
 	~combMel = Paccumbounce(28, 49, Pwhite(-7, 7, inf).reject(_ == 0));
 	~filtDecay = 1.0;
-	~filtAmpSpec = #[0, 1, -6].asSpec;
-	~filtAmp = Pkey(\filtDecay).collect(~filtAmpSpec.map(_));
+	~filtAmpSpec = [7.dbamp, -5.dbamp, \exp].asSpec;
+//	~filtAmp = Plazy { Pkey(\filtDecay).collect(~filtAmpSpec.map(_)) };
 
 	~syncProb = 0.1;
 
@@ -796,6 +783,10 @@ PR(\abstractProcess).clone {
 				};
 			}
 		}, inf)
+.collect { |ev|
+	if(ev[\instrument] != ~def) { ev[\amp].debug("amp") };
+	ev
+}
 	};
 
 	~playfx = {
