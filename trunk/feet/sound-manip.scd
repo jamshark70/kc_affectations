@@ -44,7 +44,8 @@ Dialog.getPaths({ |path| p = path });
 p = p[0];
 
 p = (if(thisProcess.platform.name == \osx) {
-	"/Users/dewdrop/sounds/fx/footsteps"
+	"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+//	"/Users/dewdrop/sounds/fx/footsteps"
 } {
 	"/media/DLM/trax/kc/samples/feet"
 }) +/+ "58454_sinatra314_footsteps_wooden_floor_loop.wav";
@@ -271,7 +272,8 @@ PR(\abstractProcess).clone {
 	~prep = {
 		~chan = MixerChannel(~collIndex, s, 2, 2);
 		~path = (if(thisProcess.platform.name == \osx) {
-			"/Users/dewdrop/sounds/fx/footsteps"
+			"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+//			"/Users/dewdrop/sounds/fx/footsteps"
 		} {
 			"/media/DLM/trax/kc/samples/feet"
 		}) +/+ "58454_sinatra314_footsteps_wooden_floor_loop.wav";

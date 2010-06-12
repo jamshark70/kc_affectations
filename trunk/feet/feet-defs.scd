@@ -366,7 +366,8 @@ PR(\abstractProcess).clone {
 			chan.playfx(Instr.at("busfx.limiter"), [0, 2, 0.99]);
 		});
 		~path = (if(thisProcess.platform.name == \osx) {
-			"/Users/dewdrop/sounds/fx/footsteps"
+			"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+//			"/Users/dewdrop/sounds/fx/footsteps"
 		} {
 //			"/media/DLM/trax/kc/samples/feet"
 			basepath = (thisProcess.nowExecutingPath ?? { Document.current.path });
@@ -994,7 +995,8 @@ make: { |name|
 		userprep: {
 			~buf ?? {
 				~bufpath = (if(thisProcess.platform.name == \osx) {
-						"/Users/dewdrop/sounds/fx/water"
+						"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+// 						"/Users/dewdrop/sounds/fx/water"
 					} {
 						basepath = (thisProcess.nowExecutingPath ?? { Document.current.path });
 						if(basepath.notNil) { basepath.dirname.dirname +/+ "samples/feet" }
