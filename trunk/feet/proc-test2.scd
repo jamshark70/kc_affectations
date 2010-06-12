@@ -1,10 +1,9 @@
 // building multi-process complexes
 
 // c. 7min
-// todo: adjust mix (less waterchord, stw level)
 // fix opening chord sound
-// more interesting rhythm for stw
 // reverb?
+// lpc
 
 SynthDescLib.global.browse;
 Object.browse;
@@ -27,7 +26,7 @@ var cc;
 	cc = VoicerMIDIController(\omni, \knob);
 	cc => CC.prNew(cc.ccnum.shortName.asSymbol);
 };
-)
+);
 
 4.do { |i| CC(("k" ++ i).asSymbol) => VP(0) };
 
@@ -102,11 +101,16 @@ t.isPlaying
 Dialog.getPaths({ |p| p.postln });
 ~master.startRecord("/Users/dewdrop/SCServer/trax/kc/feet1.aiff");
 
+(
+var w;
 ~timer = DDWTimer.new;
+w = Window.allWindows.detect { |w| w.name == "DDWTimer" };
+if(w.notNil) { w.onClose = { topEnvironment[\timer] = nil } <> w.onClose };
+)
 
 // coordinate
 (
-var	hoptime = 60;
+var	hoptime = 15;
 
 ~chordDoneSignal = {
 	~doneSignal = NotificationCenter.registerOneShot(
@@ -130,7 +134,7 @@ t = TLSequenceIterator([
 		topEnvironment[\timer] !? { topEnvironment[\timer].reset };
 	}),
 	Quant(1, -0.5),
-
+/*
 	// `nil: we need the bpcmd to use BP(\st)'s quant instead of default NilTimeSpec
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.printStopMsg = false;
@@ -160,7 +164,7 @@ t = TLSequenceIterator([
 	bp1eventCmd: (name: \slch, shouldSync: true, setDoneSignal: ~chordDoneSignal),
 	\sync,
 	4,
-
+*/
 
 // thinking of 'hop' gesture: all walkers hit a klank chord - combFreq for pitches
 // ok... needs better pitch pattern
@@ -174,7 +178,7 @@ t = TLSequenceIterator([
 		bp.accDecay = Env(#[0.011, 0.025], [hoptime], 4);
 	}),
 
-
+/*
 	// chords;
 	{	MBM(0)[\ch2] => BP(\slch);
 		BP(\slch).arpeg = \smallInt1;
@@ -229,7 +233,7 @@ t = TLSequenceIterator([
 	{	var	bp = BP(\st);
 		"moving on".debug;
 		bp.klankDcyCtl.value = 0.011;
-		bp.accDecay = Env(#[0.025, 0.011], #[75]);
+		bp.accDecay = Env(#[0.025, 0.011], #[75]).asStream.trace(prefix: "accDecay: ");
 		bp.gsel = Ppatlace([\unison, Pseq([Pn(\oneSyncop, 3), Pn(\manySyncop, inf)], 1)], inf);
 		bp.numWalkers = Pstutter(2, Pseq([3, 3, 3, Pn(5, inf)], 1));
 		// numSyncop doesn't get called when gsel is oneSyncop
@@ -309,7 +313,7 @@ t = TLSequenceIterator([
 	\cmdSync,
 	Quant(1, -0.5),
 	3,
-
+*/
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.numWalkers = 3;
 		bp.gsel = \one;
@@ -358,7 +362,7 @@ t = TLSequenceIterator([
 		value: 0.75, time: 25, curve: 2.1),
 	9,
 	mixerAutoSynthCmd: (mixer: { BP(\stw).chan }, name: \ctlPoint, outName: \outbus,
-		value: -8.dbamp, time: 25, curve: 2.1)
+		value: -12.dbamp, time: 25, curve: 2.1)
 	],
 	\cmdSync,	// wait until all the water bits are faded in
 	Quant(1, -0.5),
@@ -379,11 +383,11 @@ t = TLSequenceIterator([
 		VC(\wp).env.playfx;
 	}, resetBP: { VC(\wp).env.stopfx }),
 	mixerAutoSynthCmd: (mixer: { VC(\wp).env.target }, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[-40, -27].dbamp, #[24], 2.1)),
+		connect: 0, env: Env(#[-40, -33].dbamp, #[24], 2.1)),
 	mixerAutoSynthCmd: (mixer: { VC(\wp).env.combsMC }, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[-inf, -22].dbamp, #[39], 2.1)),
+		connect: 0, env: Env(#[-inf, -25].dbamp, #[39], 2.1)),
 	gcAutoSynthCmd: (gc: { VC(\wp).v.globalControls[\ffreq] }, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[170, 1200, 400], #[80, 70], \exp)),
+		connect: 0, env: Env(#[170, 1200, 400], #[60, 65], \exp)),
 //	{ (105 * thisThread.clock.tempo).roundUp },
 	{ (45 * thisThread.clock.tempo).roundUp },
 	{	BP(\stw).gesture = \onept5stretch;
@@ -403,17 +407,28 @@ t = TLSequenceIterator([
 	],
 	funcCmd: (func: {
 		"bigstretch".debug;
-		BP(\stw).dur_((Pwhite(14, 20, 4) * Pgeom(1, 0.84, inf)).round)
+		// collect here is a variant on 'once'
+		// the first time, it will use the ~stop.() function below;
+		// after that it's replaced by an inert 'return the argument' func
+		BP(\stw).dur_((Pwhite(9, 15, 4) * Pgeom(1, 0.84, inf)).round.collect(e { |ev| ~doneSignal.(ev) }))
 			.preSync_(Pfunc { |dur| dur } - Pwhile1({ |dur, next| next < dur }, Pseries(2, Prand(#[1, 2], inf), inf)))
 			.gesture_(\stepsStretch).gsel_(\unison);
 	}, setDoneSignal: {
-		~doneSignal = Updater(BP(\stw), e { |obj, what, more|
-			if(more == \stopped) { ~stop.() };
-		});
-	}, clearDoneSignal: {
-		~doneSignal.remove;
+		~doneSignal = e { |ev| ~doneSignal = { |ev| ev }; ~stop.(); ev };
 	}),
-	\cmdSync,
+	\cmdSync,	// this is so I know when bigstretch *really* started
+	mixerAutoSynthCmd: (mixer: { BP(\stw).chan }, name: \ctlPoint, outName: \outbus,
+		value: -4.dbamp, time: 14, curve: 2.1),
+	funcCmd: (func: { nil },
+		setDoneSignal: {
+			~doneSignal = Updater(BP(\stw), e { |obj, what, more|
+				if(more == \stopped) { ~stop.() };
+			});
+		}, clearDoneSignal: {
+			~doneSignal.remove;
+		}
+	),
+	\cmdSync,	// and this is so I know when stepsStretch ran out of parent events
 		// I can't believe this actually worked!
 	bpCmd: (name: \stw, quant: `nil, prepareBP: { |bp|
 		bp.dur_(Pseries(3, Prand(#[1, 2, 3], 5))).preSync_(0);
