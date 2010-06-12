@@ -1,0 +1,526 @@
+// filtering: needs to change ffreq when syncopation is active
+// other kinds of syncopation
+
+ChuckableBrowser.newWindow;
+SynthDescLib.global.browse;
+Object.browse;
+s.queryAllNodes;
+
+MIDIPort.init([1]);
+MIDIPort.resetAll;
+
+(
+[m, n].free;
+m = MixerChannel(\test1, s, 1, 2);
+n = MixerChannel(\test2, s, 2, 2);
+//MixingBoard(\test, nil, m, n);
+
+b = MixingBoard.new;
+8.do { |i|
+	MixerChannelGUI.new(nil, b) => MCG.prNew(i);
+	if(MIDIPort.initialized) {
+		MixerMIDIControl(\omni, nil, MCG(i).v);
+	};
+	b.add(MCG(i).v);
+};
+
+m => MCG(0); n => MCG(1);
+//~master => MCG(7);
+)
+
+MixingBoard.at(0).refresh;
+
+// in case I forgot to init midi first
+8.do { |i| MixerMIDIControl(\omni, nil, MCG(i).v); };
+
+
+
+
+Dialog.getPaths({ |path| p = path });
+p = p[0];
+
+p = (if(thisProcess.platform.name == \osx) {
+	"/Users/dewdrop/sounds/fx/footsteps"
+} {
+	"/media/DLM/trax/kc/samples/feet"
+}) +/+ "58454_sinatra314_footsteps_wooden_floor_loop.wav";
+
+b = Buffer.readAndQuery(s, p);
+b.numChannels
+
+b = Buffer(s, nil, nil, 0);
+b.updateInfo;
+
+// wet should be fairly low, < -0.8
+(
+a = m.play(
+	Instr("test1", { |bufnum, freq, decay = 0.1, wet = -1|
+		var sig = PlayBuf.ar(1, bufnum, BufRateScale.ir(bufnum), loop: 1),
+			kl = DynKlank.ar(`[
+				({ ExpRand(1.0, 5.0) } ! 5) * freq,
+				0.2 ! 5,
+				decay ! 5
+			], sig);
+			//kl = Ringz.ar(sig, freq, decay);
+		XFade2.ar(sig, Limiter.ar(kl), wet)
+	}, [\mybuf, \freq, #[0.01, 5, \exp], \bipolar]),
+	[b]
+);
+a.gui;
+)
+
+m.scope
+
+c = Buffer.readAndQuery(s, "~/share/sc-svn/common/build/sounds/a11wlk01.wav".standardizePath);
+
+// maybe...
+a = m.play {
+	var	s1 = PlayBuf.ar(1, b, BufRateScale.ir(b), loop: 1),
+	s2 = PlayBuf.ar(1, c, BufRateScale.ir(c), loop: 1);
+	Convolution.ar(s2, s1)
+};
+
+a.free;
+
+
+// get tempo from beat track? nope, not accurate enough
+a = m.play {
+	var	sig = PlayBuf.ar(1, b, BufRateScale.ir(b), loop: 1),
+	fft = FFT(LocalBuf(1024, 1), sig),
+	trackb, trackh, trackq, tempo;
+	#trackb, trackh, trackq, tempo = BeatTrack.kr(fft);
+	tempo.poll(trackb, "tempo");
+	(SinOsc.ar(220) * Decay2.kr(trackb, 0.01, 0.1)) + sig
+};
+
+a.free;
+
+
+// read labels set in audacity
+~pt = TabFileReader.read(b.path.dirname +/+ "58454_labels.txt");
+~pt = TabFileReader.read(p.dirname +/+ "58454_labels.txt");
+~pt = ~pt.flop[0].asFloat;
+
+~ptd = ~pt.differentiate.drop(1);
+~mean = ~ptd.mean;
+~evenpts = Array.series(~ptd.size, ~pt[1], ~mean);
+~error = ~evenpts - ~pt[1..];
+~error.mean
+
+// write exact points out to audacity label file
+f = File(p.dirname +/+ "58454_labels2.txt", "w");
+([
+	{ |i| "t" ++ i } ! ~ptd.size,
+	~pt[1..]
+].flop ++ [
+	{ |i| "e" ++ i } ! ~ptd.size,
+	~evenpts
+].flop)
+.sort({ |a, b| a[1] < b[1] })
+.do({ |row|
+	f << ("%\t%\t%\n".format(row[1], row[1], row[0]))
+});
+f.close;
+
+
+p = m.play(
+	Pbind(
+		\instrument, \bufGrain,
+		\bufnum, b,
+		\time, ~mean * 4,
+		\delta, Pkey(\time),
+		\amp, 1
+	)
+);
+
+TempoClock.default.tempo = ~mean.reciprocal;
+TempoClock.default.tempo = 110 / 60;
+TempoClock.default.gui;
+
+// is this right? playing the footsteps faster?
+// seems like it makes more sense that way
+p = m.play(
+	Pbind(
+		\instrument, \bufGrain,
+		\bufnum, b,
+		\delta, 1, // 0.69704989285714,  // 0.69... == ~ptd.mean
+		\time, Pkey(\delta) / Ptempo(),
+		\rate, Pseq(~ptd, inf) / ~mean, // * (110/86),
+		\attack, 0.005,
+// 		\start, (Pseq(~pt[1..], inf) - Pkey(\attack)) * b.sampleRate,
+		\start, (Pseq(~pt[1..], inf) - (0.25 * Pkey(\rate))) * b.sampleRate,
+		\amp, 4
+	),
+	(quant: #[1, -0.25])
+);
+
+SynthDef(\singrain, { |outbus, freq = 440, amp = 1, time = 1, pan = 0|
+	Out.ar(outbus, Pan2.ar(SinOsc.ar(freq, 0, amp) * EnvGen.kr(Env.perc(0.01, time), doneAction: 2), pan));
+}).add;
+
+// happy with this
+p = n.play(
+	Ptpar([
+		0, Pbind(
+			\instrument, \bufGrainPan,
+			\bufnum, b,
+			\delta, 1/3, // 0.69704989285714,  // 0.69... == ~ptd.mean
+			\time, Pkey(\delta) / Ptempo(),
+			\rate, Pseq(~ptd, inf) / ~mean * 3, // * (110/86),
+			\attack, 0.005,
+			// 		\start, (Pseq(~pt[1..], inf) - Pkey(\attack)) * b.sampleRate,
+			\start, (Pseq(~pt[1..], inf) - (0.18 / Ptempo() * Pkey(\rate))) * b.sampleRate,
+			\amp, 1,
+			\pan, -1
+		),
+		0.18, Pbind(
+			\instrument, \singrain,
+			\amp, 1,
+			\time, 0.15,
+			\freq, 880,
+			\pan, 1
+		)
+	]),
+	(quant: #[1, -0.18])
+);
+
+p.stop;
+
+Pbindf(Ptpar([
+	0, Pbind(
+		\instrument, \bufGrainPan,
+		\bufnum, b,
+		\delta, 1, // 0.69704989285714,  // 0.69... == ~ptd.mean
+		\time, Pkey(\delta) / Ptempo(),
+		\rate, 1, // Pseq(~ptd, inf) / ~mean, // * (110/86),
+		\attack, 0.005,
+		// 		\start, (Pseq(~pt[1..], inf) - Pkey(\attack)) * b.sampleRate,
+		\start, (Pseq(~pt[1..], inf) - (0.25 / Ptempo() * Pkey(\rate))) * b.sampleRate,
+		\pan, -1,
+		\amp, 1
+	),
+	0.25, Pbind(
+		\instrument, \singrain,
+		\amp, 1,
+		\time, 0.15,
+		\freq, 880,
+		\pan, 1
+	)
+]), \outbus, Pkey(\out)).record(b.path.dirname +/+ "tempo-test3.aiff", dur: 20);
+
+s.queryAllNodes;
+s.sendMsg(\n_trace, 1221);
+
+m.scope
+
+p.isPlaying
+
+
+p = n.play(
+	Pbind(
+		\instrument, \bufGrainPan,
+		\bufnum, b,
+		\delta, 1,
+		\time, Pkey(\delta) / Ptempo(),
+		// random indices, but a value must not repeat either of the previous 2
+		\i, Penvir(
+			(prev: nil ! 2, index: 0),
+			Pwhite(0, ~ptd.size - 1, inf).reject { |x|
+				var	test = ~prev.includes(x);
+				~prev[~index] = x;
+				~index = (~index + 1) % ~prev.size;
+				test
+			}
+		).clump(3),
+		\rate, Pindex(~ptd, Pkey(\i), inf) / ~mean, // Pseq(~ptd, inf) / ~mean, // * (110/86),
+		\attack, 0.005,
+// 		\start, (Pseq(~pt[1..], inf) - (0.25 / Ptempo() * Pkey(\rate))) * b.sampleRate,
+		\start, (Pindex(~pt[1..], Pkey(\i), inf) - (0.25 / Ptempo() * Pkey(\rate))) * b.sampleRate,
+		\amp, 1,
+		\pan, #[-1, 0, 1],
+		\lag, Pwhite(0.0, 0.03, inf).clump(3)
+	)
+);
+
+p.stop;
+
+
+// pr: manage rhythmic counterpoint
+// user's responsibility to make sure leadTime = 0.5 * maxLag * tempo
+(
+SynthDef(\bufGrainPanFilt, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus, ffreq = 2000|
+	var sig;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+		* EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	sig = LPF.ar(sig, ffreq);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer);
+	~quant = #[1, -0.25].asTimeSpec;
+	~alwaysReset = true;	// supports changes in ~numWalkers while stopped
+	~def = \bufGrainPanFilt;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2);
+		~path = (if(thisProcess.platform.name == \osx) {
+			"/Users/dewdrop/sounds/fx/footsteps"
+		} {
+			"/media/DLM/trax/kc/samples/feet"
+		}) +/+ "58454_sinatra314_footsteps_wooden_floor_loop.wav";
+		~buf = Buffer.readAndQuery(s, ~path);
+
+		~pt = TabFileReader.read(~path.dirname +/+ "58454_labels.txt").flop[0].asFloat;
+		~ptd = ~pt.differentiate.drop(1);
+		~pt = ~pt.drop(1);
+		~mean = ~ptd.mean;
+
+		currentEnvironment
+	};
+
+	~freeCleanup = {
+		[~chan, ~buf].free;
+	};
+
+	~lastEventTime = 0;
+	~lastItems = IdentitySet.new;
+
+	~numWalkers = 3;
+	~numWalkers_ = { |numW|
+		~numWalkers = numW;
+		if(BP(~collIndex).isPlaying) {
+			"BP(%): numWalkers changed, but won't take effect until after stopping."
+				.format(~collIndex.asCompileString).warn;
+		};
+		currentEnvironment
+	};
+
+	~gestures = (
+		one: { |i| Pbind(\delta, 1, \amp, ~amp.(i), \ffreq, ~loFilt) },
+		halfSyncop: { |i, parms| 
+			Pbind(
+				\delta, Pseq([Pn(1, parms[\preSyncop]), 1.5, Pn(1, inf)], 1),
+				\amp, ~amp.(i),
+				\ffreq, Pseq([Pn(~loFilt, parms[\preSyncop]), Pn(~hiFilt, inf)], 1)
+			)
+		},
+		triplet4: { |i, parms|
+			Pbind(
+				\delta, Pseq([Pn(1, parms[\preSyncop]), Pn(2/3, inf)], 1),
+				\amp, ~amp.(i),
+				\ffreq, Pseq([Pn(~loFilt, parms[\preSyncop]), Pn(~hiFilt, inf)], 1)
+			)
+		},
+		
+	);
+
+	~loFilt = 2400;
+	~hiFilt = 18000;
+	~index = Plazy { Pwhite(0, ~ptd.size - 1, inf) };
+	~delta = { |key, parms|
+		Plazy { ~deltas[key].(parms).asPattern }
+	};
+	~rate = 1.25;
+	~eventLag = Pwhite(0.0, 0.03, inf);
+
+	~pan = { |i|
+		if(~numWalkers > 1) {
+			i.linlin(0, ~numWalkers - 1, -1, 1)
+		} {
+			0
+		}
+
+	};
+();
+	~amp = 1;
+
+	~oneWalkerPattern = { |gesture, i, parms|
+		Pbind(
+			\time, Pif(Pfunc { |ev| ev[\time].isNil },
+				min(1, Pkey(\delta)) / Ptempo(),
+				Pkey(\time)
+			)
+		)
+		<>
+		~gestures[gesture].value(i, parms)
+		<>
+		Pbind(
+			\instrument, ~def,
+			\bufnum, ~buf,
+			// random indices, but a value must not repeat any chosen at the current timepoint
+			\i, BPStream(\index).reject { |x|
+				if(thisThread.clock.beats == ~lastEventTime) {
+					if(~lastItems.includes(x)) {
+						true
+					} {
+						~lastItems.add(x);
+						false
+					}
+				} {
+					~lastItems.clear.add(x);
+					// this needs to be set only when the two are not equal
+					// and that happens only in this false branch
+					~lastEventTime = thisThread.clock.beats;
+					false
+				};
+			}, // .collect { |x| x.debug(thisThread.clock.beats.asString); x },
+			\rate, Pindex(~ptd, Pkey(\i), inf) / ~mean * BPStream(\rate),
+			\attack, 0.005,
+			// note, phase is expected to be -1..0 so '+' really subtracts
+			\start, (Pindex(~pt, Pkey(\i), inf) + (BP(~collIndex).quant.phase / Ptempo() * Pkey(\rate))) * ~buf.sampleRate,
+			\lag, BPStream(\eventLag),
+			\chan, ~chan,
+
+			\pan, ~pan.(i)
+		)
+	};
+
+// 	~asPattern = {
+// 		Ppar({ |i|
+// 			~oneWalkerPattern.(
+// 				~pan.(i),
+// 				~delta.(i),
+// 				~amp.(i)
+// 			)
+// 		} ! ~numWalkers, inf)
+// 	};
+
+	~asPattern = {
+		PnNilSafe(Plazy {
+			var	dur = rrand(18, 32),
+				preSyncop = (dur * rrand(0.3, 0.6)).roundUp(1),
+				whichSyncop = if(~numWalkers > 1) { ~numWalkers.rand } { -999 },
+				parms = (preSyncop: preSyncop, whichSyncop: whichSyncop);
+			Pfindur(dur, Ppar(
+				{ |i|
+					~oneWalkerPattern.(
+						if(i == whichSyncop) { #[halfSyncop, triplet4].choose } { \one },
+						i,
+						parms
+					)
+				} ! ~numWalkers
+			))
+		}, inf)
+	};
+} => PR(\steps1);
+)
+
+BP(\st).free;
+PR(\steps1) => BP(\st);
+BP(\st) => MCG(2);
+BP(\st).leadTime = 0.015 * (110/60);
+
+#[1, -0.18].asTimeSpec.wrap_(true) => BP(\st);
+BP(\st).quant.phase
+
+BP(\st).play(doReset: true);
+BP(\st).stop;
+
+BP(\st).isPlaying
+BP(\st).eventLag = 0;
+
+PeakMonitor(BP(\st).chan)
+
+// why does #1 sound late when it's syncopated?
+BP(\st).delta = { |i|
+	if(i == 1) { Pseq([Pn(1, { rrand(8, 16) }), 1.5], inf) }
+	{ 1 }
+};
+
+BP(\st).amp = 1;
+
+BP(\st).numWalkers = 1;
+BP(\st).delta = Pseq([Pn(1, { rrand(8, 16) }), 1.5], inf);
+BP(\st).normPan = BP(\st).v[\panForWalker];
+BP(\st).panForWalker = -1;
+BP(\st).eventLag = 0;
+
+(
+BP(\st).play;
+
+z = n.play(
+	Pbind(
+		\instrument, \singrain,
+		\freq, Pseq(#[440, 880], inf),
+		\delta, 0.5,
+		\time, 0.15,
+		\amp, Pseq(#[1, 0.4], inf),
+		\pan, 1
+	),
+	(quant: 1)
+);
+)
+
+z.stop; BP(\st).stop;
+
+(
+t = TLSequenceIterator([
+	bpCmd: (name: \st, dur: 45, prepareBP: { |bp|
+		bp.numWalkers = 1;
+	}),
+	\sync,
+	12,
+	bpCmd: (name: \st, dur: 45, prepareBP: { |bp|
+		bp.numWalkers = 2;
+	}),
+	\sync,
+	12,
+	bpCmd: (name: \st, dur: 45, prepareBP: { |bp|
+		bp.numWalkers = 3;
+	})
+]).play
+)
+
+t.stop;
+
+BP(\st).gestures.halfSyncop = { |i, parms| 
+			Pbind(
+				\delta, Pseq([Pn(1, parms[\preSyncop]), 1.5, Pn(1, inf)], 1),
+				\time, min(1, Pkey(\delta)) / Ptempo(),
+				\amp, ~amp.(i),
+				\ffreq, Pseq([Pn(~loFilt, parms[\preSyncop] + 1), Pn(~hiFilt, inf)], 1)
+			)
+		};
+BP(\st).gestures.one = { |i| Pbind(\delta, 1, \time, min(1, Pkey(\delta)) / Ptempo(), \amp, ~amp.(i), \ffreq, ~loFilt) };
+
+BP(\st).loFilt = 2000;
+
+BP(\st).asPattern = {
+		PnNilSafe(Plazy {
+			var	dur = rrand(18, 32),
+				preSyncop = (dur * rrand(0.3, 0.6)).roundUp(1),
+				whichSyncop = if(~numWalkers > 1) { ~numWalkers.rand } { -999 },
+				parms = (preSyncop: preSyncop, whichSyncop: whichSyncop);
+			Pfindur(dur, Ppar(
+				{ |i|
+					~oneWalkerPattern.(
+ 						if(i == whichSyncop) { #[halfSyncop, triplet4].choose } { \one },
+// 						if(i == whichSyncop) { \halfSyncop } { \one },
+						i,
+						parms
+					)
+				} ! ~numWalkers
+			))
+		}, inf)
+	};
+BP(\st).numWalkers = 3;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+n.play(\bufGrainPanFilt, [start: [430909, 0, 0, 0, 1.31545, 1, 0.005, 0.02, 20, 18000]]);
+n.play(\bufGrainPanFilt, [start: [528490, 0, 0, 0, 1.31443, 1, 0.005, 0.02, 20, 1200]]);
+
+SynthDescLib.at(\bufGrainPanFilt).msgFunc.postcs
+
+BasicTimeSpec
+
+
+// wanted more chaotic, multiple attacks overlapping
+a = n.play {
+	TGrains.ar(2, Impulse.kr(22), b, 110/60, Line.kr(0, b.duration, b.duration * 5), dur: 0.6)
+};
+
+a.free;

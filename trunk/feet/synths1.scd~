@@ -1,0 +1,81 @@
+
+
+ChuckableBrowser.newWindow;
+SynthDescLib.global.browse;
+Object.browse;
+s.queryAllNodes;
+
+MIDIPort.init([1]);
+MIDIPort.resetAll;
+
+(
+[m, n].free;
+m = MixerChannel(\test1, s, 1, 2);
+n = MixerChannel(\test2, s, 2, 2);
+//MixingBoard(\test, nil, m, n);
+
+b = MixingBoard.new;
+8.do { |i|
+	MixerChannelGUI.new(nil, b) => MCG.prNew(i);
+	if(MIDIPort.initialized) {
+		MixerMIDIControl(\omni, nil, MCG(i).v);
+	};
+	b.add(MCG(i).v);
+};
+
+m => MCG(0); n => MCG(1);
+//~master => MCG(7);
+
+{ MixingBoard.at(0).refresh }.defer(3.0);
+)
+
+MixingBoard.at(0).refresh;
+
+// in case I forgot to init midi first
+8.do { |i| MixerMIDIControl(\omni, nil, MCG(i).v); };
+
+
+
+// wavetable synth with slide (introduce pitches into feet section)
+// decent prototype
+~wt.free;
+
+~wt = \makeWavetables.eval(8, s, 2048, nil, { |numHarm|
+	Array.sawtoothAmps(numHarm)
+});
+
+WrapInstr("osc2.vosc3map").listArgs
+
+WrapInstr("osc2.vosc3mapslide", { |freq, startFreq, slideTime = 0, slideTrig = 1|
+	freq = EnvGen.kr(Env([startFreq, freq], [slideTime], \sin), slideTrig);
+	WrapInstr.wrap("osc2.vosc3map", [freq]);
+}, [NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec(0, 2), TrigSpec.new]);
+
+v.free;
+
+v = WrapInstr("osc2.vosc3mapslide").miditest(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(127.midicps), \env, Env.adsr(0.5, 0.1, 0.8, 0.6)], target: m);
+
+v.unmapGlobal(\startFreq);
+
+k = MIDIPort.search(v);
+
+// very basic
+k.noteOnArgsPat = Pbind(
+	\startFreq, Pkey(\midinote).midicps,
+	\slideTrig, 1
+);
+
+k.noteOnArgsPat = Penvir((), Pbind(
+	\startFreq, Pif(Pfunc { v.playingNodes.size > 0 },
+		Pfunc { ~lastFreq },
+		Pkey(\midinote).midicps
+	),
+// 	\startFreq, Pseq([
+// 		Pfin(1, Pkey(\midinote).midicps),
+// 		Pfunc { ~lastFreq }
+// 	]),
+	\saveFreq, Pfunc { |ev| ~lastFreq = ev[\midinote].midicps },
+	\slideTrig, 1
+));
+
+v.trace;

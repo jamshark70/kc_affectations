@@ -1,0 +1,43 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 TRANSITIONAL//EN">
+<html>
+
+	<head>
+		<title>arms-sect-test1 README</title>
+	</head>
+	<body>
+
+<h3>Running this prototype</h3>
+
+<ol type="1">
+	<li>Put both .scd files into the same directory.</li>
+	<li>Open "arms-sect-test1.scd" -- in supercollider/emacs, <b>C-x C-f</b> and then enter the path to the file (tab completions should work).</li>
+	<li>Run one of the <b>~useMouse</b> lines to tell the program whether to receive the grid coordinates from vvvv (false) or from mouse movement on the supercollider machine (true). In Emacs, position the cursor anywhere on the relevant line and hit <b>C-c C-c</b>.</li>
+	<li>Then run the entire block enclosed in parentheses below that. Put the cursor before or after the opening paren and hit <b>C-M-x</b> (aka ctrl-alt-x).</li>
+</ol>
+
+<p>It should start making noise in a couple of seconds.</p>
+
+<ul>
+<li>Adjust the balance between chord and bass using the mixing board, or set the overall audio level using 3rd mixer ("master").
+
+<li>There's another little window with a slider, which adds a rhythmic element to the bass. Move it to the left to have the sound decay away from the rhythms, or to the right to have it sweep up to the accents.
+
+<li>Chord notes are triggered when the y-direction changes (up to down or vice versa).
+
+<li>From time to time, the pitches will slide to a new chord. This happens rather often for testing (to the point of being a bit obnoxious), but if it's triggered by a specific, recognizable gesture from the dancers and happens no more than three or four times in a span of, say, five minutes, it could be pretty hot.
+
+<li>When you're finished, close the yellow window and everything should stop.
+
+<ul>
+<li>The last resorts for an emergency stop are C-c C-s (which stops all the virtual machine threads and kills the synths on the server), or C-c C-l, which is even more brutal and restarts the language completely.
+</ul>
+</ul>
+
+<h3>Sending x/y to supercollider</h3>
+
+<p>Use this OSC prototype. Send via UDP to port 57110 on the SC machine.</p>
+
+<pre>["/n_set", 3996, 2, x, y]</pre>
+
+	</body>
+</html>

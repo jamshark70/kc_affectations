@@ -1,0 +1,450 @@
+// some general definitions
+
+
+{ |minval, midval, maxval|
+	var a, b, c, sqrterm, qresult, sgn = sign(maxval - minval);
+		// the formula is unstable just above the average of minval and maxval
+		// so mirror the midval around the average
+	(midval > ((maxval + minval) * 0.5)).if({
+		midval = minval + maxval - midval;
+		sgn = sgn.neg;
+	});
+	a = midval - minval;
+	b = minval - maxval;
+	c = maxval - midval;
+	sqrterm = sqrt(b.squared - (4 * a * c));
+	(((qresult = (sqrterm - b) / (2 * a))).abs != 1).if({
+		// note, NOT taking the log here
+		// because the mapsynth would just have to .exp it
+//		log(qresult.squared).abs * sgn
+		qresult.squared * sgn
+	}, {
+		((b.neg - sqrterm) / (2 * a)).squared * sgn
+	});
+} => Func(\growForCurve);
+
+
+SynthDef(\mapParm, { |bus, lo = 0, hi = 1, grow = 1|
+	var	a, b;
+	grow = Select.kr(InRange.kr(grow, 0.999, 1.001), [grow, 1.001]);
+	a = (hi-lo) / (1.0 - grow);
+	b = lo + a;
+	b = b - (a * pow(grow, In.kr(bus, 1).madd(0.5, 0.5)));
+	ReplaceOut.kr(bus, b);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+SynthDef(\snapback, { |inpos = 0, threshold = 0.5, center = 0,
+		startFreq = 18, endFreq = 2, decayTime = 1,
+		threshScale = 1, inLag = 0.1,
+		outbus, replyID|
+	var	initTrig = Impulse.kr(0),
+		localIn = LocalIn.kr(2),
+		state = Select.kr(initTrig, [localIn[0], 0]),
+		oldWobble = Select.kr(initTrig, [localIn[1], 0]),
+		inCtr0 = Lag.kr(inpos, inLag) - center,
+		inDly1 = Delay1.kr(inCtr0),
+		inScaled = inCtr0 * threshScale,
+		thresh4clip = abs(threshold * threshScale),
+		trig0to1 = BinaryOpUGen('==', state, 0) *
+			// that is, if 0 is between previous and current values of inCtr0...
+			InRange.kr(oldWobble, min(inDly1, inCtr0), max(inDly1, inCtr0)),
+		isState1 = BinaryOpUGen('==', state, 1),
+		trig1to0 = isState1 * (inCtr0.abs > threshold),
+		freq = EnvGen.kr(Env([startFreq, startFreq, endFreq], [0.01, decayTime], \exp), trig1to0),
+		pulse4filter = (trig1to0 * (inScaled - oldWobble)),
+		wobble = Ringz.kr(pulse4filter, freq, decayTime).clip(thresh4clip.neg, thresh4clip),
+		sig = Select.kr(state, [wobble, inScaled.clip(thresh4clip.neg, thresh4clip)]),
+		stateChanging = (trig0to1 + trig1to0 /* + trig2to0 */ > 0);
+	LocalOut.kr([
+			// float wrapping!!
+		(state + stateChanging).wrap(0, 2),
+		wobble
+	]);
+	SendReply.kr(stateChanging, "/snapbackState", trig0to1, replyID); 
+	ReplaceOut.kr(outbus, sig);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+SynthDef(\xyactivity, { |busnum, avgCycles = 100 /*, lag = 0.06 */|
+	var	// in = Lag.kr(In.kr(busnum, 2), lag),
+		in = In.kr(busnum, 2),
+		oldTheta = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
+		x = in[0], y = in[1],
+		xdiff = HPZ1.kr(x),
+		ydiff = HPZ1.kr(y),
+		xmean = RunningSum.kr(xdiff, avgCycles) / avgCycles,
+		ymean = RunningSum.kr(ydiff, avgCycles) / avgCycles,
+		theta = atan2(ymean.neg, xmean),
+		xact = RunningSum.kr(xdiff.abs, avgCycles) / avgCycles,
+		yact = RunningSum.kr(ydiff.abs, avgCycles) / avgCycles,
+		radius = (xact.squared + yact.squared).sqrt;
+	// if input is not moving, theta will be 0;
+	// but really I want it to return the previous theta
+
+var tIndex = BinaryOpUGen('==', xmean, 0) * BinaryOpUGen('==', ymean, 0);
+// [theta, oldTheta].poll(tIndex, "theta, old");
+	theta = Select.kr(tIndex, [theta, oldTheta]);
+	// thanks to Wouter for this trick to "unwrap" the atan result
+	// but it depends on a bugfix that Lorne won't have
+	theta = Wrap.kr(theta, oldTheta - pi, oldTheta + pi);
+// theta.poll(Impulse.kr(2), "theta");
+	LocalOut.kr(theta);
+	ReplaceOut.kr(busnum+2, [xmean, ymean, xact, yact, theta, radius]);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+
+// track when derivative changes from positive to negative or vice versa
+// assumes smoothing is already done by xyactivity
+// this could be either x or y!
+// zeroTimeThresh: At top of curve, direction may be 0 very briefly
+// if that time < threshold, allow it for a hit
+// otherwise, suppress it
+// that should strip out false triggers if it's stationary, then starts moving
+
+/*
+SynthDef(\trigReverseDirection, { |busnum, thetabus, replyID, zeroTimeLo = 0.03, zeroTimeHi = 0.1, dirThresh = 0.01|
+	var	deriv1 = In.kr(busnum, 1),  // first derivative
+		direction = deriv1.sign,  // remove subtle changes
+		directionChange = HPZ1.kr(direction).abs,
+		time = Timer.kr(directionChange),
+	//		hitFromZero = (directionChange >= 0) * (time < zeroTimeThresh),
+		hitFromZero = (directionChange >= 0) * InRange.kr(time, zeroTimeLo, zeroTimeHi),
+		hitPassZero = directionChange >= 1,
+		allowHit = deriv1.abs >= dirThresh,
+		hit = (hitPassZero + hitFromZero) * allowHit;
+	// HPZ1 is (x[i] - x[i-1]) * 0.5; if abs >= 1, it means -1 --> 1 or 1 --> -1
+	// deriv1.poll(hitPassZero + hitFromZero, "direction");
+	//directionChange.poll(hitPassZero + hitFromZero, "direction");
+	//time.poll(hitFromZero, "time");
+	SendReply.kr(hit, '/dirChanged', direction, replyID);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+*/
+
+SynthDef(\trigReverseDirection, { |busnum, replyID, crossTheta = 0.5pi, timeBetween = 0.1|
+	var	initTrig = Impulse.kr(0),
+		theta = In.kr(busnum, 1),
+		prevTheta = Select.kr(initTrig, [LocalIn.kr(1), theta]),
+		crossMapped = crossTheta.wrap(theta - 0.5pi, theta + 0.5pi),
+		trig = InRange.kr(crossMapped, min(prevTheta, theta), max(prevTheta, theta)),
+	time = Timer.kr(trig);
+	trig = trig * (time >= timeBetween);
+	// <! is necessary to force LocalOut to be later in the chain than LocalIn
+	LocalOut.kr(theta <! trig);
+	SendReply.kr(trig, '/dirChanged', theta, replyID);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+// track continuous angle changes > x radians?
+
+
+
+// dispatcher
+(
+PR(\abstractProcess).clone {
+	// for busy-wait, just to maintain playing status
+	~event = (eventKey: \dummy);
+	~alwaysReset = true;
+
+	// default: you should override for multiple instances
+	~busIndex = s.options.numControlBusChannels - 100;
+
+	~busParms = #[mousex, mousey, xmeanDelta, ymeanDelta, xactivity, yactivity, theta, radius];
+
+	~prep = {
+		if(s.controlBusAllocator.reserve(~busIndex, ~busParms.size, warn: false).notNil) {
+			~bus = Bus(\control, ~busIndex, ~busParms.size, s);
+		} {
+			BP(~collIndex).free;
+			Error("Couldn't allocate % channels at given index %.".format(~busParms.size, ~busIndex)).throw;
+		};
+
+		~trackDefs = ~trackers.();
+
+		~trackGroup = Group(s.asTarget, \addBefore);
+
+		~resetBusParms.();
+// 		s.makeBundle(nil, {
+// 		});
+	};
+
+	~avgCycles = 50;
+	~mainTrackSynth = {
+		Synth(\xyactivity, ~trackSynthArgs.(), ~trackGroup, \addToHead);
+	};
+	~trackSynthArgs = {
+		[busnum: ~bus, avgCycles: ~avgCycles, lag: 0.06]
+	};
+
+	~trackers = { (
+// 		yReverseDir: (
+// 			def: \trigReverseDirection,
+// 			respPath: '/dirChanged',
+// 			busParm: \ymeanDelta,
+// 			args: { [dirThresh: 2.6e-05] },
+// 			action: { "hit".postln }
+// 		)
+		yReverseDir: (
+			def: \trigReverseDirection,
+			respPath: '/dirChanged',
+			busParm: \theta,
+			args: [crossTheta: 0], // { [dirThresh: 2.6e-05] },
+			action: { |msg| msg[3].debug("hit") },
+			active: false,
+			activateOnPlay: true
+		)
+	) };
+
+	~activate = { |key|
+		var	def = ~trackDefs[key];
+		if(def.notNil and: { def.active.not }) {
+			~startOneTracker.(def);
+		}
+	};
+
+	~deactivate = { |key|
+		var	def = ~trackDefs[key];
+		if(def.notNil and: { def.active }) {
+			~stopOneTracker.(def);
+		}
+	};
+
+	~toggle = { |key|
+		var	def = ~trackDefs[key];
+		if(def.notNil) {
+			if(def.active) {
+				~stopOneTracker.(def);
+			} {
+				~startOneTracker.(def);
+			};
+		}
+	};
+
+	~startTrackers = {
+		~trackSynth = ~mainTrackSynth.();
+		~trackDefs.do { |def|
+			if(def.activateOnPlay ? true) {
+				~startOneTracker.(def);
+			};
+		};
+	};
+
+	~startOneTracker = { |def|
+		def.node = Synth(def.def, ~baseArgs.(def) ++ def.args(def), ~trackGroup, \addToTail);
+		def.resp = OSCpathResponder(s.addr, [def.respPath, def.node.nodeID], e { |time, resp, msg|
+			def[\action].(msg)
+		}).add;
+		def.active = true;
+	};
+
+	~stopOneTracker = { |def|
+		def.node.free;
+		def.resp.remove;
+		def.node = nil;
+		def.resp = nil;
+		def.active = false;
+	};
+
+	~baseArgs = { |def|
+		var	i = ~indexForParm.(def.busParm);
+		if(i.isNil) {
+			"%'s bus parameter % is not defined. Defaulting to %."
+				.format(~trackDefs.findKeyForValue(def), def.busParm, ~busParms[0])
+				.warn;
+			i = 0;
+		};
+		[busnum: ~bus.index + i]
+	};
+
+	~indexForParm = { |key| ~busParms.indexOf(key) };
+	~busnumForParm = { |key| ~indexForParm.(key) + ~bus.index };
+
+	~stopCleanup = {
+		~trackSynth.free;
+		~trackSynth = nil;
+		~trackDefs.do { |def|
+			~stopOneTracker.(def);
+		};
+	};
+
+	~freeCleanup = {
+		~trackGroup.free;
+		~bus.free;
+	};
+
+	~resetBusParms = { |val = 0|
+		~busParms.do { |key|
+			key.envirPut(val);
+		};
+		~bus.setn(val ! ~busParms.size);
+	};
+
+	~asPattern = {
+		Pseq([
+			Pfuncn {
+				~startTrackers.();
+				0
+			},
+//			Pbind(\delta, 2)
+			Prout {
+				loop {
+					~bus.getn(~bus.numChannels, e { |val|
+						~busParms.do { |key, i|
+							// if there's no movement, theta is NaN;
+							// keep the old value in the Proto var
+							if(val[i].isNaN.not) { key.envirPut(val[i]) };
+						};
+						currentEnvironment.changed(\busValues);
+					});
+					0.1.yield;
+				}
+			}
+		], 1)
+	};
+} => PR(\xyDispatch);
+
+
+Proto({
+	~mouseColor = Color.red;
+	~mouseColor2 = Color.red(alpha: 0.2);
+	~winSize = min(800, Window.screenBounds.height - 50);
+
+	// you should set this at chuck time
+	~model = \xy;
+	~useMouse = false;
+
+	~prep = {
+		if(BP.exists(~model)) {
+			~initViz.();
+			BP(~model).v.addDependant(currentEnvironment);
+		} {
+			BP(~collIndex).free;
+			Error("Model % for this GUI doesn't exist.".format(~model)).throw;
+		};
+	};
+
+	~freeCleanup = {
+		~busrefresh.stop;
+		~window.onClose_(nil).close;
+		BP(~model).v.removeDependant(currentEnvironment);
+	};
+
+	~update = { |obj, what|
+		if(what == \busValues) {
+			defer(e { ~trackView.refresh });
+		};
+	};
+
+	~initViz = {
+		~halfSize = ~winSize * 0.5;
+		~vizspec = \bipolar.asSpec;
+		~window = Window(~model, Rect.aboutPoint(Window.screenBounds.center, ~halfSize, ~halfSize))
+			.acceptsMouseOver_(true)
+			.onClose_(e {
+				BP(~collIndex).free;
+			});
+		~trackView = UserView(~window, Rect(0, 0, ~winSize, ~winSize))
+			.background_(Color.new255(255, 255, 180, 255 * 0.5))
+			.drawFunc_(e { |view|
+				var	x, dx, y, radius, theta;
+				x = ~vizspec.unmap(~getParm.(\mousex)) * ~winSize;
+				y = ~vizspec.unmap(~getParm.(\mousey)) * ~winSize;
+				radius = ((~getParm.(\radius) + 0.25).log + 1.388) * ~winSize * ~diffScale;
+				dx = radius * 0.5;
+				theta = ~getParm.(\theta);
+				Pen	.fillColor_(~mouseColor2)
+					.fillOval(Rect(x - dx, y - dx, radius, radius))
+					.strokeColor_(~mouseColor)
+					.moveTo(x @ y)
+					.lineTo(Point(x + (dx * cos(theta)), y - (dx * sin(theta))))
+					.moveTo(Point(~getParm.(\xmeanDelta) * ~winSize * 100 + ~halfSize, 0))
+					.lineTo(Point(~getParm.(\xmeanDelta) * ~winSize * 100 + ~halfSize, 15))
+					.moveTo(Point(0, ~halfSize - (~getParm.(\ymeanDelta) * 100 * ~winSize)))
+					.lineTo(Point(15, ~halfSize - (~getParm.(\ymeanDelta) * 100 * ~winSize)))
+					.stroke;
+			})
+			.clearOnRefresh_(true)
+			.mouseOverAction_(
+				if(~useMouse) {
+					e { |view, x, y|
+						~getParm.(\bus).setn([(x / ~winSize) * 2 - 1, (y / ~winSize) * 2 - 1]);
+					}
+				}
+			);
+		~window.front.refresh;
+	};
+
+	~getParm = { |key|
+		BP(~model).v[key]
+	};
+}) => PR(\trackviz);
+);
+
+
+WrapInstr("osc2.fm2carX", { arg freq, gate, car_env, mod_env, mod_lev, mod_ratio, detune, car_detune,
+		car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, attackTimeScale = 1, decayTimeScale = 1;
+	var sig, mod, car_amp, mod_amp, timeScale, car_eg, hit1;
+
+	car_eg = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]);
+		// once envelope starts going down, attack phase is over
+	hit1 = PulseCount.kr(HPZ1.kr(car_eg) < 0) > 0;
+	timeScale = Select.kr(hit1, [attackTimeScale, decayTimeScale]);
+	car_amp = Latch.kr(Sensitivity.kr(1, gate, car_vs), gate);
+	mod_amp = Latch.kr(Sensitivity.kr(1, gate, mod_vs), gate)
+		* EnvGen.kr(mod_env, gate, timeScale: timeScale);
+	mod_lev = mod_lev * basefreq / ((keyscale * freq) + (basefreq * (1 - keyscale)));
+	mod = Osc.ar(mod_buf, freq.madd(mod_ratio * [1, car_detune], detune * [1, -1]), 0, mod_amp * mod_lev);
+	freq = freq * [1, car_detune];
+	car_eg = EnvGen.kr(car_env, gate, timeScale: timeScale, doneAction:2);
+	LocalOut.kr(car_eg);
+	sig = Mix(Osc.ar(car_buf, freq + (mod * freq), 0, car_amp))
+		* car_eg;
+}, [\freq, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), [0.01, 300, \exponential], [1, 12, \linear, 0, 1], [-5, 5, \linear, 0, 0], \mydetune, \mybuf, \mybuf, nil, nil, \freq, [0.001, 1.0, \exp], #[0.1, 10, \exp, 0, 1]]);
+
+WrapInstr("osc2.fm2car_stereo", { |physicalPan = 0|
+	var	sig = WrapInstr.wrap("osc2.fm2carX");
+	Pan2.ar(sig, physicalPan);
+}, [\bipolar]);
+
+WrapInstr("osc2.fm2car_pan_lfo", { |pan = 0, mod_lev = 1, modLfoSpeed = 0, modLfoAmp = 0, modLfoDecay = 1, modLfoRange = 1, detune = 0, detuneLfoSpeed = 0, detuneLfoAmp = 0|
+	var	lfo = Ringz.kr(Impulse.kr(0) * modLfoAmp, modLfoSpeed, modLfoDecay)
+			.linexp(-1, 1, modLfoRange.reciprocal, modLfoRange),
+		dtlfo = SinOsc.kr(detuneLfoSpeed, mul: detuneLfoAmp),
+		sig = WrapInstr.wrap("osc2.fm2carX", [nil, nil, nil, nil, mod_lev * lfo, nil,
+			// detune + dtlfo so that dtlfo = 0 doesn't force detune to be 0
+			detune + dtlfo]);
+	Pan2.ar(sig, pan);
+}, [\bipolar, #[0.01, 300, exponential], #[0.1, 10, exp], nil, #[0.1, 10, exp], #[1, 5], #[-5, 5], #[0.01, 10, exp], #[0, 10]]);
+
+// modLfo will be mapped to a kr bus
+// but it's more flexible to make it a direct arg - allows nested patching etc.
+// modLfo range expected to be 0-1
+WrapInstr("osc2.fm2car_bass_tlfo", { |mod_lev = 1, modLfo, modUpRange = 1, detune = 0, detuneLfoSpeed = 0, detuneLfoAmp = 0|
+	var dtlfo = SinOsc.kr(detuneLfoSpeed, mul: detuneLfoAmp);
+	modLfo = modLfo.linexp(-1, 1, modUpRange.reciprocal, modUpRange);
+	WrapInstr.wrap("osc2.fm2carX", [nil, nil, nil, nil, mod_lev * modLfo, nil,
+		// detune + dtlfo so that dtlfo = 0 doesn't force detune to be 0
+		detune + dtlfo]);
+}, [#[0.01, 300, exponential], #[0, 1], #[0.1, 10, exp], #[-5, 5], #[0.01, 10, exp], #[0, 10]]);
+
+SynthDef(\repeatingRhythmBus, { |out, numRhythmSlots = 1, rhythmRepeats = 1e10, dropTime = 0.05|
+	var	rhythm = \rhythm.kr(0.5 ! 20),
+		lev = Dseq(#[0, 1], inf),
+		time = Dswitch1([
+				// if I use rhythm-dropTime here, it would be 20 binops
+				// vs 1 binop this way
+			Dseq([Dser(rhythm, numRhythmSlots)], rhythmRepeats) - dropTime,
+			dropTime
+		], Dseq(#[0, 1], inf));
+// 		time = Dseq([Dser(rhythm, numRhythmSlots)], rhythmRepeats),
+	Out.kr(out, DemandEnvGen.kr(lev, time, 5, 2.1 /*, timeScale? */));
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+// t_trig is also the rhythmic value
+SynthDef(\trigRhythmBus, { |out, t_trig = 1, top = 1, dropTime = 0.05|
+	var	curve = EnvGen.kr(Env([0, top, 0], [t_trig - dropTime, dropTime], 2.1), t_trig);
+	Out.kr(out, curve);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+
+/*
+	var	modUp = EnvGen.kr(Env(#[0, 1, 0], #[0.92, 0.08], 2.1), modUpTrig,
+			levelScale: modUpRange, timeScale: modUpTime),
+*/

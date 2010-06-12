@@ -1,0 +1,160 @@
+// building multi-process complexes
+
+ChuckableBrowser.newWindow;
+\makeEmptyMixer8.eval;
+
+SynthDescLib.global.browse;
+
+(Document.current.path.dirname +/+ "feet-defs.scd").loadPath;
+
+TempoClock.tempo = 110/60;
+
+
+// load footsteps
+BP(\st).free;
+PR(\steps1) => BP(\st);
+BP(\st).leadTime = 0.015 * (110/60);
+#[1, -0.18, 0, true] => BP(\st);
+
+BP(\st).gsel = \unison;
+BP(\st).printStopMsg = false;
+
+if(MCG.exists(1)) { BP(\st) => MCG(1) };
+
+// BP(\st).klankDecay = BP(\st).klankDcyCtl.asPattern;
+// BP(\st).klankDecay = 0.011;
+
+/*
+// try some counts
+// steps, steps, rest, steps, steps, acc+steps, acc+steps, acc, acc
+BP(\st).dur = Pseq(#[/*8, 32, 6,*/ 8, 5, 7, 4, 4, 4], 1);
+BP(\st).numWalkers = Pseq(#[/*1, 2, 0,*/ 2, 3, 3, 3, 3, 3], 1);
+// gestureStream is not called for a rest segment
+BP(\st).gesture = Pclutch(Pseq(#[/*one, one, /*one,*/ */ one, one, accsteps, accsteps, accrest, accrest], 1), Ptime().differentiate > 0).trace(prefix: "gesture: ");
+*/
+
+// load chords
+
+Fact(\slidePad) => VC(\sp);
+if(MCG.exists(2)) { VC(\sp) => MCG(2) };
+
+BP(\slch).free;
+Fact(\slideChords) => BP(\slch);
+BP(\slch) => VC(\sp);
+
+VC(\sp).v.gui;
+
+// important to prevent cutting off the arpeg pattern too soon
+Pn(#[2.5, inf], inf) =>.macro BP(\slch);
+TempoClock.default.gui
+
+BP(\slch).triggerOneEvent(0);
+VC(\sp).v.trace;
+
+BP(\slch).macro.postcs
+
+// coordinate
+(
+~chordDoneSignal = {
+	~doneSignal = NotificationCenter.registerOneShot(
+		BP(\slch).child, \childStop, currentEnvironment, e {
+			~stop.();
+		};
+	)
+};
+
+t = TLSequenceIterator([
+	funcCmd: (func: {
+		BP(\st).klankDcyCtl.value = 0.011;
+		BP(\st).gestureOne = \one;
+	}),
+	Quant(1, -0.5),
+
+	// `nil: we need the bpcmd to use BP(\st)'s quant instead of default NilTimeSpec
+	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
+		bp.printStopMsg = false;
+		bp.gsel = \unison;
+		bp.dur = Pseq(#[8, 32], 1);
+		bp.numWalkers = Pseq(#[1, 2], 1);
+		bp.gesture = \one;
+	}),
+	\sync,
+	3,
+	bp1eventCmd: (name: \slch, doReset: true,
+		shouldSync: true,
+		// TEMPORARY until doReset behavior is fixed
+		prepareBP: { |bp| bp.reset },
+		setDoneSignal: ~chordDoneSignal
+	),
+	\sync,
+	8,
+	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
+		bp.dur = Pseq(#[8, 5, 7, 4, 4, 4], 1);
+		bp.numWalkers = Pseq(#[2, 3, 3, 3, 3, 3], 1);
+		bp.gesture = Pclutch(Pseq(#[one, one, accsteps, accsteps, accrest, accrest], 1), Ptime().differentiate > 0);
+	}),
+	\sync,
+	4,
+	bp1eventCmd: (name: \slch, shouldSync: true,
+		setDoneSignal: ~chordDoneSignal
+	),
+	\sync,
+	8,
+
+// some big klanks
+// halfSyncop, add pitch slowly -- stay in g major at first
+// a couple of cycles with more chaotic syncopations
+// 2 syncops, 1 in g, other random
+
+// interact with chord notes
+
+	[	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
+			bp.gsel = Ppatlace([\unison, Pseq([Pn(\oneSyncop, 3), Pn(\manySyncop, inf)], 1)], inf);
+			bp.numWalkers = Pstutter(2, Pseq([3, 3, 3, Pn(5, inf)], 1));
+			// numSyncop doesn't get called when gsel is oneSyncop
+			bp.numSyncop = 2; // Pseq(#[/*1, 1, 1,*/ 2, 2, 2], 2);
+			bp.dur = Pseq([4, Pwhite(6, 16, 1)], inf);
+				// >= 1 is number of beats
+			bp.preSync = Pwhite(1, Pfunc { |dur| (dur * 0.6).roundUp.asInteger }, inf);
+			bp.gesture = Pswitch1([
+				\stepsaccUnpitched, 
+				Pseq([
+					\halfSyncop, \halfSyncop, 
+					\patRejectLastN.eval(Ppatlace([Prand(#[halfSyncop, dot8, triplet4], inf), Prand(#[halfSyncop, dot8, triplet4, running, tripping])], inf), 2)
+				], 1)
+				// 'which' arg of Pswitch1 generates syncop gestures according to numsycop
+			], Pseq([0, Pn(1, Pkey(\numSyncop).asStream)], inf)); //.trace(prefix: "gesture: ");
+			bp.mode = Pif(
+				Pfunc { |ev| #[someSyncops, halfSyncop, dot8, triplet4, running, tripping].includes(ev[\gesture]) },
+				Pseq([Pn(\g, 5), Ppatlace([\g, \patRejectLastN.eval(Pxrand(Mode.keys.asArray.reject(#[cmin, default, g, g0].includes(_)), inf), 5)], inf)], 1),
+				\g
+			)/*.trace(prefix: "mode: ")*/;
+		}),
+// 		2,
+// 		{ BP(\st).gestureOne = \accstepsUnpitched; 0 }
+	],
+	16,
+	gcAutoSynthCmd: (gc: BP(\st).klankDcyCtl, name: \ctlPoint, outName: \outbus,
+		value: 0.018, time: 25, curve: 7
+	)
+]).play;
+
+// (r = r { thisThread.clock.beats.debug("in r"); t.play; nil }).play(quant: 1);
+)
+
+t.stop;
+
+t.play;
+t.activeCmds
+
+Env(#[0.011, 0.018], #[25], 7).plot
+
+NotificationCenter.registrationsFor(BP(\slch).child)
+
+t.isPlaying
+
+BP(\st).klankDcyCtl.gui
+
+BP(\st).syncopInstr = Pif(Pfunc { |ev|
+	(thisThread.clock.beats + ~leadTime - ~quant.phase % 1)/*).debug("test time")*/ > 0
+}, \bufGrainPanKlank, Pfunc { ~def });

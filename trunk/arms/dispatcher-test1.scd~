@@ -1,0 +1,167 @@
+
+(Document.current.path.dirname +/+ "arms-defs.scd").loadPath;
+
+ChuckableBrowser.newWindow;
+SynthDescLib.global.browse;
+Object.browse;
+s.queryAllNodes;
+BP.all.free;
+Help.gui;
+
+
+BP(\xy).free;
+PR(\xyDispatch) => BP(\xy);
+0 => BP(\xy);
+BP(\xy).alwaysReset = true;
+
+// test xy only
+BP(\xy).trackDefs[\yReverseDir].activateOnPlay = false;
+BP(\xy).trackDefs[\yReverseDir].activateOnPlay = true;
+
+BP(\xy).play;
+BP(\xy).stop;
+
+BP(\xy).listVars;
+{ BP(\xy).trackSynth.trace }.defer(4.0)
+
+(
+PR(\trackviz).chuck(BP(\viz), nil, (
+	model: \xy,
+	useMouse: true,
+	diffScale: 10
+));
+)
+
+BP(\viz).free;
+
+BP(\xy).trackDefs.yReverseDir.node.set(\dirThresh, 1e-05);
+BP(\xy).trackDefs.yReverseDir.node.trace
+
+{ BP(\xy).trackDefs.yReverseDir.node.trace }.defer(4);
+
+// test theta oscillation
+a = { SinOsc.kr(0.5, mul: 0.2, add: 0.5pi) }.play(BP(\xy).trackDefs.yReverseDir.node, BP(\xy).busnumForParm(\theta), addAction: \addBefore);
+a.free;
+
+-20.4204.wrap(0, pi)
+
+BP(\xy).trackDefs.yReverseDir[\args] = [dirThresh: 1e-04, zeroTimeThresh: 0.01];
+
+// theta tracking arg:
+BP(\xy).trackDefs.yReverseDir[\args] = [crossTheta: 0];
+
+BP(\xy).trackDefs.yReverseDir.action = { BP(\vertNotes).triggerOneEvent(0) };
+BP(\xy).trackDefs.yReverseDir[\action] = { |msg| msg[3].debug("\nhit"); ~trackDefs.yReverseDir.node.trace };
+//BP(\xy).trackDefs.yReverseDir[\args] = { |def| ~baseArgs.(def) ++ [dirThresh: 2.6e-05] };
+
+BP(\xy).trackDefs.yReverseDir.action = {
+	BP(\vertNotes).triggerOneEvent(0);
+	[~busParms, ~busParms.collect(_.envirGet)].flop.do(_.postln); "".postln;
+};
+
+WrapInstr("osc2.fm2car_pan_lfo").listArgs
+
+(
+(make: { |name|
+// 	var	out;
+	~target = MixerChannel(name, s, 2, 2);
+	~cb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1, 2, 3].reciprocal) });
+	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1]) });
+
+	Voicer(20, WrapInstr("osc2.fm2car_pan_lfo"), [
+		basefreq: `440, keyScale: `0.28621534453893,
+		car_buf: ~cb, mod_buf: ~mb,
+ 		car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),
+// 		mod_env: ,
+		mod_ratio: `1, detune: `0, car_detune: `0.99798261661993,
+		car_vs: `0.66141732283465, mod_vs: `0
+	], target: ~target);
+},
+free: { [~cb, ~mb, ~target].free }, type: \voicer) => Fact(\fmping);
+)
+
+(
+if(VC.exists(\fmp).not) { Fact(\fmping) => VC(\fmp) };
+
+BP(\vertNotes).free;
+PR(\patternTop).chuck(BP(\vertNotes), nil, (
+	event: (eventKey: \voicerNote),
+	dispatcher: \xy,
+// 	prep: {
+// 		~chan = MixerChannel(~collIndex, s, 2, 2);
+// 	},
+	degSpec: #[21, 49, -3].asSpec,
+	deg: Pfunc { ~degSpec.map(BP(~dispatcher).mousey.neg * 0.5 + 0.5).round },
+	delta: 1,
+	length: Pwhite(1.5, 6.0, inf),
+	dtSpeed: Pexprand(0.3, 1.7, inf),
+		// note, 'freq' is actually scale degree here
+		// lower register is less tolerant of modulating detune
+	dtAmp: Pkey(\freq).linexp(16, 56, 0.2, 4, clip: \none),
+	envScaleSpec: #[0.1, 10, \exp].asSpec,
+	envScale: Pfunc {
+		~envScaleSpec.map(BP(~dispatcher).radius
+			.linlin(0.0001, 0.002, 0, 1, \minmax)).reciprocal
+	},
+	mod_levelSpec: #[0.8, 2.3].asSpec,
+	mod_level: Pfunc {
+		~mod_levelSpec.map(BP(~dispatcher).radius
+			.linlin(0.0001, 0.002, 0, 1, \minmax))
+	},
+//	modLfoSpeedSpec, ,
+//	modLfoAmpSpec, #[1, 1].asSpec,
+	modLfoDecaySpec: #[0.1, 7.0, \exp].asSpec,
+	modLfoRangeSpec: #[1, 2.5, \exp].asSpec,
+	modLfoSpeed: Pexprand(3.0, 8.0, inf),
+	modLfoAmp: 1,
+	modLfoDecay: Pfunc {
+		~modLfoDecaySpec.map(BP(~dispatcher).radius
+			.linlin(0.0001, 0.002, 0, 1, \minmax))
+	},
+		// -0.5 for lower bound means slower movement won't trigger lfo
+	modLfoRange: Pfunc {
+		~modLfoRangeSpec.map(BP(~dispatcher).radius
+			.linlin(0.0001, 0.002, -0.5, 1, \minmax))
+	},
+	mode: \default,
+	basePattern: PR(\patternTop).v[\asPattern],
+	asPattern: {
+		Pbind(
+			\envTimeScale, BPStream(\envScale),
+			\mod_level, BPStream(\mod_level),
+			\detuneLfoSpeed, BPStream(\dtSpeed),
+			\detuneLfoAmp, BPStream(\dtAmp),
+			\modLfoSpeed, BPStream(\modLfoSpeed),
+			\modLfoAmp, BPStream(\modLfoAmp),
+			\modLfoDecay, BPStream(\modLfoDecay),
+			\modLfoRange, BPStream(\modLfoRange)
+		)
+		<>
+		~basePattern.()
+	}
+));
+
+BP(\vertNotes) => VC(\fmp);
+VC(\fmp) => MCG(2);
+
+if(BP.exists(\xy)) {
+	BP(\xy).trackDefs.yReverseDir.action = { BP(\vertNotes).triggerOneEvent(0) };
+};
+)
+
+MixingBoard(\test, nil, VC(\fmp));
+
+BP(\vertNotes).deg = Pfunc { ~degSpec.map(BP(~dispatcher).mousey.neg * 0.5 + 0.5).round };
+BP(\vertNotes).length = Pwhite(1.5, 6.0, inf);
+
+BP(\vertNotes).envScale = BP(\vertNotes).envScale.trace(prefix: "envscale");
+
+BP(\vertNotes).envScale = Pfunc {
+		~envScaleSpec.map(BP(~dispatcher).radius
+			.linlin(0.0001, 0.002, 0, 1, \minmax)).reciprocal
+	}.trace(prefix: "envscale: ");
+
+
+{ VC(\fmp).v.trace }.defer(5);
+k.free;
+VC(\fmp).v.unmapGlobal(\envTimeScale);

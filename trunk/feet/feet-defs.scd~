@@ -1,0 +1,588 @@
+
+if(Mode.exists(\c).not) {
+	#[c, db, d, eb, e, f, gb, g, ab, a, bb, b].do { |key, i|
+		Mode(\default).v.copy.root_(i) => Mode(key);
+		Mode(key).v.transposeRoot(0) => Mode((key ++ "0").asSymbol);
+	};
+};
+
+
+WrapInstr("osc2.vosc3panslide", { |freq, startFreq, slideTime = 0, slideTrig = 1|
+	freq = EnvGen.kr(Env([startFreq, freq], [slideTime], \sin), slideTrig);
+	WrapInstr.wrap("osc2.vosc3panfilt", [freq]);
+}, [NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec(0, 2), TrigSpec.new]);
+
+(keys: #[master, rvbmc],
+make: { |name|
+	var	nh = (s.sampleRate * 0.5 / 79.midicps).trunc,
+		normalSpectrum = (1..nh).reciprocal,
+		rwidth = 4,  // number above and below center to randomize
+		// actually i/(rwidth*2) * 2pi but /2 *2 cancel out
+		template = { |i| (i/rwidth * pi).cos.neg * 0.5 + 0.5 } ! (rwidth*2 + 1),
+		out;
+
+	~wt = Buffer.allocConsecutive(8, s, 2048, 1, { |buf, i|
+		var	low = i.linlin(0, 7, 0, nh - (rwidth*2) - 1),
+		spectrum = normalSpectrum.copy;
+		template.do { |randAmt, i|
+			spectrum[low + i] = spectrum[low + i] + randAmt.rand;
+		};
+		buf.sine1Msg(spectrum)
+	});
+
+	~target = MixerChannel(name, s, 2, 2, level: -17.dbamp /*, completionFunc */);
+	out = Voicer(15, WrapInstr("osc2.vosc3panslide"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size)/*, bufmod: KrNumberEditor(0, [0, ~wt.size-1.001])*/, env: Env.adsr(1.6, 0.1, 0.8, 3.2), detune: 1.003, slideTime: 0.7, ffreq: 3000, vsens: `0.6, slideTrig: SimpleTrigger.new], target: ~target);
+	out.mapGlobal(\bufmod, nil, 0, [0, ~wt.size-1.001]);
+	out.mapGlobal(\ffreq, nil, 4000, \freq);
+	out.mapGlobal(\rq, nil, 1, \myrq);
+
+	out
+}, free: { [~target, ~wt].free }, type: \voicer) => Fact(\slidePad);
+
+
+if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
+
+MIDIRecBuf(\ch1, [
+	#[74, 76,  74, 79, 78],
+	#[1, 2,  1, 1, 2],
+	1, 0.5
+].asNotes, (mode: \g, type: \ch, useOwnMode: true)) => MBM(0);
+
+{ |notes, parentEv|
+	var	numEv = notes.estimateLength,
+		parentDelta = parentEv[\delta],
+		totaldur = numEv * parentDelta + 6.0;
+	Ptuple([parentDelta, Pseries(totaldur, parentDelta.neg, numEv), 0.5], 1)
+} => MicRh(\slideArpeg);
+
+{ |notes| Pseq(notes, 1) } => ArpegPat(\asis1);
+
+
+(
+make: { |name|
+	\newCh.eval(name, \arpeg1, \macroRh, MBM(0)[\ch1], nil, Pn(#[2.5, inf], inf), \slideArpeg, \asis1);
+
+	// this exploits the fact that argPairs resets for each chord
+	// each chord will always start with startFreq == freq
+	BP(name).child.argPairs = [
+		mnote: Pkey(\note).asFloat,
+		startNote: Penvir((), 
+			Pseq([
+				Pfin(1, Pkey(\mnote)).collect { |note| ~startNote = note },
+				Pfunc { |ev|
+					~startNote <!! (~startNote = ev[\note].asFloat)
+				}
+			], 1)
+		),
+		#[mfreq, startFreq], Pfunc { |ev| ev[\mode].asMode.cps([ev[\mnote], ev[\startNote]]) },
+		slideTrig: 1,
+		maxfreq: max(Pkey(\mfreq), Pkey(\startFreq)),
+		minfreq: min(Pkey(\mfreq), Pkey(\startFreq)),
+		// lower bound is 1.0 b/c we will never divide a smaller by a larger number
+		slideTime: (Pkey(\maxfreq) / Pkey(\minfreq)).explin(1.0, 2.0, 0.7, 1.6, \none)
+	];
+},
+type: \bp
+) => Fact(\slideChords);
+
+
+
+// footstep counterpoint
+
+SynthDef(\bufGrainPanFilt, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus, ffreq = 2000|
+	var sig;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+		* EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	sig = LPF.ar(sig, ffreq);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+}).add;
+
+SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtDecay = 0.1, filtAmp = 1|
+	var sig;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+		* EnvGen.kr(Env.linen(attack, time, decay));
+	// 0.06 ~= 16 Hz, likely as low a freq as you'll need
+	sig = Limiter.ar(sig + CombL.ar(LeakDC.ar(sig), 0.06, ffreq.reciprocal, filtDecay, filtAmp));
+	DetectSilence.ar(sig, 0.001, doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+}).add;
+
+// SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
+// 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0|
+// 	var harm = \harm.kr((1..5)),
+// 		amps = \amps.kr((1..5).reciprocal),
+// 		decays = \decays.kr(1 ! 5),
+// 		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+// 			* EnvGen.kr(Env.linen(attack, time, decay)),
+// 		// Klank(decay) - Klank(attack) is like a bank of Formlets
+// 		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
+// 			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack);
+// 	sig = Limiter.ar(sig + filt);
+// 	DetectSilence.ar(sig, 0.001, doneAction: 2);
+// 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+// }).add;
+
+SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
+		shapebuf = -1, shapeXf = 1, chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
+		lpfreq = 2000, lprq = 1|
+	var harm = \harm.kr((1..5)),
+		amps = \amps.kr((1..5).reciprocal),
+		decays = \decays.kr(1 ! 5),
+		chorusAmps = \chorusAmps.kr(1 ! 3),
+		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+			* EnvGen.kr(Env.linen(attack, time, decay)),
+		// Klank(decay) - Klank(attack) is like a bank of Formlets
+		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
+			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack),
+		shaped, dly, cfreqRand = chorusFreq * 0.2;
+	sig = Limiter.ar(sig + filt);
+	shaped = Select.ar(shapebuf < 0, [Shaper.ar(shapebuf, sig), sig]);
+	sig = XFade2.ar(sig, shaped, shapeXf);
+	dly = sig;
+	chorusAmps.do { |amp|
+		dly = DelayL.ar(dly, chorusDelay + chorusAmt,
+			SinOsc.kr(
+				chorusFreq + Rand(cfreqRand.neg, cfreqRand),
+				Rand(0, 2pi),
+				chorusAmt, chorusDelay
+			)) * amp;
+		sig = sig + dly;
+	};
+// 	sig = LeakDC.ar(sig);
+	sig = RLPF.ar(sig, lpfreq, lprq);
+	DetectSilence.ar(sig, 0.001, doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+}).add;
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer);
+	~quant = #[1, -0.25].asTimeSpec;
+	~alwaysReset = true;
+	~def = \bufGrainPanFilt;
+
+	~shapeBufSpecs = [
+		cheby: #[1],	// 'identity' transfer func
+		cheby: #[1, 0, 1],
+		cheby: Array.squareAmps(9),
+		sine1: #[-1],
+		sine1: (1..5).reciprocal.neg,
+		sine1: -1 ! 4
+	];
+
+	~prep = {
+		var	basepath;
+		~chan = MixerChannel(~collIndex, s, 2, 2);
+		~path = (if(thisProcess.platform.name == \osx) {
+			"/Users/dewdrop/sounds/fx/footsteps"
+		} {
+//			"/media/DLM/trax/kc/samples/feet"
+			basepath = (thisProcess.nowExecutingPath ?? { Document.current.path });
+			if(basepath.notNil) { basepath.dirname.dirname +/+ "samples/feet" }
+				{ "/media/DLM/trax/kc/samples/feet" }
+		}) +/+ "58454_sinatra314_footsteps_wooden_floor_loop.wav";
+		~buf = Buffer.readAndQuery(s, ~path);
+
+		~pt = TabFileReader.read(~path.dirname +/+ "58454_labels.txt").flop[0].asFloat;
+		~ptd = ~pt.differentiate.drop(1);
+		~pt = ~pt.drop(1);
+		~mean = ~ptd.mean;
+
+		~combFreq = BPStream(\combMel).collect { |degree, event| event[\mode].asMode.cps(degree) };
+
+		~shapeBufs = Array(~shapeBufSpecs.size);
+		~shapeBufSpecs.pairsDo { |method, amps|
+			~shapeBufs.add(Buffer.alloc(s, 2048, 1, completionMessage: { |buf|
+				buf.perform((method ++ "Msg").asSymbol, amps);
+			}));
+		};
+
+		~gestureArray = Pnsym1(BPStream(\gsel), ~gSelectors);
+
+		~klankDcyCtl = GenericGlobalControl(\klankDecay, nil, 0.011, #[0.01, 0.75, \exp]);
+		~klankDecay ?? { ~klankDecay = ~klankDcyCtl.asPattern };
+
+		currentEnvironment
+	};
+
+	~freeCleanup = {
+		[~chan, ~buf, ~shapeBufs, ~klankDcyCtl].free;
+	};
+
+	~useGui = { |vpIndex|
+		~klankDcyCtl => VP(vpIndex);
+	};
+
+	~lastEventTime = 0;
+	~lastItems = IdentitySet.new;
+
+	~numWalkers = 3;
+	~numSyncop = 1;
+
+	~dur = Pwhite(18, 30, inf);
+	~preSync = Pwhite(0.3, 0.6, inf);
+
+	~gesture = \combMel;
+	~gestureOne = \one;
+	~gsel = \one;
+	~gSelectors = (
+		one: Pfunc { |inval|
+			(~gestureOne ! inval[\numWalkers])
+		},
+		unison: Pfunc { |inval|
+			(~gestureStream.next(inval) ! inval[\numWalkers])
+		},
+		oneSyncop: Pfunc { |inval|
+			(~gestureOne ! inval[\numWalkers])
+				.put(inval[\numWalkers].rand, ~gestureStream.next(inval))
+		},
+		manySyncop: Pfunc { |inval|
+			var	out = (~gestureOne ! inval[\numWalkers]),
+			pool = Array.series(inval[\numWalkers], 0, 1).scramble;
+			inval[\numSyncop] = ~numSyncopStream.next(inval);
+			inval[\numSyncop].do { |i|
+				out.put(pool[i], ~gestureStream.next(inval))
+			};
+			out//.debug("gestures")
+		}
+	);
+
+	~gestures = (
+		one: { |i| Pbind(\delta, 1, \amp, ~amp.(i), \ffreq, ~loFilt) },
+
+		accrest: { |i, parms|
+			Pbind(
+				\instrument, Pseq(#[bufGrainPanKlank, rest]),
+				\delta, Pseq([1, parms[\dur] - 1], 1),
+				\amp, ~amp.(i),
+				\filtAttack, BPStream(\klankAttack),
+				\filtDecay, BPStream(\klankDecay),
+				\ffreq, BPStream(\combFreq),
+				\lpfreq, ~hiFilt,
+				\chorusAmt, BPStream(\syncopChorusAmt),
+				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+			)
+		},
+		accsteps: { |i, parms|
+			Pbind(
+				\instrument, Pseq([\bufGrainPanKlank, Pn(~def, inf)]),
+				\delta, 1,
+				\amp, ~amp.(i),
+				\filtAttack, BPStream(\klankAttack),
+				\filtDecay, BPStream(\klankDecay),
+				// ~def uses ffreq; klank synth uses lpfreq
+				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
+				\lpfreq, ~hiFilt,
+				\chorusAmt, BPStream(\syncopChorusAmt),
+				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+			)
+		},
+		stepsacc: { |i, parms|
+			Pbindf(~gestures[\accsteps].value(i, parms),
+				\instrument, Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank])
+			)
+		},
+		stepsaccUnpitched: { |i, parms|
+			Pbindf(~gestures[\accsteps].value(i, parms),
+				\instrument, Pseq([Pn(~def, parms[\dur] - 1), \bufGrainPanKlank]),
+				\filtDecay, Pkey(\filtAttack)
+			)
+		},
+
+		accstepsUnpitched: { |i, parms|
+			Pbindf(~gestures[\accsteps].value(i, parms), \filtDecay, Pkey(\filtAttack))
+		},
+		accrestUnpitched: { |i, parms|
+			Pbindf(~gestures[\accrest].value(i, parms), \filtDecay, Pkey(\filtAttack))
+		},
+
+		oneKlank: { |i, parms|
+			Pbind(
+				\instrument, \bufGrainPanKlank,
+				\delta, 1,
+				\amp, ~amp.(i),
+				\ffreq, BPStream(\combFreq),
+				\filtAttack, 0.01,
+				\filtDecay, Env(#[0.01, 0.01, 2.0], [parms.preSyncop, parms.dur - parms.preSyncop], \exp),
+				\lpfreq, 3500
+			) 
+		},
+
+		syncopTemplate: { |i, parms, deltaPat, instrOverride|
+			Pbind(
+				\delta, deltaPat,
+//				\prevDelta, Pdelay(Pkey(\delta), 1),
+				\instrument, instrOverride ?? { BPStream(\syncopInstr) },
+				\amp, ~amp.(i),
+				\filtAttack, BPStream(\klankAttack),
+				\filtDecay, BPStream(\klankDecay),
+				// ~def uses ffreq; klank synth uses lpfreq
+// 				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
+				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt,
+					~syncopCombFreq.(i, parms).collect { |notenum, ev|
+						ev[\mode].asMode.cps(notenum)
+					}
+				),
+				\lpfreq, ~hiFilt,
+				\chorusAmt, BPStream(\syncopChorusAmt),
+				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf),
+				\chorusAmps, ~chorusAmps
+// 				\rate, Pkey(\rate)
+// 					* Pif(Ptime() < parms[\preSyncop], 1, Pstutter(1e6, BPStream(\syncopRateMul)))
+			)
+		},
+
+		halfSyncop: { |i, parms|
+			~gestures[\syncopTemplate].(i, parms, Pseq([Pn(1, parms[\preSyncop]), 1.5, Pn(1, inf)], 1)/*.trace(prefix: "halfSyncop: ")*/)
+		},
+		triplet4: { |i, parms|
+			~gestures[\syncopTemplate].(
+				i, parms, Pseq([Pn(1, parms[\preSyncop]), Pn(2/3, inf)], 1)/*.trace(prefix: "triplet4: ")*/,
+				Pseq([Pn(~def, parms[\preSyncop]), Pn(\bufGrainPanKlank, inf)])
+			)
+		},
+		dot8: { |i, parms|
+			~gestures[\syncopTemplate].(
+				i, parms, Pseq([Pn(1, parms[\preSyncop]), Pn(0.75, inf)], 1)/*.trace(prefix: "dot8: ")*/,
+				Pseq([Pn(~def, parms[\preSyncop]), Pn(\bufGrainPanKlank, inf)])
+			)
+		},
+		running: { |i, parms|
+			~gestures[\syncopTemplate].(
+				i, parms, Pseq([Pn(1, parms[\preSyncop]), Pn(rrand(3, 5).reciprocal, inf)], 1)/*.trace(prefix: "running: ")*/,
+//				~def
+				Pseq([Pn(~def, parms[\preSyncop]), Pn(\bufGrainPanKlank, inf)])
+			)
+		},
+		tripping: { |i, parms|
+			Pbindf(
+				~gestures[\syncopTemplate].(
+					i, parms,
+					Pseq([
+						Pn(1, parms[\preSyncop]),
+						Pwxrand([
+							Pseq([0.5, 0.25, 0.25], 1),
+							0.25, 0.5, 0.75, 1.0
+						], #[3, 1, 2, 2, 2].normalizeSum, inf)
+					], 1)/*.trace(prefix: "tripping: ")*/,
+//					~def
+					Pseq([Pn(~def, parms[\preSyncop]), Pn(\bufGrainPanKlank, inf)])
+				),
+				\time, min(~maxSustains[~def], Pkey(\delta) * 0.8 - ~quant.phase) / Ptempo()
+			)
+		},
+		someSyncops: { |i, parms|
+			var prob;
+			~syncProbStream ?? { ~makeStreamForKey.(\syncProb) };
+			prob = ~syncProbStream.next(parms);
+			~gestures[\syncopTemplate].(i, parms, 
+				Pseq([
+					Pn(1, parms[\preSyncop]),
+					Pwrand([1, Pseq(#[1.5, 1.5, 1], 1)], [1 - prob, prob], inf)
+				], 1)
+			)
+		},
+		oneComb: { |i, parms|
+			Pbind(
+				\instrument, Pseq([
+					Pn(~def, parms[\preSyncop] + 1),
+					\bufGrainPanComb,
+					Pn(~def, inf)
+				], 1),
+				\delta, Pseq([Pn(1, parms[\preSyncop]), 1.5, Pn(1, inf)], 1),
+				\amp, ~amp.(i),
+				\ffreq, Pseq([Pn(~loFilt, parms[\preSyncop] + 1),
+					Pfin(1, BPStream(\combFreq)), Pn(~hiFilt, inf)], 1),
+				\filtDecay, BPStream(\filtDecay),
+				\filtAmp, BPStream(\filtAmp)
+			)
+		},
+		combMel: { |i, parms|
+			Pbind(
+				\instrument, Pseq([
+					Pn(~def, parms[\preSyncop] + 1),
+					Pn(\bufGrainPanComb, inf)
+				], 1),
+				\delta, Pseq([Pn(1, parms[\preSyncop]), 1.5, Pn(1, inf)], 1),
+				\amp, ~amp.(i),
+				\ffreq, Pseq([Pn(~loFilt, parms[\preSyncop] + 1),
+					BPStream(\combFreq)], 1),
+				\filtDecay, BPStream(\filtDecay),
+				\filtAmp, BPStream(\filtAmp)
+			)
+		},
+		combMelRandPan: { |i, parms|
+			Pbindf(~gestures[\combMel].value(i, parms), \pan, Pwhite(-1.0, 1.0, inf))
+		}
+	);
+
+		// was Pkey(\delta) + Pkey(\prevDelta) >= 3, not general enough
+	~syncopInstr = Pif(Pfunc { |ev|
+		(thisThread.clock.beats + ~leadTime - ~quant.phase % 1) > 0
+	}, \bufGrainPanKlank, Pfunc { ~def });
+
+	~mode = \default;
+	~combMel = Paccumbounce(28, 49, Pwhite(-7, 7, inf).reject(_ == 0));
+	~filtDecay = 1.0;
+	~filtAmpSpec = #[0, 1, -6].asSpec;
+	~filtAmp = Pkey(\filtDecay).collect(~filtAmpSpec.map(_));
+
+	~syncProb = 0.1;
+
+	~syncopChorusAmt = Pwhite(0.002, 0.012, inf);
+	~chorusAmps = (2..4).reciprocal;
+	~klankAttack = 0.01;
+//	~klankDecay = 0.01;
+// 	~syncopRateMul = Pwhite(1.2, 2.0, inf);
+	~syncopCombFreq = { |i, parms|
+		Pscratch(
+			Pwhite(37, 46, inf) +.x Pseq([0, Pwhite(2, 5, 1)], 1),
+			// this is the movement-direction pattern: -1, +1 or 0
+			// we do 12-24 forward/backward movements (to repeat or bounce between notes)
+			// then a pair of forward moves to get new pitches
+			Pseq([
+				Pfin({ rrand(12, 24) },
+					Pswitch1([Pseq(#[1, -1], inf), 0], Pseq([0, Prand(#[0, 1], inf)], 1))),
+				1, 1, // choose two new pitches
+			], inf),
+			memorySize: 20
+		)
+	};
+
+/* deprecated, simpler syncopcombfreq
+	{ |i, parms|
+		Prand(rrand(28, 46) + [0, rrand(2, 6)], inf)
+	};
+*/
+
+	~loFilt = 2400;
+	~hiFilt = 18000;
+	~index = Plazy { Pwhite(0, ~ptd.size - 1, inf) };
+	~delta = { |key, parms|
+		Plazy { ~deltas[key].(parms).asPattern }
+	};
+	~rate = 1.25;
+	~eventLag = Pwhite(0.0, 0.03, inf);
+
+	~pan = { |i, parms|
+		if(parms[\numWalkers] > 1) {
+			i.linlin(0, parms[\numWalkers] - 1, -1, 1)
+		} {
+			0
+		}
+	};
+
+	~amp = 1;
+
+	~maxSustains = (
+		bufGrainPanFilt: 0.8,
+		bufGrainPanComb: 0.4,
+		bufGrainPanKlank: 0.4,
+		default: 0.8
+	);
+
+	~oneWalkerPattern = { |gesture, i, parms|
+		Pbind(
+			\time, Pif(Pfunc { |ev| ev[\time].isNil },
+				min(
+					Pfunc { |ev| ~maxSustains[ev[\instrument]] ?? { ~maxSustains[\default] } },
+					Pkey(\delta)
+				) / Ptempo(),
+				Pkey(\time)
+			)
+		)
+		<>
+		~gestures[gesture].value(i, parms)
+		<>
+		Pbind(
+			\instrument, ~def,
+			\bufnum, ~buf,
+			\gesture, gesture,
+			// random indices, but a value must not repeat any chosen at the current timepoint
+			\i, BPStream(\index).reject { |x|
+				if(thisThread.clock.beats == ~lastEventTime) {
+					if(~lastItems.includes(x)) {
+						true
+					} {
+						~lastItems.add(x);
+						false
+					}
+				} {
+					~lastItems.clear.add(x);
+					// this needs to be set only when the two are not equal
+					// and that happens only in this false branch
+					~lastEventTime = thisThread.clock.beats;
+					false
+				};
+			}, // .collect { |x| x.debug(thisThread.clock.beats.asString); x },
+			\rate, Pindex(~ptd, Pkey(\i), inf) / ~mean * BPStream(\rate),
+			\attack, 0.005,
+			// note, phase is expected to be -1..0 so '+' really subtracts
+			\start, (Pindex(~pt, Pkey(\i), inf) + (BP(~collIndex).quant.phase / Ptempo() * Pkey(\rate))) * ~buf.sampleRate,
+			\lag, BPStream(\eventLag),
+			\mode, if(parms[\gestureArray][i] != \one) { Pstutter(1e6, BPStream(\mode)) } { \default },
+			\chan, ~chan,
+
+			// klank synth crashes in linux if bufnum is -1; gesture can override
+			\shapebuf, ~shapeBufs.first,
+ 			\pan, ~pan.(i, parms)
+		)
+	};
+
+	~asPattern = {
+		~numWalkersStream ?? { ~makeStreamForKey.(\numWalkers) };
+		~durStream ?? { ~makeStreamForKey.(\dur) };
+		~preSyncStream ?? { ~makeStreamForKey.(\preSync) };
+// 		~whichSyncStream ?? { ~makeStreamForKey.(\whichSync) };
+		~gestureStream ?? { ~makeStreamForKey.(\gesture) };
+		~gestureArrayStream ?? { ~makeStreamForKey.(\gestureArray) };
+		~numSyncopStream ?? { ~makeStreamForKey.(\numSyncop) };
+// 		~modeStream ?? { ~makeStreamForKey.(\mode) };
+		PnNilSafe(Plazy { |inval|
+			var	dur = ~durStream.next,
+				preSyncop, parms, gestArray;
+			block { |break|
+				if(dur.notNil and: { dur > 0 }) {
+					parms = (dur: dur, numWalkers: ~numWalkersStream.next(inval));
+					if(parms[\numWalkers].isNil) { break.(nil) };
+					if(parms[\numWalkers] > 0) {
+						preSyncop = ~preSyncStream.next(dur);
+						if(preSyncop.isNil) { break.(nil) };
+						if(preSyncop < 1.0) {
+							preSyncop = (dur * ~preSyncStream.next(dur)).roundUp(1);
+						};
+						gestArray = ~gestureArrayStream.next(parms).asArray;
+// is this check really needed? maybe not
+//						if(gestArray.size < parms[\numWalkers]) { break.(nil) };
+						parms.put(\gestureArray, gestArray)
+							.put(\preSyncop, preSyncop.roundUp(1));
+						Pfindur(dur, Ppar(
+							gestArray.collect { |gesture, i|
+								~oneWalkerPattern.(
+									gesture,
+									i,
+									parms
+								)
+							}
+						))
+					} {
+						// numWalkers = 0, just rest
+						// empty array in Ppar would fail anyway
+						Event.silent(dur)
+					};
+				} {
+					// force reset of subpatterns - we don't know which one(s) ended early
+					// returning 'nil' makes PnNilSafe stop
+					~durStream = nil;
+					~numWalkersStream = nil;
+					~preSyncStream = nil;
+					~gestureStream = nil;
+					~gestureArrayStream = nil;
+					~numSyncopStream = nil;
+				};
+			}
+		}, inf)
+	};
+} => PR(\steps1);

@@ -1,0 +1,644 @@
+ChuckableBrowser.newWindow;
+SynthDescLib.global.browse;
+WrapInstr.argBrowser;
+s.queryAllNodes;
+BP.openCodeDoc(thisProcess.nowExecutingPath.dirname +/+ "listening-init.scd");
+MIDIPort.init([1]);
+if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
+TempoClock.default.gui;
+~fastClock.gui;
+
+Error.debug = true;
+Error.debug = false;
+
+BP.loadGui;
+
+VoicerProxy.new => VP.prNew(0);
+4.do { VP(0).v.addControlProxy(VoicerGCProxy(nil, VP(0).v), addAlways: true) };
+VP(0).v.gui;
+
+// to kill reverb
+//s.sendMsg(\n_free, 1000);
+~rvb.free;
+~rvb.run(false);
+~rvb.run(true);
+
+~path = "sounds-link/spoken/gaga-listening.aiff";
+
+s.quit;
+Server.default = s = Server.internal;
+
+s.boot;
+s.makeWindow;
+
+[m, n].free;
+m = MixerChannel(\test1, s, 1, 2);
+n = MixerChannel(\test2, s, 2, 2);
+//MixingBoard(\test, nil, m, n);
+
+b = MixingBoard.new;
+8.do { |i|
+	MixerChannelGUI.new(nil, b) => MCG.prNew(i);
+	b.add(MCG(i).v);
+};
+
+m => MCG(0); n => MCG(1);
+~master => MCG(7);
+
+MixingBoard.at(0).refresh;
+MixingBoard.at(0).w.refresh;
+b.free
+
+MCG((0..7)).free
+MCG.exists(0)
+
+~saveaddr = s.addr;
+~debugaddr = DebugNetAddr("127.0.0.1", 57110);
+~debugaddr.makeDocument;
+
+s.addr = ~debugaddr;
+s.addr = ~saveaddr;
+
+
+// to perturb any parameter at any time, all synths should map inputs to kr buses
+// event to allocate the buses automatically
+// use multichannel bus - buses are cheap
+
+// doesn't handle array inputs
+// don't use without a BP - collIndex must be populated! otherwise kr bus leaks
+
+(
+ProtoEvent(\singleSynthPlayNotify).copy.putAll((
+	setArgs: {
+		var	/*argbus, args,*/ lib, desc;
+		if((lib = SynthDescLib.all[~lib ? \global]).notNil
+		and: { (desc = lib[~instrument.asSymbol]).notNil }) {
+			~hasGate = desc.hasGate;
+			~controlNames = desc.controlNames.collect(_.asSymbol);
+			~argbus = Bus.control(~server, ~controlNames.size);			
+			~argValues = desc.controls.collect { |cn|
+				cn.name.asSymbol.envirGet ?? { cn.defaultValue }
+			};
+			~argbus.setn(~argValues);
+			~args = [~controlNames, (..~controlNames.size-1).collect({ |i| ("c" ++ (i+~argbus.index)).asSymbol })].flop.flat;
+		} {
+			currentEnvironment.keysValuesDo { |key, val| [key, val].postln };
+			Error("singleSynthAutoMap event requires a SynthDesc, but couldn't find it.").throw;
+		}
+	},
+	notifyDependents: {
+			// once the synth is dead, don't need the control bus anymore
+		OSCpathResponder(~server.addr, ['/n_end', ~node.asNodeID], e { |time, resp, msg|
+			protect { BP(~collIndex).v.nodeEndedNotify(~node, currentEnvironment) } {
+				resp.remove;
+				~argbus.free;
+			};
+		}).add;
+		BP(~collIndex.debug("sending notification to")).v.recvEventNotify(~node, currentEnvironment);
+	}
+)) => ProtoEvent(\singleSynthAutoMap);
+
+ProtoEvent.composite(#[singleSynthPlayer, singleSynthTrigger, singleSynthAutoMap]) => ProtoEvent(\perturb);
+)
+
+(
+/// *** How do I get the parameter synths into the parent event? *** ///
+// seems to hack up ok, needs refinement
+
+SynthDef(\freqperturb, { |outbus, t_trig = 0, t_freq = 440|
+//	var	init = Latch.kr(In.kr(outbus, 1), Impulse.kr(0));
+	var	freq = Latch.kr(t_freq, t_freq);
+	ReplaceOut.kr(outbus, freq * Decay2.kr(t_trig, 0.1, 0.4, add: 1));
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \perturb);
+	~parmRejectKeys = #[out, outbus, i_out, gate];
+	
+	~mod_ratio = 2;
+	~detune = 1.4;
+	~degree = Pwhite(-7, 7, inf) + 35;
+	~delta = Pexprand(1.0, 4.0, inf);
+	~legato = Pwhite(4.0, 10.0, inf);
+	~pan = Pwhite(-0.8, 0.8, inf);
+	
+	~prep = {
+		~nodes = IdentitySet.new;
+		~chan = MixerChannel(~collIndex, s, 2, 2, level: -24.dbamp, completionFunc: { |chan|
+			~mousebus = Bus.control(s, 1);
+//			~mousesyn = { MouseY.kr(-1, 1) }.play(outbus: ~mousebus,
+//				target: chan.fadergroup, addAction: \addToHead);
+		});
+
+		~synthdefs.();
+
+		~fmbuf = Buffer.alloc(s, 1024, 1, completionMessage: { |buf|
+			buf.sine1Msg(#[1])
+		});
+
+		WrapInstr("osc2.fm1stereo", { |pan = 0/*, freq, gate, car_env, mod_env, mod_lev, mod_ratio, detune, car_buf, mod_buf, car_vs, mod_vs*/|
+			var	sig = WrapInstr.wrap("osc2.fm1");
+			Pan2.ar(sig, pan);
+		}, [\bipolar]);
+		~def = WrapPatch("osc2.fm1stereo", [nil, nil, nil, Env.adsr(0.8, 0.1, 0.7, 1.4), nil, nil, nil, nil, ~fmbuf, ~fmbuf]).asSynthDef.perform(Library.at(\ddwGlobal, \storeMethod));
+		
+		~initViz.();
+	};
+
+	~initViz = {
+		~vizspec = \bipolar.asSpec;
+		~strokeColor = Color.blue;
+		~winsize = min(800, Window.screenBounds.height - 50);
+		~window = Window("mouse", Rect.aboutPoint(Window.screenBounds.center, ~winsize/2, ~winsize/2))
+			.acceptsMouseOver_(true);
+		~trackView = UserView(~window, Rect(0, 0, ~winsize, ~winsize))
+			.background_(Color.new255(255, 255, 180, 255 * 0.5))
+			.drawFunc_(e { |view|
+				var	x;
+				Pen.strokeColor_(~strokeColor);
+				~nodes.do { |ev|
+					x = ~vizspec.unmap(ev.pan) * ~winsize;
+					Pen.moveTo(x @ 0)
+						.lineTo(x @ ~winsize);
+				};
+				Pen.stroke;
+			})
+			.clearOnRefresh_(true)
+			.mouseOverAction_(e { |view, x, y|
+//				[x, y].postln;
+				~mousebus.set((x / ~winsize) * 2 - 1);
+			});
+		~window.front.refresh;
+	};
+
+	~freeCleanup = {
+		[~chan, ~mousebus, ~fmbuf].free;
+		~window.close;
+	};
+	
+	~recvEventNotify = { |node, event|
+			// some events/nodes might be received here that don't need to be tracked
+event.debug("received map event");
+		if(event[\argbus].notNil) {
+			~nodes.add(event);
+			defer(e {
+				if(~window.isClosed.not) {
+					~trackView.refresh;
+				};
+			});
+				// key = control name symbol; val = synth node
+			event[\parmSynths] = ();
+			~makeParmSynths.(event);
+		};
+	};
+	
+	~nodeEndedNotify = { |node, event|
+		event[\parmSynths].debug("freeing parm synths").do(_.free);
+		~nodes.remove(event);
+		defer(e {
+			if(~window.isClosed.not) {
+				~trackView.refresh;
+			};
+		});
+	};
+	
+	~makeParmSynths = { |event|
+		var	hi;
+		event.controlNames.do { |name, i|
+//			if(~parmRejectKeys.includes(name).not) {
+//				// busnum is event.argbus.index + i
+//			};
+			if(name.asSymbol == \mod_lev) {
+				event[\parmSynths][\mod_lev] = Synth(\snapback, [
+					inpos: ~mousebus.asMap, outbus: event.argbus.index + i,
+					center: event[\pan], // rrand(-0.8, 0.8),
+					startFreq: rrand(4.0, 6.0), endFreq: 1,
+					decayTime: rrand(1.5, 3.5),
+					threshold: 0.2, threshScale: 5
+				].debug("snapback args"));
+				event[\parmSynths][\mod_lev_map] = Synth(\mapParm, [
+					bus: event.argbus.index + i,
+					lo: 0.2,
+					hi: hi = rrand(15.0, 30.0),
+					grow: ~growForCurve.(0.2, 1.0, hi)
+				].debug("map args"), target: event[\parmSynths][\mod_lev], addAction: \addAfter);
+//				{ event[\parmSynths][\mod_lev].trace }.defer(0.1);
+			};
+		};
+	};
+
+	~asPattern = {
+//		Pseq([
+//			Pfin(1,
+				Pbind(
+					\protoEvent, \singleSynthAutoMap,
+					\instrument, ~def.name.asSymbol,
+					\chan, ~chan,
+					\gate, 1,
+					\mod_ratio, BPStream(\mod_ratio),
+					\mod_lev, 1,
+					\detune, BPStream(\detune),
+					\degree, BPStream(\degree),
+					\freq, Pkey(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11],
+						12).midicps,
+					\delta, BPStream(\delta),
+					\sustain, Pkey(\delta) * BPStream(\legato),
+					\pan, BPStream(\pan)
+				)
+//			),
+//			Event.silent(30)
+//		], 1)
+
+/*		Pseq([
+				// init main synth and its parms
+			Pfuncn {
+				var	event;
+					// this should call back with an argbus-bearing event
+				~event.copy.putAll(
+					(protoEvent: \singleSynthAutoMap, instrument: \default,
+						freq: 440, amp: 0.6, delta: 0, sustain: nil,
+						collIndex: ~collIndex, chan: ~chan)
+				).yield;
+				// make parm synths
+				event = ~nodes.detect(true);	// only one, get it
+				~makeParmSynths.(event);
+				0
+			},
+			// singleSynthTriggers to disturb parms randomly
+			Pbind(
+				\protoEvent, \singleSynthTrigger,
+				\node, Pfunc { ~nodes.detect(true).parmSynths[\freq] },
+				\trig, Pexprand(0.4, 1.8, inf),
+				\delta, Pwhite(1, 6, inf) * 0.25
+			)
+		], 1)
+*/
+	};
+	
+	~stopCleanup = {
+		var	desc;
+			// not ideal but ok for testing
+		~nodes.copy.do { |ev|
+			if((desc = SynthDescLib.global.at(ev[\instrument].asSymbol)).notNil
+			and: { desc.hasGate }) {
+				ev.node.release;
+			} {
+				ev.node.free
+			};
+		};
+	};
+	
+	~synthdefs = {
+		SynthDef(\mapParm, { |bus, lo = 0, hi = 1, grow = 1|
+			var	a, b;
+			grow = Select.kr(InRange.kr(grow, 0.999, 1.001), [grow, 1.001]);
+			a = (hi-lo) / (1.0 - grow);
+			b = lo + a;
+			b = b - (a * pow(grow, In.kr(bus, 1).madd(0.5, 0.5)));
+//b.poll(Impulse.kr(5), "mapped");
+			ReplaceOut.kr(bus, b);
+		}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+		SynthDef(\snapback, { |inpos = 0, threshold = 0.5, center = 0,
+				startFreq = 18, endFreq = 2, decayTime = 1,
+				threshScale = 1,
+				outbus|
+			var	initTrig = Impulse.kr(0),
+				state = Select.kr(initTrig, [LocalIn.kr(1), 0]),
+				inCtr0 = inpos - center,
+				inDly1 = Delay1.kr(inCtr0),
+				inScaled = inCtr0 * threshScale,
+				trig0to1 = BinaryOpUGen('==', state, 0)
+					// that is, if 0 is between previous and current values of inCtr0...
+					* InRange.kr(0, min(inDly1, inCtr0), max(inDly1, inCtr0)),
+				isState1 = BinaryOpUGen('==', state, 1),
+				trig1to2 = isState1 * (inCtr0.abs > threshold),
+				freq = EnvGen.kr(Env([startFreq, startFreq, endFreq], [0.01, decayTime], \exp), trig1to2),
+				trig2to0 = BinaryOpUGen('==', state, 2) * Done.kr(freq),
+				pulse4filter = trig1to2 * inScaled,
+				wobble = Ringz.kr(pulse4filter, freq, decayTime),
+				sig = Select.kr(state, [wobble, inScaled, wobble]);
+			// float wrapping!!
+//state.poll(HPZ1.kr(state).abs, "state");
+			LocalOut.kr((state + (trig0to1 + trig1to2 + trig2to0 > 0)).wrap(0, 3));
+			ReplaceOut.kr(outbus, sig);
+		}).perform(Library.at(\ddwGlobal, \storeMethod));
+	};
+	
+	~growForCurve = { |minval, midval, maxval|
+		var a, b, c, sqrterm, qresult, sgn = sign(maxval - minval);
+			// the formula is unstable just above the average of minval and maxval
+			// so mirror the midval around the average
+		(midval > ((maxval + minval) * 0.5)).if({
+			midval = minval + maxval - midval;
+			sgn = sgn.neg;
+		});
+		a = midval - minval;
+		b = minval - maxval;
+		c = maxval - midval;
+		sqrterm = sqrt(b.squared - (4 * a * c));
+		(((qresult = (sqrterm - b) / (2 * a))).abs != 1).if({
+	//		log(qresult.squared).abs * sgn
+			qresult.squared * sgn
+		}, {
+			((b.neg - sqrterm) / (2 * a)).squared * sgn
+		});
+	};
+} => PR(\perturbTest);
+)
+
+BP(\pt).free;
+PR(\perturbTest) => BP(\pt);
+BP(\pt).quant = 0;
+
+BP(\pt).trackView.background_(Color.new255(255, 255, 180, 255 * 0.5));
+
+BP(\pt).pan = BP(\pt).pan.trace(prefix: "pan: ");
+
+BP(\pt).play;
+BP(\pt).stop;
+
+s.controlBusAllocator.debug
+
+Bus(\control, 2, 5, s).getn(5, _.postln)
+
+BP(\pt).nodes
+
+SynthDescLib.at(\default).controlNames
+s.controlBusAllocator.debug
+
+
+{ Ringz.ar(Impulse.ar(0), 60, 0.2) }.plot(0.2, s);
+{ Formlet.ar(Impulse.ar(0), 60, 0.01, 0.2) }.plot(0.2, s);
+
+{ Formlet.ar(DelayN.ar(Impulse.ar(0), 0.01, 0.01), 60, 0.01, 0.2) }.plot(0.2, s);
+
+
+{	var	pulse = Impulse.ar(0);
+	Ringz.ar(pulse, 60, 0.2) - Ringz.ar(pulse, 60, 0.01)
+}.plot(0.2, s);
+
+// how to bias the curve?
+// cspec curve trick maybe
+
+f = { |minval, midval, maxval|
+	var a, b, c, sqrterm, qresult, sgn = sign(maxval - minval);
+		// the formula is unstable just above the average of minval and maxval
+		// so mirror the midval around the average
+	(midval > ((maxval + minval) * 0.5)).if({
+		midval = minval + maxval - midval;
+		sgn = sgn.neg;
+	});
+	a = midval - minval;
+	b = minval - maxval;
+	c = maxval - midval;
+	sqrterm = sqrt(b.squared - (4 * a * c));
+	(((qresult = (sqrterm - b) / (2 * a))).abs != 1).if({
+//		log(qresult.squared).abs * sgn
+		qresult.squared * sgn
+	}, {
+		((b.neg - sqrterm) / (2 * a)).squared * sgn
+	});
+};
+
+f.(0, 0.5, 1)
+
+
+// target value comes from [lo, hi, curve].asSpec.map(0.5)
+// curve should be calculated by f above
+SynthDef(\sineperturb, { |t_trig = 0, lo = 0, hi = 1, grow = 1,
+		startFreq = 18, endFreq = 2, decayTime = 1, attackRatio = 0.05,
+		outbus|
+	var	//pulse = Impulse.kr(0),
+		freq = EnvGen.kr(Env([startFreq, startFreq, endFreq], [0.01, decayTime], \exp), t_trig),
+		sig = Ringz.kr(t_trig, freq, decayTime) - Ringz.kr(t_trig, freq, decayTime * attackRatio),
+		curveWarpF = { |val, lo, hi, grow|
+			var	/*grow,*/ a, b;
+//			curve = Select.kr(curve >= -0.001 * (curve <= 0.001), [curve, 0.001]);
+//			grow = exp(curve);
+			grow = Select.kr(grow >= 0.999 * (grow <= 1.001), [grow, 1.001]);
+			a = (hi-lo) / (1.0 - grow);
+			b = lo + a;
+			b - (a * pow(grow, val))
+		};
+	ReplaceOut.kr(outbus, curveWarpF.(sig.madd(0.5, 0.5), lo, hi, grow));
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+SynthDescLib.global.browse
+
+b = Bus.control(s, 1);
+b.set(440);
+b.get(_.postln)
+a = Synth(\default, [freq: b.asMap, amp: 0.4]);
+
+c = Synth(\sineperturb, [t_trig: 1, lo: 220, hi: 880, grow: f.(220, 440, 880), outbus: b]);
+
+c.set(\t_trig, 1, \decayTime, 8, \startFreq, 6, \endFreq, 0.2, \lo, 400, \hi, 500, \grow, f.(400, 440, 500));
+c.trace;
+
+a.free;
+c.free;
+
+
+Help.gui;
+
+// older version
+SynthDef(\snapback, { |inpos = 0, threshold = 0.5, center = 0,
+		lo = 0, hi = 1, grow = 1,
+		startFreq = 18, endFreq = 2, decayTime = 1, attackRatio = 0.05,
+		outbus|
+	var	initTrig = Impulse.kr(0),
+		state = Select.kr(initTrig, [LocalIn.kr(1), 0]),
+		insmooth = inpos,
+		inDly1 = Delay1.kr(insmooth),
+		trig0to1 = BinaryOpUGen('==', state, 0)
+			// that is, if 0 is between previous and current values of insmooth...
+			* InRange.kr(0, min(inDly1, insmooth), max(inDly1, insmooth)),
+		isState1 = BinaryOpUGen('==', state, 1),
+		trig1to2 = isState1 * (insmooth.abs > threshold),
+		freq = EnvGen.kr(Env([startFreq, startFreq, endFreq], [0.01, decayTime], \exp), trig1to2),
+		trig2to0 = BinaryOpUGen('==', state, 2) * Done.kr(freq),
+		pulse4filter = trig1to2 * insmooth/*.sign*/,
+		wobble = Ringz.kr(pulse4filter, freq, decayTime),
+		sig = Select.kr(state, [wobble, insmooth, wobble]),
+		curveWarpF = { |val, lo, hi, grow|
+			var	a, b;
+			grow = Select.kr(InRange.kr(grow, 0.999, 1.001), [grow, 1.001]);
+			a = (hi-lo) / (1.0 - grow);
+			b = lo + a;
+			b - (a * pow(grow, val))
+		};
+	LocalOut.kr((state + (trig0to1 + trig1to2 + trig2to0 > 0)).wrap(0, 3));  // float wrapping!!
+	ReplaceOut.kr(outbus, curveWarpF.(sig.madd(0.5, 0.5), lo, hi, grow));
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+
+// string plucking? Pull away from center, then oscillate back
+// inpos should be -1..1
+// center is the crossing point within -1..1
+// threshold: can pull the output value within center-threshold..center+threshold
+// output will also be -1..1 -- your responsibility to map it
+// output==0 matches input==center -- this should make mapping easier
+
+(
+SynthDef(\snapback, { |inpos = 0, threshold = 0.5, center = 0,
+//		lo = 0, hi = 1, grow = 1,
+		startFreq = 18, endFreq = 2, decayTime = 1, attackRatio = 0.05,
+		outbus|
+	var	initTrig = Impulse.kr(0),
+		state = Select.kr(initTrig, [LocalIn.kr(1), 0]),
+		inCtr0 = inpos - center,
+		inDly1 = Delay1.kr(inCtr0),
+		trig0to1 = BinaryOpUGen('==', state, 0)
+			// that is, if 0 is between previous and current values of inCtr0...
+			* InRange.kr(0, min(inDly1, inCtr0), max(inDly1, inCtr0)),
+		isState1 = BinaryOpUGen('==', state, 1),
+		trig1to2 = isState1 * (inCtr0.abs > threshold),
+		freq = EnvGen.kr(Env([startFreq, startFreq, endFreq], [0.01, decayTime], \exp), trig1to2),
+		trig2to0 = BinaryOpUGen('==', state, 2) * Done.kr(freq),
+		pulse4filter = trig1to2 * inCtr0/*.sign*/,
+		wobble = Ringz.kr(pulse4filter, freq, decayTime),
+		sig = Select.kr(state, [wobble, inCtr0, wobble]);
+	// float wrapping!!
+	LocalOut.kr((state + (trig0to1 + trig1to2 + trig2to0 > 0)).wrap(0, 3));
+	ReplaceOut.kr(outbus, sig);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+)
+
+2.99.wrap(0.0, 3.0)
+
+b = Bus.control(s, 1);
+c = Bus.control(s, 1);
+
+~mouse = { MouseY.kr(-1, 1) }.play(outbus: c);
+~mouse.trace;
+
+SynthDescLib.at(\snapback).controls.do(_.postln); ""
+
+~pluck = Synth(\snapback, [inpos: c.asMap, grow: 1, startFreq: 2, endFreq: 0.4, decayTime: 5, outbus: b, lo: 440 / 2, hi: 440 * 2, grow: f.(440 / 2, 440, 440 * 2)]);
+~pluck.trace;
+~pluck.free;
+
+~plotbuf = Buffer.alloc(s, (10 * 44100 / 64).asInt, 1);
+{ RecordBuf.kr(In.kr(b, 1), ~plotbuf, loop: 0, doneAction: 2) }.play;
+
+~plotbuf.getn(3000, 20, _.postln);
+~plotbuf.getToFloatArray(action: { |val| ~data = val; "done".postln });
+~data.plot;
+~data[1050..1250].plot;
+~data[1300..1500].plot;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/traceme', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+b.set(0.5);
+
+w = Window("position", Rect(10, 100, 600, 50));
+z = Slider(w, Rect(5, 5, 590, 20));
+t = StaticText(w, Rect(5, 28, 150, 16));
+w.front;
+
+KrBusWatcher.register(b);
+~sp = [440 / 1.25, 440 * 1.25, \exp].asSpec;
+u = Updater(b, { |bus, value|
+	defer {
+		z.value = ~sp.unmap(value[0]);
+		t.string = value[0].round(0.001).asString;
+	};
+});
+KrBusWatcher.newFrom(s).updateFreq = 8
+
+KrBusWatcher.unregister(b);
+u.remove;
+
+~synth = Synth(\default, [freq: b.asMap, amp: 0.1]);
+~synth.free;
+
+Function.browse;
+
+s.queryAllNodes
+s.sendMsg(\n_free, 1005)
+
+a = {
+	var	inittrig = Impulse.kr(0),
+		trig = Impulse.kr(1) - inittrig,
+		eg = EnvGen.kr(Env(#[1, 1, 0], #[0, 0.5]), trig),
+		done = Done.kr(eg),
+		time = Sweep.kr(1, 1);
+	done.poll(HPZ1.kr(done).abs + inittrig);
+	Silent.ar(1)
+}.play;
+
+a.free;
+
+
+
+		direction = HPZ1.kr(insmooth),
+		sign = direction.sign,
+			// the idea here is, if you're left of center, use the positive pull range
+		isGt0 = insmooth > 0,
+		pullLo = Select.kr(isGt0, [-1, 0]),
+		pullHi = pullLo + 1,
+		pulling = InRange.kr(insmooth, pullLo, pullHi),
+		trig = Select.kr(direction >= 0, [insmooth < threshold.neg, insmooth > threshold]),
+
+		envOver = Done.kr(freq),
+		sig = Select.kr(envOver, [wobble, insmooth]),
+
+
+// multiple plucks
+n = 8;
+b.free;
+b = Bus.control(s, n);
+c = Bus.control(s, 1);
+
+~mouse = { MouseY.kr(-1, 1) }.play(outbus: c);
+~mouse.trace;
+
+SynthDescLib.at(\snapback).controls.do(_.postln); ""
+
+SynthDef(\mapParm, { |bus, lo = 0, hi = 1, grow = 1|
+	var	a, b;
+	grow = Select.kr(InRange.kr(grow, 0.999, 1.001), [grow, 1.001]);
+	a = (hi-lo) / (1.0 - grow);
+	b = lo + a;
+	b = b - (a * pow(grow, In.kr(bus, 1).madd(0.5, 0.5)));
+	ReplaceOut.kr(bus, b);
+}).perform(Library.at(\ddwGlobal, \storeMethod));
+
+~pluck = { |i|
+	var	ctr = ((i+1) / (n+1)) * 2 - 1,
+		ctrf = 220 * (i+1),
+		bus = b.index + i,
+		sy = Synth(\snapback, [inpos: c.asMap, startFreq: 5, endFreq: 0.4, decayTime: 2.5, center: ctr, threshold: (n+1).reciprocal, outbus: bus]),
+		map = Synth.after(sy, \mapParm, [bus: bus,
+			lo: ctrf * 0.25, hi: ctrf * 4, grow: f.(ctrf * 0.25, ctrf, ctrf * 4)]);
+	[sy, map]
+} ! n;
+
+~pluck[0][0].trace
+~pluck[0][1].trace
+
+~pluck[1][0].trace
+~pluck[1][1].trace
+
+~synths = { |i|
+	Synth(\default, [freq: "c" ++ (b.index + i), amp: 0.1])
+} ! n;
+
+~synths.free; ~pluck.flat.free;
+
+MIDIPort.numPorts
+MIDIPort.init([1]);
+MIDIPort.sources
+~cb = Buffer.alloc(s, 2048, 1);
+~mb = Buffer.alloc(s, 2048, 1);
+
+~cb.sine1([1]);
+~mb.sine1([1]);
+
+WrapInstr("osc2.fm1").listArgs;
+
+v = WrapInstr("osc2.fm1").miditest(#[2, 0], [car_buf: ~cb, mod_buf: ~mb, car_env: Env.adsr(0.8, 0.1, 0.7, 1.4)], target: m, ctlChannel: #[0, 0]);
+
+MIDIPort.resetAll
