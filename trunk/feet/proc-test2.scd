@@ -108,9 +108,11 @@ w = Window.allWindows.detect { |w| w.name == "DDWTimer" };
 if(w.notNil) { w.onClose = { topEnvironment[\timer] = nil } <> w.onClose };
 )
 
+[TempoClock.default.beats, BP(\sb).v[\resetTime]]
+
 // coordinate
 (
-var	hoptime = 60;
+var	hoptime = 15;
 
 ~chordDoneSignal = {
 	~doneSignal = NotificationCenter.registerOneShot(
@@ -126,6 +128,7 @@ t = TLSequenceIterator([
 		BP(\st).accDecay = 0.011;
 		BP(\st).gestureOne = \one;
 		BP(\st).chan.level = 0.75;
+		BP(\st).chan.postSends[0].level = 0.075;
 		BP(\slch).child.fitFunc = \asis;
 		BP(\slch).arpeg = \asis1;
 		MBM(0)[\ch1] => BP(\slch);
@@ -134,7 +137,7 @@ t = TLSequenceIterator([
 		topEnvironment[\timer] !? { topEnvironment[\timer].reset };
 	}),
 	Quant(1, -0.5),
-
+/*
 	// `nil: we need the bpcmd to use BP(\st)'s quant instead of default NilTimeSpec
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.printStopMsg = false;
@@ -164,8 +167,8 @@ t = TLSequenceIterator([
 	bp1eventCmd: (name: \slch, shouldSync: true, setDoneSignal: ~chordDoneSignal),
 	\sync,
 	4,
-
-
+*/
+/*
 // thinking of 'hop' gesture: all walkers hit a klank chord - combFreq for pitches
 // ok... needs better pitch pattern
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
@@ -189,6 +192,7 @@ t = TLSequenceIterator([
 			Pindex(~chords, Pseries(2.rand, Pwhite(1, ~chords.size - 1, inf)))
 		};
 		BP(\slch).reset;
+		BP(\sb).resetTime = nil;
 		0
 	},
 	[
@@ -196,7 +200,7 @@ t = TLSequenceIterator([
 			{ ~delay.next },
 			bp1eventCmd: (name: \slch, quant: 1)
 		], setDoneSignal: {	// cheating and using this for more init, not donesig
-			~dur = rrand(80, 110).debug("pre-bass");
+			~dur = rrand(70, 94).debug("pre-bass");
 			~delay = Plimitsum(~dur - 8, Pwhite(18, 28, inf))
 				.asStream;
 		}),
@@ -215,6 +219,7 @@ t = TLSequenceIterator([
 				}
 			},
 			// wait for exactly bass's total duration
+			// BP(\sb) populates a ~note, which has the total dur
 			{ Library.at(BP(\sb).bassID).dur }
 		])
 	],
@@ -233,7 +238,7 @@ t = TLSequenceIterator([
 	{	var	bp = BP(\st);
 		"moving on".debug;
 		bp.klankDcyCtl.value = 0.011;
-		bp.accDecay = Env(#[0.025, 0.011], #[75]).asStream.trace(prefix: "accDecay: ");
+		bp.accDecay = Env(#[0.025, 0.011], #[75]).asStream;
 		bp.gsel = Ppatlace([\unison, Pseq([Pn(\oneSyncop, 3), Pn(\manySyncop, inf)], 1)], inf);
 		bp.numWalkers = Pstutter(2, Pseq([3, 3, 3, Pn(5, inf)], 1));
 		// numSyncop doesn't get called when gsel is oneSyncop
@@ -269,15 +274,20 @@ t = TLSequenceIterator([
 	gcAutoSynthCmd: (gc: BP(\st).klankDcyCtl, name: \ctlPoint, outName: \outbus,
 		value: 0.018, time: 48, curve: 5, stopAction: { "autosynth done".debug }
 	),
-	140,
+	{	BP(\sb).resetTime = thisThread.beats + 140;
+		140
+	},
 
 
 // TEMPORARY - in case I'm not using hop segment above
 	bpCmd: (name: \st, quant: `nil, playWarning: false),
 
 	funcCmd: (func: {
-		var	bp = BP(\st);
+		var	bp = BP(\st), syn;
 		"reset".debug;
+		syn = bp.chan.postSends[0].levelAuto(\ctlEnv,
+			[connect: 0, env: Env(#[0.075, 0.8], #[1], \exp), time: 33 / thisThread.clock.tempo].debug("auto args"));
+		{ syn.trace }.defer(1);
 		bp.gsel = \unison;
 		bp.gesture = Pseq([\stepsacc, Pn(\allAcc, inf)]);
 		bp.dur = Pseq(#[4, 3, 4, 5, 7, 10], 1);
@@ -319,6 +329,7 @@ t = TLSequenceIterator([
 		bp.gsel = \one;
 		bp.gestureOne = \one;
 		bp.dur = 32;
+		bp.chan.postSends[0].level = 0.2;
 		bp.reset;
 	}),
 	4,
@@ -342,6 +353,7 @@ t = TLSequenceIterator([
 		value: 0.01, time: 14, curve: -5 //, stopAction: { "autosynth done".debug }
 	),
 	20,
+*/
 	[	bpCmd: (name: \brook, quant: `nil, prepareBP: { |bp| bp.reset; bp.chan.level = 0 }),
 		9,
 		bpCmd: (name: \stw, quant: `nil, prepareBP: { |bp|
@@ -350,6 +362,7 @@ t = TLSequenceIterator([
 			bp.dur = 8;
 			bp.preSync = Pwhite(0.3, 0.6, inf);
 			/*bp.reset;*/ bp.chan.level = 0;
+			bp.chan.postSends[0].level = 0.1;
 		}),
 		\sync  // otherwise, iterator stops and thereby, prev bpcmd doesn't play
 	],
@@ -369,7 +382,8 @@ t = TLSequenceIterator([
 	{	var	p = BP(\stw);
 		"all there".debug;
 		p.gsel = \unison;
-		p.gesture = \somept5;
+		p.gesture = Pif(Ptime() < ((45 * thisThread.clock.tempo).roundUp),
+			\somept5, Pwrand(#[somept5, onept5stretch], #[0.2, 0.8], inf));
 		p.dur = Pwhite(18, 30, inf);
 		p.preSync = Pfunc { |dur| max(1, dur - rrand(5, 12)) };
 		6
@@ -397,7 +411,7 @@ t = TLSequenceIterator([
 //	bpCmd: (name: \stw, quant: `nil, playWarning: false),
 	[	12,
 		mixerAutoSynthCmd: (mixer: { BP(\brook).chan }, name: \ctlPoint, outName: \outbus,
-			value: 0, time: 48, curve: -2.1, stopAction: { BP(\brook).stop }),
+			value: 0, time: 48, curve: -2.1, stopAction: { BP(\brook).stop; t.activeCmds.debug("brook out") }),
 		mixerAutoSynthCmd: (mixer: { VC(\wp).env.target }, name: \ctlPoint, outName: \outbus,
 			value: 0, time: 34, curve: -2.1),
 		mixerAutoSynthCmd: (mixer: { VC(\wp).env.combsMC }, name: \ctlPoint, outName: \outbus,
@@ -419,6 +433,20 @@ t = TLSequenceIterator([
 	\cmdSync,	// this is so I know when bigstretch *really* started
 	mixerAutoSynthCmd: (mixer: { BP(\stw).chan }, name: \ctlPoint, outName: \outbus,
 		value: -4.dbamp, time: 14, curve: 2.1),
+	funcCmd: (func: {
+			~synth = BP(\stw).chan.postSends[0].levelAuto(\ctlEnv,
+				[connect: 0, env: Env(#[0.1, 0.8], #[1], \exp), time: 22]);
+		},
+		setDoneSignal: {
+			~doneSignal = true;
+			// godawful stupid hack b/c ~fire happens *after* ~setDoneSignal
+			thisThread.clock.sched(0.01, e {
+				~doneSignal = OSCpathResponder(s.addr, ['/n_end', ~synth.nodeID], e { |t, r, m|
+					r.remove;
+					~stop.();
+				}).add;
+			});
+		}),
 	funcCmd: (func: { nil },
 		setDoneSignal: {
 			~doneSignal = Updater(BP(\stw), e { |obj, what, more|
@@ -426,6 +454,7 @@ t = TLSequenceIterator([
 			});
 		}, clearDoneSignal: {
 			~doneSignal.remove;
+			BP(\wch).stopNow;  // don't want chord to play into last few FFT stretches
 		}
 	),
 	\cmdSync,	// and this is so I know when stepsStretch ran out of parent events
@@ -443,11 +472,13 @@ t.stop;
 BP.all.stop
 
 t.isPlaying;
+t.activeCmds;
 
 VC(\wp).v.playingNodes.maxItem(_.frequency).trace
 VC(\wp).v.nodes.choose.initArgs
 
 BP.all.free; VC.all.free;
+~rvb.run(false);
 
 BP(\st).klankDcyCtl.value
 
