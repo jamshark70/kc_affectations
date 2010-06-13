@@ -86,3 +86,58 @@ fork { SoundFile.normalize(a = "~/sounds/spoken/kcfeet.aiff".standardizePath, a.
 
 x = LPCAna("~/sounds/spoken/kcfeet-mono.aiff".standardizePath);
 x.ana(nPoles: 32, frameSize: 256, hop: 0.5, minFreq: 70, maxFreq: 300, conditionSignal: 1, completion: { "done".debug });
+
+
+// use lpc
+// path == TEMPORARY!
+~dir = "~/sounds/spoken/lpc".standardizePath;
+
+~lpcb.free;
+~lpcb = Buffer.readAndQuery(s, ~dir +/+ "kcfeet.lpc.aif");
+b = ~lpcb;
+
+c = Buffer.readAndQuery(s, "/Users/dewdrop/sounds/fx/water/L_7304__ingeos___stream_underwater_Ruisseau_de_Ponchale_Les_Peyroux_23_St_Goussaud_France.aiff");
+
+~pt = TabFileReader.read(~dir +/+ "kcfeet-labels.txt");
+~pt = ~pt.do { |pt| 2.do { |i| pt[i] = pt[i].asFloat } };
+
+f = SoundFile.openRead(~dir +/+ "kcfeet-mono.aiff"); f.close;
+
+z = m.play { PlayBuf.ar(1, c, loop: 1) };
+
+p = ~pt.choose;
+
+SynthDef(\lpcfx, { |outbus, lpcbuf, sfdur, start, end, time = 1, amp = 8|
+	var cps, rmso, err, voc, noise, timepoint, sig, wet;
+	timepoint = Line.kr(start, end, time) / sfdur;
+	# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
+	noise = PinkNoise.ar(err * 0.05);
+	voc = In.ar(outbus, 1);
+	sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
+	wet = EnvGen.kr(Env.linen(0.2, time - 0.4, 0.2), doneAction: 2);
+	XOut.ar(outbus, wet, sig * amp);
+//	ReplaceOut.ar(outbus, Limiter.ar(sig * amp));
+}).add;
+
+
+q = Pbind(
+	\instrument, \lpcfx,
+	\group, m.effectgroup,
+	\outbus, m.inbus,
+	\lpcbuf, ~lpcb,
+	\sfdur, f.duration,
+	#[start, end], Prand(~pt.flop[0..1].flop, inf),
+	\time, 5,
+	\amp, 8
+).asStream;
+
+z = m.play { PlayBuf.ar(1, c, loop: 1) };
+
+e = q.next(()).play;
+{ s.sendMsg(\n_trace, e[\id][0]) }.defer(0.5);
+
+z.free;
+
+
+// analysis seems too volatile
+LPCFile.browse
