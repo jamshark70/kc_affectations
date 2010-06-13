@@ -126,10 +126,11 @@ PR(\abstractProcess).clone {
 	);
 
 	~shortDur = Pwhite(2, 3, inf);
-	~longDur = Pwhite(16, 30, inf);
+	~longDur = Pwhite(16, 24, inf);
 	~longHold = Pwhite(0.4, 0.6, inf);
 	~preRest = Pwhite(0, 7, inf);
 	~gate = Pseq(#[1, 1, 0.001], inf);
+	~minBeforeReset = 16;
 
 	~asPattern = {
 		Pbind(
@@ -142,8 +143,11 @@ PR(\abstractProcess).clone {
 				#[],	// rest
 				Pfin(2, Pkey(\target) + (Pkey(\interval) * Pkey(\upOrDownFix)))
 			], inf),
-			\durArray, Pstutter(3,
-				Ptuple([BPStream(\preRest), BPStream(\shortDur), BPStream(\longDur)], inf)),
+			\durArray, Pif(
+				Pfunc { |ev| ~resetTime.isNil or: { (~resetTime - thisThread.beats) >= ~minBeforeReset } },
+				Pstutter(3,
+					Ptuple([BPStream(\preRest), BPStream(\shortDur), BPStream(\longDur)], inf))
+			),
 			\totalDur, Pfunc { |ev| ev[\durArray].sum },
 			\dur, Pn(Plazy { |ev| Pseq(ev[\durArray], 1) }, inf),
 			\legato, Ppatlace([1, 1.01, BPStream(\longHold)], inf),
@@ -365,7 +369,7 @@ PR(\abstractProcess).clone {
 		var	basepath;
 		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master], completionFunc: { |chan|
 			chan.playfx(Instr.at("busfx.limiter"), [0, 2, 0.99]);
-			chan.newPostSend(~rvbmc, 0.2);
+			chan.newPostSend(~rvbmc, 0.075);
 		});
 		~path = (if(thisProcess.platform.name == \osx) {
 			"/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/feet"
@@ -522,14 +526,14 @@ PR(\abstractProcess).clone {
 // because filtAttack == filtDecay cancels out the filter!
 		accstepsUnpitched: { |i, parms|
 			Pbindf(~gestures[\accsteps].value(i, parms),
-				\filtDecay, Pkey(\filtAttack),
-				\amp, Pkey(\amp) * 5.dbamp
+				\filtDecay, Pkey(\filtAttack)//,
+//				\amp, Pkey(\amp) * 5.dbamp
 			)
 		},
 		accrestUnpitched: { |i, parms|
 			Pbindf(~gestures[\accrest].value(i, parms),
-				\filtDecay, Pkey(\filtAttack),
-				\amp, Pkey(\amp) * 5.dbamp
+				\filtDecay, Pkey(\filtAttack)//,
+//				\amp, Pkey(\amp) * 5.dbamp
 			)
 		},
 
@@ -800,10 +804,10 @@ PR(\abstractProcess).clone {
 				};
 			}
 		}, inf)
-.collect { |ev|
-	if(ev[\instrument] != ~def) { ev[\amp].debug("amp") };
+/*.collect { |ev|
+	if(ev[\instrument] != ~def) { [ev[\gesture], ev[\amp]].debug("gesture, amp") };
 	ev
-}
+}*/
 	};
 
 	~playfx = {
@@ -1018,7 +1022,7 @@ make: { |name|
 			~rq = GenericGlobalControl(\rq, nil, 0.14236, \myrq);
 			~stdArgs = ~stdArgs.();
 			~chan.doWhenReady {
-				~chan.newPostSend(~rvbmc, 0.25);
+				~chan.newPostSend(~rvbmc, 0.4);
 			};
 		},
 		inChannels: 2,
