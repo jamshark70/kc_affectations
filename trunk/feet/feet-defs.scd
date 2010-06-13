@@ -20,12 +20,25 @@ if(Mode.exists(\c).not) {
 };
 
 
+~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
+
+~rvbmc ?? {
+	~rvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
+};
+
+~rvbmc.doWhenReady {
+	if(~rvb.isNil or: { ~rvb.isPlaying.not }) {
+		~rvb = ~rvbmc.playfx(Instr("busfx.freeverb2"), [0, 1.0, 0.75, 0.5, 1.0]);
+	};
+};
+
 // pad
 
-WrapInstr("osc2.vosc3panslide", { |freq, startFreq, slideTime = 0, slideTrig = 1|
+WrapInstr("osc2.vosc3panslide", { |freq, startFreq, slideTime = 0, slideTrig = 1, panS, panE|
+	var	pan = EnvGen.kr(Env([panS, panE], [slideTime], \sin), slideTrig);
 	freq = EnvGen.kr(Env([startFreq, freq], [slideTime], \sin), slideTrig);
-	WrapInstr.wrap("osc2.vosc3panfilt", [freq]);
-}, [NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec(0, 2), TrigSpec.new]);
+	WrapInstr.wrap("osc2.vosc3panfilt", [freq, nil ! 7, pan].flat);
+}, [NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec.newFrom(\freq.asSpec), NoLagControlSpec(0, 2), TrigSpec.new, NoLagControlSpec(-1, 1), NoLagControlSpec(-1, 1)]);
 
 (keys: #[master, rvbmc],
 make: { |name|
@@ -45,10 +58,13 @@ make: { |name|
 		buf.sine1Msg(spectrum)
 	});
 
-	~target = MixerChannel(name, s, 2, 2, level: -17.dbamp, outbus: ~master /*, completionFunc */);
+	~target = MixerChannel(name, s, 2, 2, level: -17.dbamp, outbus: ~master, completionFunc: { |chan|
+		~ch = chan.playfx(Instr("busfx.chorus2"), [18, 2, 2, 2, 0.0084255985991258, 0.077426358822457, 0.005573957308325, 0.61086524860099, 0.825]);
+		chan.newPostSend(~rvbmc, 0.405);
+	});
 	out = Voicer(15, WrapInstr("osc2.vosc3panslide"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size)/*, bufmod: KrNumberEditor(0, [0, ~wt.size-1.001])*/, env: Env.adsr(1.6, 0.1, 0.8, 3.2), detune: 1.003, slideTime: 0.7, ffreq: 3000, vsens: `0.6, slideTrig: SimpleTrigger.new], target: ~target);
-	out.mapGlobal(\bufmod, nil, 0, [0, ~wt.size-1.001]);
-	out.mapGlobal(\ffreq, nil, 2100, \freq);
+	out.mapGlobal(\bufmod, nil, 2.314, [0, ~wt.size-1.001]);
+	out.mapGlobal(\ffreq, nil, 900, \freq);
 	out.mapGlobal(\rq, nil, 1, \myrq);
 
 	out
@@ -349,9 +365,10 @@ PR(\abstractProcess).clone {
 		var	basepath;
 		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master], completionFunc: { |chan|
 			chan.playfx(Instr.at("busfx.limiter"), [0, 2, 0.99]);
+			chan.newPostSend(~rvbmc, 0.2);
 		});
 		~path = (if(thisProcess.platform.name == \osx) {
-			"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+			"/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/feet"
 //			"/Users/dewdrop/sounds/fx/footsteps"
 		} {
 //			"/media/DLM/trax/kc/samples/feet"
@@ -800,7 +817,7 @@ PR(\abstractProcess).clone {
 	~stopfx = {
 		~fx !? { ~fx.release; ~fx = nil };
 	};
-} => PR(\steps1);
+}.putAll((master: ~master, rvbmc: ~rvbmc)) => PR(\steps1);
 
 
 
@@ -898,6 +915,7 @@ PR(\steps1).chuck(BP(name), nil, (
 				}).add;
 				0.1.wait;
 			};
+//			try { ~chan.postSends[0].level = 0.2 } { "watersteps: couldn't set send level".debug };
 		};
 		~gestures.put(\stepsrest, { |i, parms|
 			Pbind(
@@ -986,7 +1004,7 @@ make: { |name|
 		userprep: {
 			~buf ?? {
 				~bufpath = (if(thisProcess.platform.name == \osx) {
-						"/Users/dewdrop/SCServer/trax/kcgit/trunk/samples/feet"
+						"/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/feet"
 // 						"/Users/dewdrop/sounds/fx/water"
 					} {
 						basepath = (thisProcess.nowExecutingPath ?? { Document.current.path });
@@ -999,9 +1017,13 @@ make: { |name|
 			~event.put(\bufnum, ~buf.bufnum);
 			~rq = GenericGlobalControl(\rq, nil, 0.14236, \myrq);
 			~stdArgs = ~stdArgs.();
+			~chan.doWhenReady {
+				~chan.newPostSend(~rvbmc, 0.25);
+			};
 		},
 		inChannels: 2,
 		master: ~master,
+		rvbmc: ~rvbmc,
 		userfree: {
 			if(~myBuf) { ~buf.free };
 			~rq.free;
@@ -1255,8 +1277,13 @@ make: { |name|
 		~ch = chan.playfx(Instr("busfx.chorus2"), #[0, 1, 2, 3, 0.0040240867741694, 0.11364637357074, 0.0036090192987437, 1.1344639929904, 0.72629173909809]);
 		~ch.doWhenPlaying { ~ch.synth.moveToTail(chan.effectgroup) };
 	});
-	~combsMC = MixerChannel(name ++ "comb", s, 2, 2, level: ~target.level * ~cLevelRatio, outbus: ~master);
-	~target.newPreSend(~combsMC, 0);
+	~combsMC = MixerChannel(name ++ "comb", s, 2, 2, level: ~target.level * ~cLevelRatio, outbus: ~master, completionFunc: { |chan|
+		chan.newPostSend(~rvbmc, 0.8);
+	});
+	~target.doWhenReady {
+		~target.newPreSend(~combsMC, 0);
+		~target.newPostSend(~rvbmc, 0.75);
+	};
 
 	~levelSync = Updater(~target.controls[\level], e { |levelCtl, parms|
 		if(parms[\what] == \value) { ~combsMC.level = levelCtl.value * ~cLevelRatio }

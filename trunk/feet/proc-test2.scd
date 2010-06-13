@@ -1,8 +1,9 @@
 // building multi-process complexes
 
 // c. 7min
-// fix opening chord sound
-// reverb?
+// fix opening chord sound -- automate filter up, and bufmod
+// st and stw: increase reverb before end
+// fix timing on water chord fadeout
 // lpc
 
 SynthDescLib.global.browse;
@@ -18,7 +19,7 @@ VoicerProxy.new => VP.prNew(0);
 4.do { VP(0).v.addControlProxy(nil, true) };
 VP(0).v.gui;
 
-k = VoicerMIDISocket(\omni, VP(0).v);
+k = VoicerMIDISocket(0, VP(0).v);
 
 (
 var cc;
@@ -33,7 +34,6 @@ var cc;
 (Document.current.path.dirname +/+ "feet-defs.scd").loadPath;
 TempoClock.tempo = 110/60;
 
-~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
 ~master => MCG(7);
 MixingBoard.at(0).refresh;
 
@@ -110,7 +110,7 @@ if(w.notNil) { w.onClose = { topEnvironment[\timer] = nil } <> w.onClose };
 
 // coordinate
 (
-var	hoptime = 15;
+var	hoptime = 60;
 
 ~chordDoneSignal = {
 	~doneSignal = NotificationCenter.registerOneShot(
@@ -134,7 +134,7 @@ t = TLSequenceIterator([
 		topEnvironment[\timer] !? { topEnvironment[\timer].reset };
 	}),
 	Quant(1, -0.5),
-/*
+
 	// `nil: we need the bpcmd to use BP(\st)'s quant instead of default NilTimeSpec
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.printStopMsg = false;
@@ -164,7 +164,7 @@ t = TLSequenceIterator([
 	bp1eventCmd: (name: \slch, shouldSync: true, setDoneSignal: ~chordDoneSignal),
 	\sync,
 	4,
-*/
+
 
 // thinking of 'hop' gesture: all walkers hit a klank chord - combFreq for pitches
 // ok... needs better pitch pattern
@@ -178,7 +178,7 @@ t = TLSequenceIterator([
 		bp.accDecay = Env(#[0.011, 0.025], [hoptime], 4);
 	}),
 
-/*
+
 	// chords;
 	{	MBM(0)[\ch2] => BP(\slch);
 		BP(\slch).arpeg = \smallInt1;
@@ -313,7 +313,7 @@ t = TLSequenceIterator([
 	\cmdSync,
 	Quant(1, -0.5),
 	3,
-*/
+
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.numWalkers = 3;
 		bp.gsel = \one;
