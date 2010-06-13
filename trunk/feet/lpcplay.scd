@@ -63,7 +63,7 @@ b.write(p.splitext[0] ++ "-5sec.aiff", sampleFormat: "int16");
 x = LPCAna("/Users/dewdrop/sounds/spoken/quantum-5sec.aiff");
 x.ana(nPoles: 64, frameSize: 256, hop: 0.5, minFreq: 70, maxFreq: 400, conditionSignal: 1, completion: { "done".debug });
 x.saveToLPCFile(p.splitext[0] ++ "-5sec.lpc");
-x.saveToFiles("/Users/dewdrop/sounds/spoken/quantum-5sec-2.lpc");
+x.saveToFiles("/Users/dewdrop/sounds/spoken/lpc/kcfeet.lpc");
 x = nil;
 
 x.lperr; x.lppch; x.lprms;
@@ -71,3 +71,18 @@ x.resrms.plot
 x.pchcps.plot
 
 LPCAna.browse
+
+
+// basic recording
+// air - earth - fire - water - grass - trees - worms - eagles - mountains - waterfalls - glaciers - plains - oceans
+PeakMonitor(m);
+z = m.play { In.ar(8, 1) };
+m.startRecord("~/sounds/spoken/kcfeet.aiff".standardizePath);
+m.stopRecord;
+z.free;
+m.free;
+
+fork { SoundFile.normalize(a = "~/sounds/spoken/kcfeet.aiff".standardizePath, a.splitext[0] ++ "-norm.aiff", newSampleFormat: "int16", threaded: true); };
+
+x = LPCAna("~/sounds/spoken/kcfeet-mono.aiff".standardizePath);
+x.ana(nPoles: 32, frameSize: 256, hop: 0.5, minFreq: 70, maxFreq: 300, conditionSignal: 1, completion: { "done".debug });
