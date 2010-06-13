@@ -99,7 +99,7 @@ BP(\slch).macro.postcs
 t.isPlaying
 
 Dialog.getPaths({ |p| p.postln });
-~master.startRecord("/Users/dewdrop/SCServer/trax/kc/feet1.aiff");
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet2.aiff");
 
 (
 var w;
@@ -112,7 +112,7 @@ if(w.notNil) { w.onClose = { topEnvironment[\timer] = nil } <> w.onClose };
 
 // coordinate
 (
-var	hoptime = 15;
+var	hoptime = 60;
 
 ~chordDoneSignal = {
 	~doneSignal = NotificationCenter.registerOneShot(
@@ -134,10 +134,12 @@ t = TLSequenceIterator([
 		MBM(0)[\ch1] => BP(\slch);
 		BP(\slch).child.makeChordPattern = { Pseq(~chords, inf) };
 		BP(\slch).reset;
+		VC(\sp).globalControls[\ffreq].value = 900;
+		VC(\sp).globalControls[\bufmod].value = 2.314;
 		topEnvironment[\timer] !? { topEnvironment[\timer].reset };
 	}),
 	Quant(1, -0.5),
-/*
+
 	// `nil: we need the bpcmd to use BP(\st)'s quant instead of default NilTimeSpec
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
 		bp.printStopMsg = false;
@@ -167,8 +169,8 @@ t = TLSequenceIterator([
 	bp1eventCmd: (name: \slch, shouldSync: true, setDoneSignal: ~chordDoneSignal),
 	\sync,
 	4,
-*/
-/*
+
+
 // thinking of 'hop' gesture: all walkers hit a klank chord - combFreq for pitches
 // ok... needs better pitch pattern
 	bpCmd: (name: \st, quant: `nil, prepareBP: { |bp|
@@ -195,11 +197,11 @@ t = TLSequenceIterator([
 		BP(\sb).resetTime = nil;
 		0
 	},
-	[
-		loopCmd: (cmds: [
+	[	loopCmd: (cmds: [
 			{ ~delay.next },
 			bp1eventCmd: (name: \slch, quant: 1)
 		], setDoneSignal: {	// cheating and using this for more init, not donesig
+			~once = true;
 			~dur = rrand(70, 94).debug("pre-bass");
 			~delay = Plimitsum(~dur - 8, Pwhite(18, 28, inf))
 				.asStream;
@@ -223,7 +225,33 @@ t = TLSequenceIterator([
 			{ Library.at(BP(\sb).bassID).dur }
 		])
 	],
-
+	[	funcCmd: (func: {
+			SynthDef(\bufmodAuto, { |outbus, top = 1|
+				Out.kr(outbus, SinOsc.kr(0.025).range(0, top))
+			}).add;
+		},
+		setDoneSignal: {
+			~doneSignal = Updater(BP(\slch), e { |obj, what|
+				if(what.debug("slch updater") == \oneEventPlayed) { ~doneSignal.remove; ~stop.() };
+			});
+		}),
+		\cmdSync,
+		gcAutoSynthCmd: (gc: VC(\sp).v.globalControls[\bufmod], outName: \outbus, name: \bufmodAuto,
+			top: VC(\sp).env.wt.size - 1.002,
+			setDoneSignal: {
+				{ VC(\sp).v.globalControls[\bufmod].autoSynth.trace }.defer(5);
+				~doneSignal = Updater(BP(\sb), e { |obj, what, more|
+					if(more == \stopped) {
+						(e { ~doneSignal.remove; ~stop.() }).defer(10)
+					};
+				})
+			}
+		),
+		gcAutoSynthCmd: (gc: VC(\sp).v.globalControls[\ffreq], outName: \outbus, name: \ctlEnv,
+			env: Env(#[900, 9000, 500], #[0.4, 0.6], \exp),
+			time: (hoptime + 140) / TempoClock.tempo
+		)
+	],
 	// v. important to change dur pattern before it stops!
 	// this will b/c the iterator runs a bit ahead of the pattern
 	hoptime,
@@ -283,11 +311,10 @@ t = TLSequenceIterator([
 	bpCmd: (name: \st, quant: `nil, playWarning: false),
 
 	funcCmd: (func: {
-		var	bp = BP(\st), syn;
+		var	bp = BP(\st);
 		"reset".debug;
-		syn = bp.chan.postSends[0].levelAuto(\ctlEnv,
-			[connect: 0, env: Env(#[0.075, 0.8], #[1], \exp), time: 33 / thisThread.clock.tempo].debug("auto args"));
-		{ syn.trace }.defer(1);
+		bp.chan.postSends[0].levelAuto(\ctlEnv,
+			[connect: 0, env: Env(#[0.075, 0.8], #[1], \exp), time: 33 / thisThread.clock.tempo]);
 		bp.gsel = \unison;
 		bp.gesture = Pseq([\stepsacc, Pn(\allAcc, inf)]);
 		bp.dur = Pseq(#[4, 3, 4, 5, 7, 10], 1);
@@ -353,7 +380,7 @@ t = TLSequenceIterator([
 		value: 0.01, time: 14, curve: -5 //, stopAction: { "autosynth done".debug }
 	),
 	20,
-*/
+
 	[	bpCmd: (name: \brook, quant: `nil, prepareBP: { |bp| bp.reset; bp.chan.level = 0 }),
 		9,
 		bpCmd: (name: \stw, quant: `nil, prepareBP: { |bp|
@@ -399,7 +426,7 @@ t = TLSequenceIterator([
 	mixerAutoSynthCmd: (mixer: { VC(\wp).env.target }, name: \ctlEnv, outName: \outbus,
 		connect: 0, env: Env(#[-40, -33].dbamp, #[24], 2.1)),
 	mixerAutoSynthCmd: (mixer: { VC(\wp).env.combsMC }, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[-inf, -25].dbamp, #[39], 2.1)),
+		connect: 0, env: Env(#[-inf, -28].dbamp, #[39], 2.1)),
 	gcAutoSynthCmd: (gc: { VC(\wp).v.globalControls[\ffreq] }, name: \ctlEnv, outName: \outbus,
 		connect: 0, env: Env(#[170, 1200, 400], #[60, 65], \exp)),
 //	{ (105 * thisThread.clock.tempo).roundUp },
@@ -467,7 +494,7 @@ t = TLSequenceIterator([
 // (r = r { thisThread.clock.beats.debug("in r"); t.play; nil }).play(quant: 1);
 )
 
-t.stop;
+t.stop;  // register q stop record
 
 BP.all.stop
 
