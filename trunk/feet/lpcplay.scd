@@ -131,7 +131,7 @@ q = Pbind(
 	\outbus, m.inbus,
 	\lpcbuf, ~lpcb,
 	\sfdur, f.duration,
-	\pt, Pseq(~pt, inf).trace,
+	\pt, Pseq(~pt, 1).trace,
 	#[start, end], Pkey(\pt).collect { |pt| pt[0..1] },
 	\time, 5,
 	\amp, 2
@@ -141,6 +141,12 @@ z = m.play { PlayBuf.ar(1, c, loop: 1) };
 
 e = q.next(()).put(\amp, 4).play;
 { s.sendMsg(\n_trace, e[\id][0]) }.defer(0.5);
+
+l = List.new;
+o.remove;
+o = OSCresponderNode(s.addr, '/tr', { |t, r, m| l.add(m[3]) }).add;
+
+1.4006985425949, 1.2204302549362, 1.6174520254135, 0.52945500612259, 0.77074950933456, 0.6013805270195, 0.36621832847595, 0.57746821641922, 1.219409942627, 0.96967452764511, 0.33334475755692, 0.50978434085846, 0.62868392467499
 
 z.free;
 
