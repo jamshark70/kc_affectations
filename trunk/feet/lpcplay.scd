@@ -90,32 +90,37 @@ x.ana(nPoles: 32, frameSize: 256, hop: 0.5, minFreq: 70, maxFreq: 300, condition
 
 // use lpc
 // path == TEMPORARY!
-~dir = "~/sounds/spoken/lpc".standardizePath;
+//~dir = "~/sounds/spoken/lpc".standardizePath;
+~dir = Document.current.path.dirname.dirname +/+ "samples/feet";
 
 ~lpcb.free;
-~lpcb = Buffer.readAndQuery(s, ~dir +/+ "kcfeet.lpc.aif");
+~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
 b = ~lpcb;
 
-c = Buffer.readAndQuery(s, "/Users/dewdrop/sounds/fx/water/L_7304__ingeos___stream_underwater_Ruisseau_de_Ponchale_Les_Peyroux_23_St_Goussaud_France.aiff");
+c.free;
+c = Buffer.readAndQuery(s, ~dir +/+ "L_7304__ingeos___stream_underwater_Ruisseau_de_Ponchale_Les_Peyroux_23_St_Goussaud_France.aiff");
 
-~pt = TabFileReader.read(~dir +/+ "kcfeet-labels.txt");
+~pt = TabFileReader.read(~dir +/+ "words-labels.txt");
 ~pt = ~pt.do { |pt| 2.do { |i| pt[i] = pt[i].asFloat } };
 
-f = SoundFile.openRead(~dir +/+ "kcfeet-mono.aiff"); f.close;
+f = SoundFile.openRead(~dir +/+ "words-mono.aiff"); f.close;
 
 z = m.play { PlayBuf.ar(1, c, loop: 1) };
 
 p = ~pt.choose;
 
 SynthDef(\lpcfx, { |outbus, lpcbuf, sfdur, start, end, time = 1, amp = 8|
-	var cps, rmso, err, voc, noise, timepoint, sig, wet;
+	var cps, rmso, err, voc, noise, timepoint, sig, wet, peak;
 	timepoint = Line.kr(start, end, time) / sfdur;
 	# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
 	noise = PinkNoise.ar(err * 0.05);
 	voc = In.ar(outbus, 1);
-	sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
+	sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso) * amp;
+	peak = Peak.kr(sig);
+//peak.poll(Impulse.ar(5));
 	wet = EnvGen.kr(Env.linen(0.2, time - 0.4, 0.2), doneAction: 2);
-	XOut.ar(outbus, wet, sig * amp);
+Poll.kr(Done.kr(wet), peak, "peak", 1);
+	XOut.ar(outbus, wet, sig);
 //	ReplaceOut.ar(outbus, Limiter.ar(sig * amp));
 }).add;
 
@@ -126,14 +131,15 @@ q = Pbind(
 	\outbus, m.inbus,
 	\lpcbuf, ~lpcb,
 	\sfdur, f.duration,
-	#[start, end], Prand(~pt.flop[0..1].flop, inf),
+	\pt, Pseq(~pt, inf).trace,
+	#[start, end], Pkey(\pt).collect { |pt| pt[0..1] },
 	\time, 5,
-	\amp, 8
+	\amp, 2
 ).asStream;
 
 z = m.play { PlayBuf.ar(1, c, loop: 1) };
 
-e = q.next(()).play;
+e = q.next(()).put(\amp, 4).play;
 { s.sendMsg(\n_trace, e[\id][0]) }.defer(0.5);
 
 z.free;
@@ -141,3 +147,24 @@ z.free;
 
 // analysis seems too volatile
 LPCFile.browse
+x = LPCFile(~dir +/+ "words.lpc");
+
+3.do { x.pchcps = x.pchcps.lowpass };
+3.do { x.origrms = x.origrms.lowpass };
+3.do { x.resrms = x.resrms.lowpass };
+3.do { x.nrmerr = x.nrmerr.lowpass };
+
+x.saveToFile(~dir +/+ "words-lpf3.aiff");
+x.saveLPCFile(~dir +/+ "words-lpf3.lpc");
+
+
+// fail
+
+( 'instrument': lpcfx, 'time': 5, 'amp': 8, 'start': 19.727046, 
+  'sustain': 0.8, 'server': localhost, 'isPlaying': true, 'hasGate': false, 'outbus': SharedBus(audio, 4, 2, localhost), 
+  'id': [ 1011 ], 'group': Group(4), 'msgFunc': a Function, 'sfdur': 20.489841269841, 'lpcbuf': Buffer(0, 262144, 1, 164130416, /home/ddw1970/share/SuperCollider/scd/kc/trunk/samples/feet/words-lpf3-lpc.aiff), 
+  'end': 20.32408, 'freq': 261.6255653006 )
+Channel 0 maximum clip: 1.1445959338419e+18
+Channel 1 maximum clip: 1.1445959338419e+18
+
+~pt.detect { |pt| pt[0] == 19.727046 }
