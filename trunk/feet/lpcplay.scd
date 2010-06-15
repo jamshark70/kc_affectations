@@ -244,3 +244,98 @@ fork {
 };
 
 ~pt = ~pt.collect { |pt, i| pt.add(~pk[i]) };
+
+
+
+SynthDef(\lpcfx2, { |inbus, outbus, lpcbuf, voxbuf, start, end, time = 1, amp = 8, expectPeak = 1, tfreq = 18, tdur = 4, hpfreq = 800, voxamp = 0.2|
+	var cps, rmso, err, voc, noise, timepoint, sig, wet, peak, realvox;
+	timepoint = Line.kr(start, end, time) / BufDur.ir(voxbuf);
+	# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
+	noise = PinkNoise.ar(err * 0.05);
+	voc = In.ar(inbus, 2);
+	sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
+	peak = Amplitude.kr(sig, 0.1, 0.1);
+	realvox = GrainBuf.ar(1, Impulse.ar(tfreq), tfreq.reciprocal * tdur, voxbuf,
+		LFNoise1.kr(0.8).exprange(0.75, 1.3333), pos: timepoint);
+	realvox = HPF.ar(realvox, hpfreq, voxamp);
+	wet = EnvGen.kr(Env.linen(0.1, 0.8, 0.1), timeScale: time, doneAction: 2);
+	XOut.ar(outbus, wet * min(1, (peak / expectPeak)), sig * amp + realvox);
+}).add;
+
+(
+BP(\brookfx).free;
+PR(\basicSynthChooser).chuck(BP(\brookfx), nil, (
+	isFx: true,
+	chan: BP(\brook).chan,
+	userprep: {
+		~dir = topEnvironment[\feetdir].dirname +/+ "samples/feet";
+		~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
+		~pt = TabFileReader.read(~dir +/+ "words-labels.txt");
+		~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
+		SoundFile.use(~dir +/+ "words-mono.aiff", { |file| ~voxdur = file.duration });
+		~originalSigBus = BP(\brook).originalSigBus;
+	},
+	userfree: {
+		~lpcb.free;
+	},
+	synth: \lpcfx2,
+	delta: Pexprand(2.0, 6.0, inf),
+	timeMul: Pexprand(1.2, 1.8, inf),
+	peakAdj: 0.01,
+	objects: { (
+		lpcfx2: (
+			def: SynthDef(\lpcfx2, { |inbus, outbus, lpcbuf, filedur, start, end, time = 1, amp = 8, expectPeak = 1 /*, tfreq = 18, tdur = 4, hpfreq = 800, voxamp = 0.2*/|
+				var cps, rmso, err, voc, noise, timepoint, sig, wet, peak, realvox;
+				timepoint = Line.kr(start, end, time) / filedur;
+				# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
+				noise = PinkNoise.ar(err * 0.05);
+				voc = In.ar(inbus, 2);
+				sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
+				peak = Amplitude.kr(sig, 0.1, 0.1);
+// 				realvox = GrainBuf.ar(1, Impulse.ar(tfreq), tfreq.reciprocal * tdur, voxbuf,
+// 					LFNoise1.kr(0.8).exprange(0.75, 1.3333), pos: timepoint);
+// 				realvox = HPF.ar(realvox, hpfreq, voxamp);
+				wet = EnvGen.kr(Env.linen(0.1, 0.8, 0.1), timeScale: time, doneAction: 2);
+				wet = (wet * min(1, (peak / expectPeak))).madd(2, -1);
+				sig = LinXFade2.ar(voc, Limiter.ar(sig * amp), wet, 1);
+				ReplaceOut.ar(outbus, sig);
+			}),
+			args: [
+				inbus: ~originalSigBus,
+				lpcbuf: ~lpcb,
+				filedur: ~voxdur,
+				pt: Prand(~pt, inf),
+				ptname: Pfunc { |ev| ev[\pt][2].debug("pt") },
+				// * 0.05? For some reason the peak measurements were WAY higher than the reality
+				#[start, end, expectPeak], Pkey(\pt).collect { |pt| pt[#[0, 1, 3]] * [1, 1, ~peakAdj] },
+				\time, (Pkey(\end) - Pkey(\start)) * BPStream(\timeMul),
+				\amp, 4,
+// 				\voxamp, Pfunc { |ev| 0.0 / ev[\pt][4] },
+// 				\tfreq, 19,
+// 				\tdur, 4,
+// 				\hpfreq, 1600
+			]
+		)
+	) }
+))
+)
+
+BP(\brookfx).debug = true;
+BP(\brookfx).debug = false;
+
+BP(\brookfx).event.trace = true;
+BP(\brookfx).event.trace = false;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	{ s.sendMsg(\n_trace, m[1]) }.defer(0.5);
+}).add;
+
+BP(\brookfx).event.notifyDependents = {
+	(e { ~node.trace }).defer(~time * 0.5);
+};
+
+BP(\brookfx).event.notifyDependents = nil;
+
+BP(\brookfx).lpcfx2amp = 12;
+BP(\brookfx).timeMul = Pwhite(1.5, 4.0, inf);
