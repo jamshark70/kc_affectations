@@ -37,13 +37,16 @@ topEnvironment[\feetdir] ?? {
 
 ~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
 
-~rvbmc ?? {
-	~rvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
-};
+// don't want reverb on netbook
+if(Window.screenBounds.height > 600) {
+	~rvbmc ?? {
+		~rvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
+	};
 
-~rvbmc.doWhenReady {
-	if(~rvb.isNil or: { ~rvb.isPlaying.not }) {
-		~rvb = ~rvbmc.playfx(Instr("busfx.freeverb2"), [0, 1.0, 0.75, 0.5, 1.0]);
+	~rvbmc.doWhenReady {
+		if(~rvb.isNil or: { ~rvb.isPlaying.not }) {
+			~rvb = ~rvbmc.playfx(Instr("busfx.freeverb2"), [0, 1.0, 0.75, 0.5, 1.0]);
+		};
 	};
 };
 
