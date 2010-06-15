@@ -34,12 +34,18 @@ var cc;
 (Document.current.path.dirname +/+ "feet-defs.scd").loadPath;
 TempoClock.tempo = 110/60;
 
+~rvbmc => MCG(6);
 ~master => MCG(7);
 MixingBoard.at(0).refresh;
+
+~rvb.run(false);
+~rvbmc.free;  // or, on netbook, dump rvb altogether
+~rvbmc = nil;
 
 // load footsteps
 BP(\st).free;
 PR(\steps1) => BP(\st);
+//PR(\steps1).chuck(BP(\st), nil, (rvbmc: ~rvbmc));
 BP(\st).leadTime = 0.015 * (110/60);
 #[1, -0.18, 0, true] => BP(\st);
 
@@ -558,3 +564,22 @@ BP(\slch).child.chords.collect(_.useOwnMode)
 BP(\slch).child.chords.do { |ch| ch.notes.asFloat.postln }; ""
 BP(\slch).topNote.listVars
 BP(\slch).topNote.deg.postcs
+
+
+
+// other rhythms for st:
+// phasing effect, not bad, make less predictable
+
+BP(\st).numWalkers = 5;
+
+BP(\st).gestures.put(\phaser, { |i, parms|
+	var	invDur = parms[\dur].reciprocal;
+	Pbindf(~gestures[\one].(i, parms),
+		\instrument, Pseq([\rest, Pn(~def, inf)]),
+//		\delta, (i / parms[\dur]) + 1
+		\delta, 1 - (i * invDur)
+	)
+});
+
+BP(\st).gestureOne = \phaser;
+BP(\st).gsel = \one;
