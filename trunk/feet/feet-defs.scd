@@ -19,6 +19,21 @@ if(Mode.exists(\c).not) {
 	};
 };
 
+topEnvironment[\feetdir] ?? {
+	topEnvironment[\feetdir] = thisProcess.nowExecutingPath
+		?? { Document.current.tryPerform(\path) };
+	if(topEnvironment[\feetdir].notNil) {
+		topEnvironment[\feetdir] = topEnvironment[\feetdir].dirname;
+	} {
+		switch(thisProcess.platform.name)
+			{ \osx } {
+				topEnvironment[\feetdir] = "~/SCServer/trax/kc.git/trunk/feet".standardizePath;
+			}
+			{ \linux } {
+				topEnvironment[\feetdir] = "~/share/SuperCollider/scd/kc.git/trunk/feet".standardizePath;
+			};
+	};
+};
 
 ~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
 
@@ -1021,8 +1036,11 @@ make: { |name|
 			~event.put(\bufnum, ~buf.bufnum);
 			~rq = GenericGlobalControl(\rq, nil, 0.14236, \myrq);
 			~stdArgs = ~stdArgs.();
+			~originalSigBus = BusDict.audio(s, 2, name.asString + "save original signal");
 			~chan.doWhenReady {
 				~chan.newPostSend(~rvbmc, 0.4);
+				Synth('mixers/Send2', [busin: ~chan.inbus, busout: ~originalSigBus, level: 1],
+					~chan.effectgroup, \addBefore);
 			};
 		},
 		inChannels: 2,
@@ -1030,7 +1048,7 @@ make: { |name|
 		rvbmc: ~rvbmc,
 		userfree: {
 			if(~myBuf) { ~buf.free };
-			~rq.free;
+			[~rq, ~originalSigBus].free;
 			BP(~collIndex).releaseDependants;
 		},
 		stopCleanup: {
