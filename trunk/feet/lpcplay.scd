@@ -2,7 +2,7 @@
 // slow playback speeds thru the lpc buffer REALLY DO NOT WORK WELL
 
 Help.gui;
-EmacsInterface
+ChuckableBrowser.newWindow;
 
 Object.browse
 
@@ -14,6 +14,7 @@ MIDIPort.init([2]);
 \makeEmptyMixer8.eval;
 m = MixerChannel(\test, s, 1, 2);
 m => MCG(0);
+~master => MCG(7);
 
 b = LPCFile("/Users/dewdrop/sounds/spoken/quantum-5sec.lpc").loadToBuffer;
 s.bufferAllocator.debug
@@ -263,62 +264,76 @@ SynthDef(\lpcfx2, { |inbus, outbus, lpcbuf, voxbuf, start, end, time = 1, amp = 
 }).add;
 
 (
-BP(\brookfx).free;
-PR(\basicSynthChooser).chuck(BP(\brookfx), nil, (
-	isFx: true,
-	chan: BP(\brook).chan,
-	userprep: {
-		~dir = topEnvironment[\feetdir].dirname +/+ "samples/feet";
-		~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
-		~pt = TabFileReader.read(~dir +/+ "words-labels.txt");
-		~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
-		SoundFile.use(~dir +/+ "words-mono.aiff", { |file| ~voxdur = file.duration });
-		~originalSigBus = BP(\brook).originalSigBus;
-	},
-	userfree: {
-		~lpcb.free;
-	},
-	synth: \lpcfx2,
-	delta: Pexprand(2.0, 6.0, inf),
-	timeMul: Pexprand(1.2, 1.8, inf),
-	peakAdj: 0.01,
-	objects: { (
-		lpcfx2: (
-			def: SynthDef(\lpcfx2, { |inbus, outbus, lpcbuf, filedur, start, end, time = 1, amp = 8, expectPeak = 1 /*, tfreq = 18, tdur = 4, hpfreq = 800, voxamp = 0.2*/|
-				var cps, rmso, err, voc, noise, timepoint, sig, wet, peak, realvox;
-				timepoint = Line.kr(start, end, time) / filedur;
-				# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
-				noise = PinkNoise.ar(err * 0.05);
-				voc = In.ar(inbus, 2);
-				sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
-				peak = Amplitude.kr(sig, 0.1, 0.1);
-// 				realvox = GrainBuf.ar(1, Impulse.ar(tfreq), tfreq.reciprocal * tdur, voxbuf,
-// 					LFNoise1.kr(0.8).exprange(0.75, 1.3333), pos: timepoint);
-// 				realvox = HPF.ar(realvox, hpfreq, voxamp);
-				wet = EnvGen.kr(Env.linen(0.1, 0.8, 0.1), timeScale: time, doneAction: 2);
-				wet = (wet * min(1, (peak / expectPeak))).madd(2, -1);
-				sig = LinXFade2.ar(voc, Limiter.ar(sig * amp), wet, 1);
-				ReplaceOut.ar(outbus, sig);
-			}),
-			args: [
-				inbus: ~originalSigBus,
-				lpcbuf: ~lpcb,
-				filedur: ~voxdur,
-				pt: Prand(~pt, inf),
-				ptname: Pfunc { |ev| ev[\pt][2].debug("pt") },
-				// * 0.05? For some reason the peak measurements were WAY higher than the reality
-				#[start, end, expectPeak], Pkey(\pt).collect { |pt| pt[#[0, 1, 3]] * [1, 1, ~peakAdj] },
-				\time, (Pkey(\end) - Pkey(\start)) * BPStream(\timeMul),
-				\amp, 4,
-// 				\voxamp, Pfunc { |ev| 0.0 / ev[\pt][4] },
-// 				\tfreq, 19,
-// 				\tdur, 4,
-// 				\hpfreq, 1600
-			]
-		)
-	) }
-))
+(
+driver: \brook,
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		driver: ~driver,
+		isFx: true,
+		chan: BP(~driver).chan,
+		userprep: {
+			~dir = topEnvironment[\feetdir].dirname +/+ "samples/feet";
+			~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
+			~pt = TabFileReader.read(~dir +/+ "words-labels.txt");
+			~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
+			SoundFile.use(~dir +/+ "words-mono.aiff", { |file| ~voxdur = file.duration });
+			~originalSigBus = BP(~driver).originalSigBus;
+		},
+		userfree: {
+			~lpcb.free;
+		},
+		synth: \lpcfx2,
+		delta: Pexprand(2.0, 6.0, inf),
+		timeMul: Pwhite(1.5, 4.0, inf),
+		peakAdj: 0.01,
+		objects: { (
+			lpcfx2: (
+				def: SynthDef(\lpcfx2, { |inbus, outbus, lpcbuf, filedur, start, end, time = 1, amp = 8, expectPeak = 1|
+					var cps, rmso, err, voc, noise, timepoint, sig, wet, peak, realvox, checkbad;
+					timepoint = Line.kr(start, end, time) / filedur;
+					# cps, rmso, err = LPCVals.kr(lpcbuf, timepoint);
+					noise = PinkNoise.ar(err * 0.05);
+					voc = In.ar(inbus, 2);
+					sig = LPCSynth.ar(lpcbuf, voc + noise, timepoint, mul: rmso);
+CheckBadValues.ar(sig.sum, id: -1, post: 2);
+					peak = Amplitude.kr(sig, 0.1, 0.1);
+					wet = EnvGen.kr(Env.linen(0.1, 0.8, 0.1), timeScale: time, doneAction: 2);
+					wet = (wet * min(1, (peak / expectPeak))).madd(2, -1);
+					checkbad = CheckBadValues.kr(wet.sum, id: 0, post: 2);
+					wet = wet * (checkbad <= 0);
+					sig = LinXFade2.ar(voc, Limiter.ar(sig * amp), wet, 1);
+					checkbad = checkbad + CheckBadValues.ar(sig.sum, id: 1, post: 2);
+//					SendTrig.ar(HPZ1.ar(checkbad).abs > 0, -9999, checkbad);
+					FreeSelf.kr(checkbad);
+					ReplaceOut.ar(outbus, sig);
+				}).add,
+				args: [
+					inbus: ~originalSigBus,
+					lpcbuf: ~lpcb,
+					filedur: ~voxdur,
+					pt: Prand(~pt, inf),
+					ptname: Pfunc { |ev| ev[\pt][2].debug("pt") },
+					// For some reason the peak measurements pt[3] were WAY higher than the reality
+					#[start, end, expectPeak], Pkey(\pt)
+						.collect { |pt| pt[#[0, 1, 3]] * [1, 1, ~peakAdj] },
+					\time, (Pkey(\end) - Pkey(\start)) * BPStream(\timeMul),
+					\amp, 4,
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+},
+type: \bp) => Fact(\brookfx);
 )
+
+BP(\brookfx).free;
+Fact(\brookfx) => BP(\brookfx);
+0 => BP(\brookfx);
+
+BP(\brookfx).lpcfx2ptname = 0;
+BP(\brookfx).lpcfx2ptname = Pfunc { |ev| ev[\pt][2].debug("pt") };
 
 BP(\brookfx).debug = true;
 BP(\brookfx).debug = false;
@@ -327,8 +342,8 @@ BP(\brookfx).event.trace = true;
 BP(\brookfx).event.trace = false;
 
 o.remove;
-o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
-	{ s.sendMsg(\n_trace, m[1]) }.defer(0.5);
+o = OSCresponderNode(s.addr, '/tr', { |t, r, m|
+	s.sendMsg(\n_trace, m[1])
 }).add;
 
 BP(\brookfx).event.notifyDependents = {
@@ -339,3 +354,19 @@ BP(\brookfx).event.notifyDependents = nil;
 
 BP(\brookfx).lpcfx2amp = 12;
 BP(\brookfx).timeMul = Pwhite(1.5, 4.0, inf);
+
+BP(\brook).synth = \bpf;
+BP(\brook)[\rate] = Pexprand(0.3, 1.5, inf); //.trace(prefix: "\n");
+BP(\brook).bpfffreq = (Ppatlace([Pexprand(1500, 3000, inf), Pexprand(3600, 7000, inf)], inf, { 2.rand }) * min((Pkey(\rate) - 1) * 0.5 + 1, 1)); //.trace;
+
+BP(\brook).use {
+BP(\brook).synth = Plazy({
+			Pwrand(#[bpf, ringz], #[0.97, 0.03], inf).reject { |key|
+				~playingRingz.notNil and: { key == \ringz }
+			}
+		})
+}
+
+BP.all.stop;
+BP.all.free;
+~rvb.free;
