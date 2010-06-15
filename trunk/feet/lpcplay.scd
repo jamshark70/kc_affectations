@@ -284,7 +284,8 @@ make: { |name|
 			~lpcb.free;
 		},
 		synth: \lpcfx2,
-		delta: Pexprand(2.0, 6.0, inf),
+//		delta: Pexprand(2.0, 6.0, inf),
+		deltaMul: Pexprand(3.0, 12.0, inf),
 		timeMul: Pwhite(1.5, 4.0, inf),
 		peakAdj: 0.01,
 		objects: { (
@@ -318,6 +319,7 @@ CheckBadValues.ar(sig.sum, id: -1, post: 2);
 					#[start, end, expectPeak], Pkey(\pt)
 						.collect { |pt| pt[#[0, 1, 3]] * [1, 1, ~peakAdj] },
 					\time, (Pkey(\end) - Pkey(\start)) * BPStream(\timeMul),
+					\delta, Pkey(\time) * BPStream(\deltaMul) * Ptempo(),
 					\amp, 4,
 				]
 			)
@@ -334,6 +336,8 @@ Fact(\brookfx) => BP(\brookfx);
 
 BP(\brookfx).lpcfx2ptname = 0;
 BP(\brookfx).lpcfx2ptname = Pfunc { |ev| ev[\pt][2].debug("pt") };
+
+BP(\brookfx).deltaMul = Pexprand(1.1, 2.2, inf);
 
 BP(\brookfx).debug = true;
 BP(\brookfx).debug = false;
