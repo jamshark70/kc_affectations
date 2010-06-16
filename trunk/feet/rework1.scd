@@ -42,6 +42,9 @@ TempoClock.tempo = 110/60;
 MixingBoard.at(0).refresh;
 
 ~rvb.run(false); ~rvbmc.mute;
+~rvb.run(true); ~rvbmc.mute;
+
+
 ~rvbmc.free;  // or, on netbook, dump rvb altogether
 ~rvbmc = nil;
 
@@ -199,7 +202,7 @@ p.preSync = 0;
 b = BP(\st).buf;
 
 c.free;
-f = 2048;
+f = 512;
 c = Buffer.alloc(s, b.duration.calcPVRecSize(f, 0.25));
 
 a = {
@@ -211,8 +214,10 @@ a = {
 	Silent.ar(1)
 }.play;
 
+(
 SynthDef(\pvplayStereoPos, { |outbus, pvbuf, time = 1, rate = 1, amp = 1, pan,
-	stretch = 1, shift = 0,
+//	stretch = 1, shift = 0,
+	shiftS, shiftE,
 	attack = 0.01, decay = 0.05|
 	var	posEnv = \posEnv.kr(Env(#[0, 1], #[1]).asArray.extend(24, 0)),
 		point = EnvGen.kr(posEnv, timeScale: time),
@@ -220,16 +225,22 @@ SynthDef(\pvplayStereoPos, { |outbus, pvbuf, time = 1, rate = 1, amp = 1, pan,
 		even = PV_BufRd(LocalBuf(frSize, 1), pvbuf, point),
 		odd = PV_Copy(even, LocalBuf(frSize, 1)),
 		sig;
-	odd = PV_BinShift(odd, stretch, shift);
-//	even = PV_BinShift(even, stretch, shift);
- 	even = PV_Add(even, odd);
- 	odd = PV_Copy(even, odd);
+// 	even = PV_RectComb(even, 12,
+// 		LFSaw.kr(0.02, 1.5, 0.5, 0.5),
+// 		SinOsc.kr(1.23213).range(0.1, 0.9)
+// 	);
+//	even = PV_BinShift(even, 1, Line.kr(shiftS, shiftE, time));
+	odd = PV_BinShift(odd, 1, Line.kr(shiftS, shiftE, time));
+	odd = PV_RandComb(odd, Line.kr(0, Rand(0.5, 0.8), time));
+// 	even = PV_Add(even, odd);
+// 	odd = PV_Copy(even, odd);
 	even = PV_EvenBin(even <! odd);
 	odd = PV_OddBin(odd);
 	sig = IFFT([even, odd], 1)
 		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan, amp));
 }).add;
+)
 
 
 c.get(0, { |fr| ~fr = ((c.numFrames - 3) / fr).debug("pv frames") });
@@ -253,15 +264,36 @@ n = MCG(1).v.mixer;
 
 q = q.next;
 
-e = {
-	var	pt = q.next;
-	Env((pt + #[0, 0.05, 0.1]) / b.duration, #[0.25, 0.75], \sin)
-};
+e = { |q| Env((q + #[0, 0.5]) / b.duration, #[1]) };
+
+e = { |pt| Env((pt + #[0, 0.1, 0.5]) / b.duration, #[0.25, 0.75], \lin) };
 
 r = 0.1;
 z = 1;
 
-a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, amp: 1, posEnv: { e.value } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, stretch: 0.75, shift: 16));
+a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, amp: 1, posEnv: { e.value(q.next) } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, stretch: 0.75, shift: 16));
+a[\id].do(s.sendMsg(\n_trace, _));
+
+z = 5;
+a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, decay: 4, amp: 1, posEnv: { e.value(q.next) } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, shiftS: 0, shiftE: { rrand(8, 15) } ! z));
+
+// this actually is pretty fricken cool
+a = Pbind(
+	\instrument, \pvplayStereoPos,
+	\pvbuf, c,
+	\rate, Pgeom.fromEndpoints(1, 0.05, 10),
+	\time, Pkey(\rate).reciprocal,
+	\decay, Pkey(\time) * 0.14,
+	\amp, 1,
+	\n, 3,
+	\pt, Pn(Pshuf(p.pt, 1), inf).clump(Pkey(\n)),
+	\posEnv, Pfunc { |ev| ev[\pt].collect { |pt| e.value(pt) } },
+	\pan, Pif(Pkey(\n) > 1, Pn(Plazy { |ev| Pseries.fromEndpoints(-0.5, 0.5, ev[\n]) }), 0),
+	\shiftS, -5,
+	\shiftE, Pwhite(4, 30, inf).clump(Pkey(\n))
+).asStream;
+
+n.play(a.next(()));
 
 fork({
 a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, amp: 1, posEnv: { e.value } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, stretch: 1, shift: -20));
@@ -321,3 +353,52 @@ a = m.play((instrument: \partConv, start: p.pt.choose, time: 0.2, amp: 1, irbuf:
 
 // WAY FRICKEN LOUD!!
 a = m.play((instrument: \partConv, start: 0, time: p.buf.duration, amp: 1, irbuf: ~irbufs.choose, bufnum: p.buf));
+
+
+c.free;
+c = Buffer.alloc(s, 512, 1, { |buf| buf.setnMsg(0, Env.perc(0.1, 0.9).discretize(buf.numFrames)) });
+c.plot;
+
+Signal.hanningWindow(512).plot;
+z = Pgeom.fromEndpoints(0.001, 1, 512).asStream.all;
+z.plot;
+c.setn(0, z);
+c.setn(0, Signal.hanningWindow(1024)[ .. 511]);
+
+// can be a LOT of low-freq audio
+g = GenericGlobalControl(\blend, nil, 1);
+g.gui;
+
+// steady (blend == 1) needs work: just a buzz now (even w/ hanning window)
+a = n.play({ |blend = 1|
+	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
+			// Dust outputs 0 < y <= 1; I want flat levels
+		trig = blendf.(blend, Dust.kr(8) > 0, Impulse.kr(40)),
+		pt = p.pt.choose,
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		fwdpt = Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002) * b.duration,
+		randpt = TRand.kr(-0.002, 0.002, trig) * b.duration,
+		blended = blendf.(blend, randpt, fwdpt),
+		bufPt01 = pt + blended,
+		rate = TExpRand.kr(0.5, 6, trig),
+		rateBlend = blendf.(blend, rate, TExpRand.kr(0.98, 0.98.reciprocal, trig)),
+		dur = SinOsc.kr(0.05).exprange(0.08, 0.5),
+		pan = blendf.(blend, TRand.kr(-1.0, 1.0, trig), 0);
+//	GrainBuf.ar(2, trig, dur, b, rateBlend, bufPt01, 2, pan, c)
+	TGrains3.ar(2, trig, b, rateBlend, bufPt01, dur, pan, amp: trig, att: 0.1 * dur, dec: 0.9 * dur, window: c, interp: 2)
+}, [blend: g]);
+
+a.trace;
+
+a.free;
+
+a = { 
+	var	fwdpt = Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002),
+		dropped = HPZ1.kr(fwdpt) < 0,
+		timer = Timer.kr(dropped + Impulse.kr(0));
+	timer.poll(dropped);
+	Silent.ar(1)
+}.play;
+
+a.trace;
+a.free;
