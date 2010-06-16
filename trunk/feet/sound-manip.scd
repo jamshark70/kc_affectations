@@ -556,6 +556,8 @@ a.trace;
 // pv_bufrd?
 // lores (frame=256) is wicked ugly! maybe nice transition to water sounds
 // plus partial/noise synths, with narrow thresholds, get watery
+b = BP(\st).buf;
+
 c.free;
 f = 256;
 c = Buffer.alloc(s, b.duration.calcPVRecSize(f, 0.25));
