@@ -780,8 +780,8 @@ PR(\abstractProcess).clone {
 // 		~modeStream ?? { ~makeStreamForKey.(\mode) };
 		PnNilSafe(Plazy { |inval|
 			var	dur = ~durStream.next,
-				preSyncop, parms, gestArray;
-			block { |break|
+				preSyncop, parms, gestArray, result;
+			result = block { |break|
 				if(dur.notNil and: { dur > 0 }) {
 					parms = (dur: dur, numWalkers: ~numWalkersStream.next(inval));
 					if(parms[\numWalkers].isNil) { break.(nil) };
@@ -792,8 +792,8 @@ PR(\abstractProcess).clone {
 							preSyncop = (dur * ~preSyncStream.next(dur)).roundUp(1);
 						};
 						gestArray = ~gestureArrayStream.next(parms).asArray;
-// is this check really needed? maybe not
-//						if(gestArray.size < parms[\numWalkers]) { break.(nil) };
+						if(gestArray.size < parms[\numWalkers]
+							or: { gestArray.any(_.isNil) }) { break.(nil) };
 						parms.put(\gestureArray, gestArray)
 							.put(\preSyncop, preSyncop.roundUp(1));
 						Pfindur(dur, Ppar(
@@ -810,17 +810,19 @@ PR(\abstractProcess).clone {
 						// empty array in Ppar would fail anyway
 						Event.silent(dur)
 					};
-				} {
-					// force reset of subpatterns - we don't know which one(s) ended early
-					// returning 'nil' makes PnNilSafe stop
-					~durStream = nil;
-					~numWalkersStream = nil;
-					~preSyncStream = nil;
-					~gestureStream = nil;
-					~gestureArrayStream = nil;
-					~numSyncopStream = nil;
 				};
-			}
+			};
+			result ?? {
+				// force reset of subpatterns - we don't know which one(s) ended early
+				// returning 'nil' makes PnNilSafe stop
+				~durStream = nil;
+				~numWalkersStream = nil;
+				~preSyncStream = nil;
+				~gestureStream = nil;
+				~gestureArrayStream = nil;
+				~numSyncopStream = nil;
+				nil
+			};
 		}, inf)
 /*.collect { |ev|
 	if(ev[\instrument] != ~def) { [ev[\gesture], ev[\amp]].debug("gesture, amp") };
