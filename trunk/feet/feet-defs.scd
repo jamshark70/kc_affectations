@@ -326,9 +326,30 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
 
+SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
+	attack = 0.01, decay = 0.05|
+	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
+		sig = IFFT(fft, 1)
+			* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+}).add;
+
+SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
+	attack = 0.01, decay = 0.05|
+	var	frSize = Index.kr(pvbuf, 0),
+		even = PV_PlayBuf(LocalBuf(frSize, 1), pvbuf, rate, startFrame, loop: 0),
+		odd = PV_Copy(even, LocalBuf(frSize, 1)),
+	even = PV_EvenBin(even <! odd);
+	odd = PV_OddBin(odd);
+	sig = IFFT([even, odd], 1)
+		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
+	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan, amp));
+}).add;
+
+
 {	|name = \waterfx, numCh = 2, numFr = 256, lo = 1, hi = 7, mid = 1.32432|
 	SynthDef(name, { |thresh = 1, wet = 1, outbus, gate = 1|
-	 	var	sig = In.ar(outbus, numCh), sig2,
+		var	sig = In.ar(outbus, numCh), sig2,
 			fft = FFT({ LocalBuf(numFr, 1) } ! numCh, sig, 0.25, 1),
 			fft2 = PV_Copy(fft, { LocalBuf(numFr, 1) } ! numCh),
 			// most of this crap will be calculated in the client first,
@@ -877,27 +898,6 @@ PR(\steps1).chuck(BP(name), nil, (
 
 	processLabels: {
 		var	a;
-
-		SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
-			attack = 0.01, decay = 0.05|
-			var	fft = PV_PlayBuf(LocalBuf(256, 1), pvbuf, rate, startFrame, loop: 0),
-				sig = IFFT(fft, 1)
-					* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
-			Out.ar(outbus, Pan2.ar(sig, pan, amp));
-		}).add;
-
-		SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
-			ffreq = 6000, attack = 0.01, decay = 0.05|
-			var	even = PV_PlayBuf(LocalBuf(256, 1), pvbuf, rate, startFrame, loop: 0),
-				odd = PV_Copy(even, LocalBuf(256, 1)),
-				sig;
-			even = PV_EvenBin(even <! odd);
-			odd = PV_OddBin(odd);
-			sig = IFFT([even, odd], 1)
-				* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
-//			sig = LPF.ar(sig, ffreq);
-			Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan, amp));
-		}).add;
 
 		~pt = ~pt.collect { |row, i|
 			2.do { |i| row[i] = row[i].asFloat };
