@@ -339,6 +339,7 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 	var	frSize = Index.kr(pvbuf, 0),
 		even = PV_PlayBuf(LocalBuf(frSize, 1), pvbuf, rate, startFrame, loop: 0),
 		odd = PV_Copy(even, LocalBuf(frSize, 1)),
+		sig;
 	even = PV_EvenBin(even <! odd);
 	odd = PV_OddBin(odd);
 	sig = IFFT([even, odd], 1)
