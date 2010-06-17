@@ -818,7 +818,7 @@ PR(\abstractProcess).clone {
 							or: { gestArray.any(_.isNil) }) { break.(nil) };
 						parms.put(\gestureArray, gestArray)
 							.put(\preSyncop, preSyncop.roundUp(1));
-						Pfindur(dur, Ppar(
+						/*Pfindur*/ Psync(Ppar(
 							gestArray.collect { |gesture, i|
 								~oneWalkerPattern.(
 									gesture,
@@ -826,7 +826,7 @@ PR(\abstractProcess).clone {
 									parms
 								)
 							}
-						))
+						), dur, dur)
 					} {
 						// numWalkers = 0, just rest
 						// empty array in Ppar would fail anyway
