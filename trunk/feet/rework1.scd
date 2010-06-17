@@ -18,6 +18,12 @@ MT(1).gui;
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
 
+m = MixerChannel(\test1, s, 1, 2);
+n = MixerChannel(\test2, s, 2, 2);
+m => MCG(0); n => MCG(1);
+
+#[master, rvbmc, rvb].do(_.envirPut(nil));
+
 VoicerProxy.new => VP.prNew(0);
 4.do { VP(0).v.addControlProxy(nil, true) };
 VP(0).v.gui;
@@ -214,6 +220,8 @@ a = {
 	Silent.ar(1)
 }.play;
 
+a.trace;
+
 (
 SynthDef(\pvplayStereoPos, { |outbus, pvbuf, time = 1, rate = 1, amp = 1, pan,
 //	stretch = 1, shift = 0,
@@ -370,14 +378,15 @@ g = GenericGlobalControl(\blend, nil, 1);
 g.gui;
 
 // steady (blend == 1) needs work: just a buzz now (even w/ hanning window)
-a = n.play({ |blend = 1|
+a = n.play({ |blend = 1, z = 0.008|
 	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
 			// Dust outputs 0 < y <= 1; I want flat levels
-		trig = blendf.(blend, Dust.kr(8) > 0, Impulse.kr(40)),
-		pt = p.pt.choose,
+		trig = blendf.(blend, Dust.kr(18) > 0, Impulse.kr(70)),
+		pt = p.pt.choose.debug("pt"),
 		// often I'd divide rate by bufdur, but 0.004 is already normalized
-		fwdpt = Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002) * b.duration,
-		randpt = TRand.kr(-0.002, 0.002, trig) * b.duration,
+		zneg = z.neg,
+		fwdpt = Phasor.kr(0, (z*2) / 5 * ControlDur.ir, zneg, z, zneg) * b.duration,
+		randpt = TRand.kr(zneg, z, trig) * b.duration,
 		blended = blendf.(blend, randpt, fwdpt),
 		bufPt01 = pt + blended,
 		rate = TExpRand.kr(0.5, 6, trig),
@@ -385,20 +394,172 @@ a = n.play({ |blend = 1|
 		dur = SinOsc.kr(0.05).exprange(0.08, 0.5),
 		pan = blendf.(blend, TRand.kr(-1.0, 1.0, trig), 0);
 //	GrainBuf.ar(2, trig, dur, b, rateBlend, bufPt01, 2, pan, c)
-	TGrains3.ar(2, trig, b, rateBlend, bufPt01, dur, pan, amp: trig, att: 0.1 * dur, dec: 0.9 * dur, window: c, interp: 2)
+	TGrains3.ar(2, trig, b, rateBlend, bufPt01, dur, pan, amp: trig, att: 0.5 * dur, dec: 0.5 * dur, window: w, interp: 2)
 }, [blend: g]);
 
 a.trace;
 
 a.free;
 
-a = { 
-	var	fwdpt = Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002),
-		dropped = HPZ1.kr(fwdpt) < 0,
-		timer = Timer.kr(dropped + Impulse.kr(0));
-	timer.poll(dropped);
-	Silent.ar(1)
-}.play;
+~mc = BasicMIDIControl(0, \knob, { |val, div| g.value = val / div });
+
+c.get(0, { |fs| ((c.numFrames - 3) / fs).postln });
+6988.reciprocal
+0.004 * b.duration
+
+(
+a = n.play({ |z = 0.008, blend = 0, moveRate = 1, slowBufDur = 0.1|
+	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
+		pvbuf = c,
+		framesize = Index.kr(pvbuf, 0),
+		fftrig = FFTTrigger(LocalBuf(framesize, 1), /*0.25*/ Index.kr(pvbuf, 1)),
+		fft2,
+		alltrigs = fftrig >= 0,
+		trigcoin = TRand.kr(0.0, 1.0, alltrigs) < 0.05,
+		trig = alltrigs * trigcoin,
+		zneg = z.neg,
+//		rise = Phasor.kr(trig, (z*2) / 5 * ControlDur.ir, zneg, z, zneg),
+		fastRise = Phasor.kr(trig, ControlDur.ir / b.duration, 0, 1, 0),
+		slowRise = Phasor.kr(0, moveRate * ControlDur.ir, 0, slowBufDur, 0) / b.duration,
+		rise = blendf.(blend, fastRise + TRand.kr(z, zneg, trig), slowRise),
+		pt = 5.09152 /*p.pt.choose*/ / b.duration,
+		pos = pt + rise,
+		shift = TIRand.kr(-8, 12, alltrigs) * LinExp.kr(blend, 0, 1, 1, 0.001);
+
+	fftrig = PV_BinBufRd(fftrig, pvbuf, pos, numBins: 512, clear: 1);
+	fftrig = PV_BinShift(fftrig, 1, shift);
+	fft2 = PV_Copy(fftrig, LocalBuf(framesize, 1));
+	fftrig = PV_EvenBin(fftrig <! fft2);
+	fft2 = PV_OddBin(fft2);
+	IFFT([fftrig, fft2])
+}, [blend: g, moveRate: h]);
+)
+
+a.set(\moveRate, 0.025).set(\slowBufDur, 0.1);
+
+h = GenericGlobalControl(\moveR, nil, 0.025, #[0.025, 10.0, \exp]); h.gui;
+h.automate({ SinOsc.kr(0.01, -0.5pi).exprange(0.025, 3.0) });
+h.watch;
+
+h.stopAuto;
+h.stopWatching;
 
 a.trace;
 a.free;
+
+// ^^ rvb send level c. 0.132
+n.postSettings
+
+w.free;
+w = Buffer.alloc(s, 512, 1, { |buf| buf.setnMsg(0, Signal.hanningWindow(1024)[..511]) });
+w.plot;
+
+// steady (blend == 1) needs work: just a buzz now (even w/ hanning window)
+a = n.play({
+	var	trig = Dust.kr(8) > 0,
+		pt = p.pt.choose,
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		fwdpt = 0, // Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002) * b.duration,
+		randpt = TRand.kr(-0.002, 0.002, trig) * b.duration,
+		bufPt01 = pt + fwdpt + randpt,
+		rate = TExpRand.kr(0.5, 6, trig),
+		dur = SinOsc.kr(0.05).exprange(0.08, 0.5);
+	TGrains3.ar(2, trig, b, rate, bufPt01, dur, 0, amp: trig, att: 0.1 * dur, dec: 0.9 * dur, window: w, interp: 2)
+});
+
+a.free;
+
+// steady (blend == 1) needs work: just a buzz now (even w/ hanning window)
+a = n.play({
+	var	trig = Impulse.kr(50),
+		pt = p.pt.choose,
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		fwdpt = Phasor.kr(0, 0.004 / 5 * ControlDur.ir, -0.002, 0.002, -0.002) * b.duration,
+		randpt = 0, // TRand.kr(-0.002, 0.002, trig) * b.duration,
+		bufPt01 = pt + fwdpt + randpt,
+		rate = TExpRand.kr(0.5, 6, trig),
+		dur = SinOsc.kr(0.05).exprange(0.08, 0.5);
+	TGrains3.ar(2, trig, b, rate, bufPt01, dur, 0, amp: trig, att: 0.1 * dur, dec: 0.9 * dur, window: w, interp: 2)
+});
+
+a.free;
+
+
+a = n.play({ |blend = 1, z = 0.008|
+	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
+			// Dust outputs 0 < y <= 1; I want flat levels
+		trig = blendf.(blend, Dust.kr(18) > 0, Impulse.kr(70)),
+		pt = p.pt.choose.debug("pt"),
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		zneg = z.neg,
+		fwdpt = Phasor.kr(0, (z*2) / 5 * ControlDur.ir, zneg, z, zneg) * b.duration,
+		randpt = TRand.kr(zneg, z, trig) * b.duration,
+		blended = blendf.(blend, randpt, fwdpt),
+		bufPt01 = pt + blended,
+		rate = TExpRand.kr(0.5, 6, trig),
+		rateBlend = blendf.(blend, rate, TExpRand.kr(0.98, 0.98.reciprocal, trig)),
+		dur = SinOsc.kr(0.05).exprange(0.08, 0.5),
+		pan = blendf.(blend, TRand.kr(-1.0, 1.0, trig), 0);
+//	GrainBuf.ar(2, trig, dur, b, rateBlend, bufPt01, 2, pan, c)
+	TGrains3.ar(2, trig, b, rateBlend, bufPt01, dur, pan, amp: trig, att: 0.5 * dur, dec: 0.5 * dur, window: w, interp: 2)
+}, [blend: g]);
+
+0.008 * b.duration
+
+
+SynthDef(\pvdisintegrate, { |outbus, audiobuf, pvbuf, blend, ptSec, fastTrigProb = 0.05, ptRandSec = 0.15, moveRate = 1, slowBufDur = 1, shiftL = -8, shiftR = 12, attack = 0.1, decay = 0.1, gate = 1, amp = 1|
+	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
+		bufdur = BufDur.ir(audiobuf),
+		framesize = Index.kr(pvbuf, 0),
+		hop = Index.kr(pvbuf, 1),
+		cdur = ControlDur.ir,
+		fftrig = FFTTrigger(LocalBuf(framesize, 1), hop),
+		fft2,
+		alltrigs = fftrig >= 0,
+		trigcoin = TRand.kr(0.0, 1.0, alltrigs) < fastTrigProb,
+		trig = alltrigs * trigcoin,
+		z = ptRandSec / bufdur, zneg = z.neg,
+		fastRise = Phasor.kr(trig, cdur / bufdur, 0, 1, 0),
+		slowRise = Phasor.kr(0, moveRate * cdur, 0, slowBufDur, 0) / bufdur,
+		rise = blendf.(blend, fastRise + TRand.kr(z, zneg, trig), slowRise),
+		pt = ptSec / bufdur,
+		pos = pt + rise,
+		shift = TIRand.kr(shiftL, shiftR, alltrigs) * LinExp.kr(blend, 0, 1, 1, 0.01),
+		eg = EnvGen.kr(Env.asr(attack, 1, decay), gate, doneAction: 2);
+
+	fftrig = PV_BinBufRd(fftrig, pvbuf, pos, numBins: framesize, clear: 1);
+	fftrig = PV_BinShift(fftrig, 1, shift);
+	fft2 = PV_Copy(fftrig, LocalBuf(framesize, 1));
+	fftrig = PV_EvenBin(fftrig <! fft2);
+	fft2 = PV_OddBin(fft2);
+	Out.ar(outbus, IFFT([fftrig, fft2]) * eg * amp)
+}).add;
+
+// client drives randomized trigs - note here, client should calculate shift amount - no auto blending
+SynthDef(\t_pvdisintegrate, { |outbus, audiobuf, pvbuf, blend, ptSec, t_fasttrig = 1, ptRandSec = 0.15, moveRate = 1, slowBufDur = 1, shift = 0, attack = 0.1, decay = 0.1, gate = 1, amp = 1|
+	var	blendf = { |blend, a, b| a + (blend * (b - a)) },
+		bufdur = BufDur.ir(audiobuf),
+		framesize = Index.kr(pvbuf, 0),
+		hop = Index.kr(pvbuf, 1),
+		frameTime = framesize * hop / SampleRate.ir,
+		cdur = ControlDur.ir,
+		fftrig = FFTTrigger(LocalBuf(framesize, 1), hop),
+		fft2,
+		alltrigs = fftrig >= 0,
+		trigmask = Trig1.kr(t_fasttrig, frameTime - cdur),
+		trig = alltrigs * trigmask,
+		z = ptRandSec / bufdur, zneg = z.neg,
+		fastRise = Phasor.kr(trig, cdur / bufdur, 0, 1, 0),
+		slowRise = Phasor.kr(0, moveRate * cdur, 0, slowBufDur, 0) / bufdur,
+		rise = blendf.(blend, fastRise + TRand.kr(z, zneg, trig), slowRise),
+		pt = ptSec / bufdur,
+		pos = pt + rise,
+		eg = EnvGen.kr(Env.asr(attack, 1, decay), gate, doneAction: 2);
+
+	fftrig = PV_BinBufRd(fftrig, pvbuf, pos, numBins: framesize, clear: 1);
+	fftrig = PV_BinShift(fftrig, 1, shift);
+	fft2 = PV_Copy(fftrig, LocalBuf(framesize, 1));
+	fftrig = PV_EvenBin(fftrig <! fft2);
+	fft2 = PV_OddBin(fft2);
+	Out.ar(outbus, IFFT([fftrig, fft2]) * eg * amp)
+}).add;
