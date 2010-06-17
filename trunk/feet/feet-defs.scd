@@ -391,7 +391,8 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 PR(\abstractProcess).clone {
 	~bufPath = "58454_sinatra314_footsteps_wooden_floor_loop.wav";
 
-	~event = (eventKey: \singleSynthPlayer);
+// 	~event = (eventKey: \singleSynthPlayer);
+	~event = (eventKey: \polySynthPlayer);
 	~quant = #[1, -0.25].asTimeSpec;
 	~alwaysReset = true;
 	~def = \bufGrainPanFilt;
@@ -616,7 +617,7 @@ PR(\abstractProcess).clone {
 				\lpfreq, ~hiFilt,
 				\chorusAmt, BPStream(\syncopChorusAmt),
 				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf),
-				\chorusAmps, ~chorusAmps
+				\chorusAmps, [~chorusAmps]
 // 				\rate, Pkey(\rate)
 // 					* Pif(Ptime() < parms[\preSyncop], 1, Pstutter(1e6, BPStream(\syncopRateMul)))
 			)
