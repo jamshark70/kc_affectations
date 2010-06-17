@@ -163,7 +163,7 @@ p.gestures[\spray] = { |i, parms, delta|
 		),
 		\chorusAmt, 0, //BPStream(\syncopChorusAmt),
 		\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
-		\chorusAmps, 0 ! 3
+		\chorusAmps, [0 ! 3]
 	)
 };
 
@@ -638,3 +638,41 @@ WrapPatch(
 FxPatch(
 	[ 'busfx', 'chorus' ], [ 18, 2, 0.0084255985991258, 0.40842391509327, 0.005573957308325, 1.8325956521762, 0.5 ]
 )
+
+
+
+// steps chords
+p.gestures[\blox] = { |i, parms|
+	// must not have more than one walker
+	if(i == 0) {
+		Pbind(
+			\instrument, \bufGrainPanKlank,
+			\pan, Pwhite(-1.0, 1.0, inf),
+			\amp, ~amp.(i, parms),
+			\n, Pwhite(3, 6, inf),
+			\mnotes, Pscratch(
+				Pvbrown(39, 50, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\n), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\n).asStream)),
+				Pwrand(#[-1, 0, 1], #[0.1, 0.5, 0.4], inf),
+				memorySize: 30
+			),
+			\ffreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
+			\filtAttack, BPStream(\klankAttack),
+			\filtDecay, Pkey(\filtAttack) + 0.05,
+			\chorusAmt, 0, //BPStream(\syncopChorusAmt),
+			\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+			\chorusAmps, [0 ! 3],
+			\lpfreq, ~hiFilt,
+			\delta, Pstutter(Pwhite(3, 10, inf), Pwhite(2, 4, inf).reciprocal)
+		)
+	} {
+		Event.silent(parms[\dur])
+	}
+};
+
+p.gesture = \blox;
+p.numWalkers = 1;
+
+BP(\st).reset;
+BP(\st).prepareForPlay;
+
+p.eventStream.next(p.event.copy).postcs; ""
