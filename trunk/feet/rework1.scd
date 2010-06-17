@@ -162,7 +162,8 @@ p.gestures[\spray] = { |i, parms, delta|
 			\exp
 		),
 		\chorusAmt, 0, //BPStream(\syncopChorusAmt),
-		\chorusDelay, 0 //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+		\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+		\chorusAmps, 0 ! 3
 	)
 };
 
@@ -196,11 +197,32 @@ p.numSyncop = 2;
 
 // another config: rests - OK! need more gestural variety
 p.dur = Ppatlace([Pexprand(5, 14, inf).round, Pwhite(1, 3, inf)], inf);
-p.gesture = Pxrand(#[spray, sprayFtoS, sprayStoF], inf); //\spray;
+p.gesture = Pxrand(#[spray, sprayFtoS, sprayStoF, blipup], inf); //\spray;
 p.gsel = \unison;
-p.numWalkers = Pseq(#[1, 0], inf);
+p.numWalkers = Pseq(#[3, 0], inf);
 p.preSync = 0;
 
+
+// blip up, blip down gestures
+p.gestures[\blipup] = { |i, parms|
+	var	numEv = rrand(8, 15);
+	Pbind(
+		\root, Plazy { |ev| Pn(rrand(28, 37).unmapMode(ev[\mode]).midicps) },
+//		\ffreq, Pkey(\root) * Pn(Pseries(1, rrand(2, 5).reciprocal, rrand(5, 9))),
+		\ffreq, Pkey(\root) * Pseries(1, rrand(2, 5).reciprocal, numEv),
+		\filtDecay, Pkey(\filtAttack) + 0.05,
+		\delta, (parms[\dur] - rrand(1, 3)) / numEv
+	) <> ~gestures[\spray].(i, parms);
+};
+
+p.dur = Pwhite(5, 9, inf);
+
+p.numWalkers = 5;
+p.gesture = \blipup;
+p.gesture = \spray;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]); r.remove; }).add;
 
 
 // recheck granular synth
@@ -238,8 +260,8 @@ SynthDef(\pvplayStereoPos, { |outbus, pvbuf, time = 1, rate = 1, amp = 1, pan,
 // 		SinOsc.kr(1.23213).range(0.1, 0.9)
 // 	);
 //	even = PV_BinShift(even, 1, Line.kr(shiftS, shiftE, time));
-	odd = PV_BinShift(odd, 1, Line.kr(shiftS, shiftE, time));
-	odd = PV_RandComb(odd, Line.kr(0, Rand(0.5, 0.8), time));
+// 	odd = PV_BinShift(odd, 1, Line.kr(shiftS, shiftE, time));
+// 	odd = PV_RandComb(odd, Line.kr(0, Rand(0.5, 0.8), time));
 // 	even = PV_Add(even, odd);
 // 	odd = PV_Copy(even, odd);
 	even = PV_EvenBin(even <! odd);
@@ -285,11 +307,13 @@ a[\id].do(s.sendMsg(\n_trace, _));
 z = 5;
 a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, decay: 4, amp: 1, posEnv: { e.value(q.next) } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, shiftS: 0, shiftE: { rrand(8, 15) } ! z));
 
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet-demos.aiff");
+
 // this actually is pretty fricken cool
-a = Pbind(
+a = n.play(Pbind(
 	\instrument, \pvplayStereoPos,
 	\pvbuf, c,
-	\rate, Pgeom.fromEndpoints(1, 0.05, 10),
+	\rate, Pgeom.fromEndpoints(1, 0.11, 8),
 	\time, Pkey(\rate).reciprocal,
 	\decay, Pkey(\time) * 0.14,
 	\amp, 1,
@@ -298,10 +322,15 @@ a = Pbind(
 	\posEnv, Pfunc { |ev| ev[\pt].collect { |pt| e.value(pt) } },
 	\pan, Pif(Pkey(\n) > 1, Pn(Plazy { |ev| Pseries.fromEndpoints(-0.5, 0.5, ev[\n]) }), 0),
 	\shiftS, -5,
-	\shiftE, Pwhite(4, 30, inf).clump(Pkey(\n))
-).asStream;
+	\shiftE, Pwhite(4, 30, inf).clump(Pkey(\n)),
+	\delta, Pkey(\time) * Ptempo() * Pwhite(0.75, 0.9, inf)
+));
 
 n.play(a.next(()));
+
+a.stop
+n.stopRecord;
+~master.stopRecord;
 
 fork({
 a = n.play((instrument: \pvplayStereoPos, pvbuf: c, rate: r, time: 1/r, amp: 1, posEnv: { e.value } ! z, pan: if(z > 1) { 0.5 * (-1.0, (z-1).reciprocal * 2 - 1 .. 1.0) } { 0 }, stretch: 1, shift: -20));
@@ -563,3 +592,49 @@ SynthDef(\t_pvdisintegrate, { |outbus, audiobuf, pvbuf, blend, ptSec, t_fasttrig
 	fft2 = PV_OddBin(fft2);
 	Out.ar(outbus, IFFT([fftrig, fft2]) * eg * amp)
 }).add;
+
+
+
+// buzz --> separate steps
+g = GenericGlobalControl(\tfreq, nil, 20, #[5, 200, \exp]); g.gui;
+g.spec = #[0.5, 150, \exp];
+
+// steady (blend == 1) needs work: just a buzz now (even w/ hanning window)
+a = n.play({ |tfreq = 50|
+	var	trig = Impulse.ar(tfreq),
+		pt = p.pt.choose.debug,
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		fwdpt = 0, //Phasor.ar(0, 0.01 * SampleDur.ir, 0, 0.5, 0) * b.duration,
+//		randpt = 0, //TRand.kr(-0.002, 0.002, trig) * b.duration,
+		randpt = SinOsc.ar(0.1, 0, 0.01),
+		bufPt01 = pt + fwdpt + randpt,
+		rate = 1, //TExpRand.kr(0.5, 6, trig),
+		dur = (tfreq.reciprocal * 10).clip(0.1, 0.4);
+	TGrains.ar(2, trig, b, rate, bufPt01, dur, 0, amp: trig, interp: 2)
+}, [tfreq: g]);
+
+a.trace;
+a.free;
+
+WrapInstr("grain.tone", { |bufnum, tfreq = 50, pt = 0, lfospd = 0.1, lfoamt = 0.01, rate = 1, durMul = 10|
+	var	trig = Impulse.ar(tfreq),
+		// often I'd divide rate by bufdur, but 0.004 is already normalized
+		lfo = SinOsc.ar(lfospd, 0, lfoamt),
+		bufPt01 = pt + lfo,
+		dur = (tfreq.reciprocal * durMul).clip(0.1, 0.4);
+	TGrains.ar(2, trig, bufnum, rate, bufPt01, dur, 0, amp: trig, interp: 2)
+}, [\mybuf, #[0.5, 300, \exp], #[0, 20], #[0.01, 10, \exp], #[0.001, 0.1, \exp], #[0.25, 4, \exp], #[1, 20, \exp]]);
+
+WrapInstr("grain.tone").listArgs
+
+a = n.play(WrapInstr("grain.tone"), [b, nil, p.pt.choose]); a.gui;
+z = n.playfx(Instr("busfx.chorus"),  [0, 2]); z.gui;
+
+
+WrapPatch(
+	[ 'grain', 'tone' ], [ Buffer.new, 79.129751054297, 14.303334, 0.74989420933246, 0.01564748046212, 1.0, 10.0 ]
+)
+
+FxPatch(
+	[ 'busfx', 'chorus' ], [ 18, 2, 0.0084255985991258, 0.40842391509327, 0.005573957308325, 1.8325956521762, 0.5 ]
+)
