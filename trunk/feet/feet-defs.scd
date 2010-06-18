@@ -672,6 +672,40 @@ PR(\abstractProcess).clone {
 					Pwrand([1, Pseq(#[1.5, 1.5, 1], 1)], [1 - prob, prob], inf)
 				], 1)
 			)
+		},
+
+		blox: { |i, parms|
+			// must not have more than one walker
+			if(i == 0) {
+				Pbind(
+					\instrument, \bufGrainPanKlank,
+					\pan, Pwhite(-1.0, 1.0, inf),
+		//			\amp, ~amp.(i, parms),
+					\bloxNum, Pwhite(3, 6, inf),
+					\mnotesStep, Pwrand(#[-1, 0, 1], #[0.1, 0.5, 0.4], inf),
+					\mnotes, Pscratch(
+						Pvbrown(43, 54, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\bloxNum), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\bloxNum).asStream)),
+						Pkey(\mnotesStep),
+						memorySize: 30
+					),
+					\mode, BPStream(\bloxMode),
+					\ffreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
+					\filtAttack, BPStream(\klankAttack),
+					\filtDecay, BPStream(\klankDecay), // Pkey(\filtAttack) + 0.08,
+					\chorusAmt, 0, //BPStream(\syncopChorusAmt),
+					\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
+					\chorusAmps, [0 ! 3],
+					\lpfreq, ~hiFilt,
+					\delta, Pstutter(Pwhite(3, 10, inf), 4 / Pxrand((4..10), inf)),
+						// Pif allows Pgeom to run when delta does not change
+						// Pdiff is always 0 for the first event in a given Pn iteration!
+					\amp, PnNilSafe(
+						Pif(Pbinop('==', Pdiff(Pkey(\delta)), 0), Pgeom.fromEndpoints(1, 0.15, 10))
+					)
+				)
+			} {
+				Event.silent(parms[\dur])
+			}
 		}
 	);
 
@@ -685,6 +719,9 @@ PR(\abstractProcess).clone {
 	~filtDecay = 1.0;
 	~filtAmpSpec = [7.dbamp, -5.dbamp, \exp].asSpec;
 //	~filtAmp = Plazy { Pkey(\filtDecay).collect(~filtAmpSpec.map(_)) };
+
+	~modes0 = Mode.keys.asArray.select { |m| m.asString.last == $0 };
+	~bloxMode = Pclutch(Prand(p.modes0, inf), Pkey(\mnotesStep).abs > 0);
 
 	~syncProb = 0.1;
 
@@ -792,7 +829,10 @@ PR(\abstractProcess).clone {
 		parms
 	};
 
-	~asPattern = {
+	// this is the hook for a visual-event dispatcher to get the next composite pattern
+	~oneAggregateGesture = { |inval|
+		var	dur, preSyncop, parms, gestArray, result;
+
 		~numWalkersStream ?? { ~makeStreamForKey.(\numWalkers) };
 		~durStream ?? { ~makeStreamForKey.(\dur) };
 		~preSyncStream ?? { ~makeStreamForKey.(\preSync) };
@@ -801,51 +841,55 @@ PR(\abstractProcess).clone {
 		~gestureArrayStream ?? { ~makeStreamForKey.(\gestureArray) };
 		~numSyncopStream ?? { ~makeStreamForKey.(\numSyncop) };
 // 		~modeStream ?? { ~makeStreamForKey.(\mode) };
-		PnNilSafe(Plazy { |inval|
-			var	dur = ~durStream.next,
-				preSyncop, parms, gestArray, result;
-			result = block { |break|
-				if(dur.notNil and: { dur > 0 }) {
-					parms = (dur: dur, numWalkers: ~numWalkersStream.next(inval));
-					if(parms[\numWalkers].isNil) { break.(nil) };
-					if(parms[\numWalkers] > 0) {
-						preSyncop = ~preSyncStream.next(dur);
-						if(preSyncop.isNil) { break.(nil) };
-						if(preSyncop < 1.0) {
-							preSyncop = (dur * ~preSyncStream.next(dur)).roundUp(1);
-						};
-						gestArray = ~gestureArrayStream.next(parms).asArray;
-						if(gestArray.size < parms[\numWalkers]
-							or: { gestArray.any(_.isNil) }) { break.(nil) };
-						parms.put(\gestureArray, gestArray)
-							.put(\preSyncop, preSyncop.roundUp(1));
-						/*Pfindur*/ Psync(Ppar(
-							gestArray.collect { |gesture, i|
-								~oneWalkerPattern.(
-									gesture,
-									i,
-									parms
-								)
-							}
-						), dur, dur)
-					} {
-						// numWalkers = 0, just rest
-						// empty array in Ppar would fail anyway
-						Event.silent(dur)
+
+		result = block { |break|
+			dur = ~durStream.next;
+			if(dur.notNil and: { dur > 0 }) {
+				parms = (dur: dur, numWalkers: ~numWalkersStream.next(inval));
+				if(parms[\numWalkers].isNil) { break.(nil) };
+				if(parms[\numWalkers] > 0) {
+					preSyncop = ~preSyncStream.next(dur);
+					if(preSyncop.isNil) { break.(nil) };
+					if(preSyncop < 1.0) {
+						preSyncop = (dur * ~preSyncStream.next(dur)).roundUp(1);
 					};
+					gestArray = ~gestureArrayStream.next(parms).asArray;
+					if(gestArray.size < parms[\numWalkers]
+						or: { gestArray.any(_.isNil) }) { break.(nil) };
+					parms.put(\gestureArray, gestArray)
+						.put(\preSyncop, preSyncop.roundUp(1));
+					/*Pfindur*/ Psync(Ppar(
+						gestArray.collect { |gesture, i|
+							~oneWalkerPattern.(
+								gesture,
+								i,
+								parms
+							)
+						}
+					), dur, dur)
+				} {
+					// numWalkers = 0, just rest
+					// empty array in Ppar would fail anyway
+					Event.silent(dur)
 				};
 			};
-			result ?? {
-				// force reset of subpatterns - we don't know which one(s) ended early
-				// returning 'nil' makes PnNilSafe stop
-				~durStream = nil;
-				~numWalkersStream = nil;
-				~preSyncStream = nil;
-				~gestureStream = nil;
-				~gestureArrayStream = nil;
-				~numSyncopStream = nil;
-				nil
-			};
+		};
+		result ?? {
+			// force reset of subpatterns - we don't know which one(s) ended early
+			// returning 'nil' makes PnNilSafe in ~asPattern stop
+			~durStream = nil;
+			~numWalkersStream = nil;
+			~preSyncStream = nil;
+			~gestureStream = nil;
+			~gestureArrayStream = nil;
+			~numSyncopStream = nil;
+			nil
+		};
+	};
+
+	~asPattern = {
+		PnNilSafe(Plazy { |inval|
+			~oneAggregateGesture.(inval)
 		}, inf)
 /*.collect { |ev|
 	if(ev[\instrument] != ~def) { [ev[\gesture], ev[\amp]].debug("gesture, amp") };
