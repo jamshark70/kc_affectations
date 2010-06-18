@@ -654,11 +654,13 @@ p.gestures[\blox] = { |i, parms|
 			\pan, Pwhite(-1.0, 1.0, inf),
 //			\amp, ~amp.(i, parms),
 			\bloxNum, Pwhite(3, 6, inf),
+			\mnotesStep, Pwrand(#[-1, 0, 1], #[0.1, 0.5, 0.4], inf),
 			\mnotes, Pscratch(
-				Pvbrown(39, 50, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\bloxNum), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\bloxNum).asStream)),
-				Pwrand(#[-1, 0, 1], #[0.1, 0.5, 0.4], inf),
+				Pvbrown(43, 54, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\bloxNum), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\bloxNum).asStream)),
+				Pkey(\mnotesStep),
 				memorySize: 30
 			),
+			\mode, BPStream(\bloxMode),
 			\ffreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
 			\filtAttack, BPStream(\klankAttack),
 			\filtDecay, BPStream(\klankDecay), // Pkey(\filtAttack) + 0.08,
@@ -678,6 +680,10 @@ p.gestures[\blox] = { |i, parms|
 	}
 };
 )
+
+p.modes0 = Mode.keys.asArray.select { |m| m.asString.last == $0 };
+p.bloxMode = Pclutch(Prand(p.modes0, inf), Pkey(\mnotesStep).abs > 0);
+p.bloxMode = \db0;
 
 p.gesture = \blox;
 p.numWalkers = 1;
