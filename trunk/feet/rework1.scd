@@ -642,32 +642,42 @@ FxPatch(
 
 
 // steps chords
+
+// syncopTemplate also uses klankDcyCtl - prolly Pfset w/ cleanup to switch them
+
+(
 p.gestures[\blox] = { |i, parms|
 	// must not have more than one walker
 	if(i == 0) {
 		Pbind(
 			\instrument, \bufGrainPanKlank,
 			\pan, Pwhite(-1.0, 1.0, inf),
-			\amp, ~amp.(i, parms),
-			\n, Pwhite(3, 6, inf),
+//			\amp, ~amp.(i, parms),
+			\bloxNum, Pwhite(3, 6, inf),
 			\mnotes, Pscratch(
-				Pvbrown(39, 50, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\n), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\n).asStream)),
+				Pvbrown(39, 50, Pwhite(1, 3, inf), inf) -.x Pclump(Pkey(\bloxNum), Pseries(0, Pwrand(#[1, 2, 3], #[0.1, 0.45, 0.45], inf), Pkey(\bloxNum).asStream)),
 				Pwrand(#[-1, 0, 1], #[0.1, 0.5, 0.4], inf),
 				memorySize: 30
 			),
 			\ffreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
 			\filtAttack, BPStream(\klankAttack),
-			\filtDecay, Pkey(\filtAttack) + 0.05,
+			\filtDecay, BPStream(\klankDecay), // Pkey(\filtAttack) + 0.08,
 			\chorusAmt, 0, //BPStream(\syncopChorusAmt),
 			\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
 			\chorusAmps, [0 ! 3],
 			\lpfreq, ~hiFilt,
-			\delta, Pstutter(Pwhite(3, 10, inf), Pwhite(2, 4, inf).reciprocal)
+			\delta, Pstutter(Pwhite(3, 10, inf), 4 / Pxrand((4..10), inf)),
+				// Pif allows Pgeom to run when delta does not change
+				// Pdiff is always 0 for the first event in a given Pn iteration!
+			\amp, PnNilSafe(
+				Pif(Pbinop('==', Pdiff(Pkey(\delta)), 0), Pgeom.fromEndpoints(1, 0.15, 10))
+			)
 		)
 	} {
 		Event.silent(parms[\dur])
 	}
 };
+)
 
 p.gesture = \blox;
 p.numWalkers = 1;
@@ -676,3 +686,5 @@ BP(\st).reset;
 BP(\st).prepareForPlay;
 
 p.eventStream.next(p.event.copy).postcs; ""
+//SynthDescLib.at(\bufGrainPanKlank).controls.detect { |cn| cn.name == "chorusAmps" }
+
