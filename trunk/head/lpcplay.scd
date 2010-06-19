@@ -1,5 +1,11 @@
 // vox synthesis for head section, initial experiments
 
+// notched blippy wavetables
+// overlapping phonemes
+// pitch material (incl. chords) as input - one lpc seg/chord, or more?
+//		- split exciter from lpcsynth - buspool from r-u-listening
+
+
 SynthDescLib.global.browse;
 Object.browse;
 s.queryAllNodes;
@@ -46,39 +52,66 @@ MixingBoard.at(0).refresh;
 
 
 // lpc support files
+~lpcb.free;
 
 ~dir = Document.current.path.dirname.dirname +/+ "samples/feet";
-~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
+//~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-lpf3-lpc.aiff");
+~lpcb = Buffer.readAndQuery(s, ~dir +/+ "words-ana3.lpc.aif");
 ~pt = TabFileReader.read(~dir +/+ "words-labels.txt");
 ~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
 SoundFile.use(~dir +/+ "words-mono.aiff", { |file| ~voxdur = file.duration });
 
-SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440|
+
+// default LPCAna parms SUCK
+x = LPCAna(~dir +/+ "words-mono.aiff");
+x.ana(nPoles: 35, frameSize: 1000, hop: 0.5, minFreq: 70, maxFreq: 300, conditionSignal: 0);
+
+x.saveToFiles(~dir +/+ "words-ana4.lpc");
+
+y = LPCFile(~dir +/+ "words-ana3.lpc");
+[y.nrmerr.minItem, y.nrmerr.maxItem]
+
+~lpcb.getn(0, 3, _.postln)
+
+SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 400, ampFactor = 0.01, xfscale = 0.25, lpf = 5000|
 	var	pos = Line.kr(start, end, time) / voxdur,
-	lpcv = LPCVals.ar(lpcbuf, pos),
-	src = Saw.ar(freq * [1, 1.003]).sum,
-	noise = PinkNoise.ar(lpcv[2] * 8),
-	sig = LPCSynth.ar(lpcbuf, src+noise, pos, amp * lpcv[1]),
-	eg = EnvGen.kr(Env.linen(0.01, time - 0.05, 0.04), doneAction: 2);
-	Out.ar(outbus, sig * eg);
+ 		lpcv = LPCVals.ar(lpcbuf, pos),
+		src = Blip.ar(freq * [1, 1.003], 15000.0 / freq).sum,
+ 		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
+//		noise = WhiteNoise.ar(noiseMul),
+		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
+		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
+	sig = LPF.ar(sig, lpf);
+	Out.ar(outbus, Limiter.ar(sig * eg * ampFactor));
 }).add;
 
+SynthDescLib.at(\lpc1).def.children.do(_.postln)
+
 p = ~pt.choose;
-a = m.play(\lpc1, [lpcbuf: ~lpcb, start: p[0] / ~voxdur, end: p[1] / ~voxdur, time: p[1] - p[0], amp: 1]);
+a = m.play(\lpc1, [lpcbuf: ~lpcb, start: (p[0] - 0.1) / ~voxdur, end: (p[1] + 0.1) / ~voxdur, time: p[1] - p[0] * 3, amp: 1, freq: 200, noiseMul: 1, ampFactor: 1, xfscale: 0.23, lpf: 12000, hpf: 1646]);
 a.free;
 
-TempoClock.tempo
+PeakMonitor(m);
+
+h = GenericGlobalControl(\hpf, nil, 200, #[20, 8000, \exp]); h.gui;
+g = GenericGlobalControl(\xfmul, nil, 0.25); g.gui;
+i = GenericGlobalControl(\lpf, nil, 5000, \freq); i.gui;
 
 p = m.play(
 	Pbind(
 		\instrument, \lpc1,
 		\pt, Prand(~pt, inf),
 		#[start, end], Pkey(\pt),	// ignores extra vals
-		\time, Pkey(\end) - Pkey(\start),
+		\time, 0.95, // Pkey(\end) - Pkey(\start),
 		\amp, 1,
 		\voxdur, ~voxdur,
 		\delta, Pkey(\time).roundUp(0.25),
-		\freq, Pexprand(200.0, 600.0, inf)
+		\freq, Pexprand(200.0, 600.0, inf),
+		\noiseMul, 1,
+		\hpf, h.asMap,
+		\ampFactor, 1, //0.01
+		\xfscale, g.asMap,
+		\lpf, i.asMap
 	)
 );
 
@@ -89,3 +122,117 @@ o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
 	s.sendMsg(\n_trace, m[1]); r.remove;
 }).add;
+
+
+p = m.play(
+	Pbind(
+		\instrument, \lpc1,
+		\pt, Prand(~pt, inf),
+		#[ptstart, ptend], Pindex(Pkey(\pt), Pn(#[0, 1], 1), inf),
+		\start, Pwhite(Pkey(\ptstart), Pkey(\ptend) - 0.1, inf),
+		\end, Pkey(\start) + 0.1,
+		\time, 0.3,
+		\amp, 1,
+		\voxdur, ~voxdur,
+		\delta, 0.125,
+		\freq, Pexprand(200.0, 600.0, inf),
+		\noiseMul, 1,
+		\hpf, 3000,
+		\ampFactor, 1, //0.01
+		\xfscale, 0.236,
+		\lpf, 18000
+	)
+);
+
+p.stop;
+
+
+// bus lock object - release bus when all the locking objects are gone
+(
+Proto {
+	~prep = { |args|
+		if(args.respondsTo(\keysValuesDo)) {
+			currentEnvironment.putAll(args);
+		};
+		~locks = IdentitySet.new;
+		// this way, makeStuff can have whatever args it needs
+		// and it will pull them from the environment (after being put there by putAll)
+		currentEnvironment.env.use { ~makeStuff.valueEnvir };
+		currentEnvironment
+	};
+
+	~numCh = 1;
+	~rate = \audio;
+	~server = { Server.default };
+
+	// user overrides
+	~makeStuff = { |numCh, rate, server|
+		~server = server.value;
+		if((~bus = Bus.perform(rate, ~server, numCh)).isNil) {
+			Error("couldn't get % bus".format(rate)).throw;
+		};
+		~bus //.debug("made");
+	};
+
+	~freeStuff = {
+		~bus /*.debug("freed")*/ .free;
+	};
+
+	~addNode = { |node|
+		var	endFunc = e { |obj, what|
+			if(what == \n_end) {
+				node.removeDependant(endFunc);
+				~removeLock.(node);
+			};
+		};
+		~locks.add(node);
+		NodeWatcher.register(node);
+		node.addDependant(endFunc);
+	};
+
+	~removeLock = { |obj|
+		~locks.remove(obj);
+		if(~locks.isEmpty) {
+			~freeStuff.();
+		};
+	};
+} => PR(\busLock);
+)
+
+
+SynthDef(\simpleLPCfx, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000|
+	var	src = In.ar(inbus, 1),
+		pos = Line.kr(start, end, time) / voxdur,
+ 		lpcv = LPCVals.ar(lpcbuf, pos),
+ 		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
+		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
+		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
+	sig = LPF.ar(sig, lpf);
+	Out.ar(outbus, Limiter.ar(sig * eg));
+}).add;
+
+SynthDef(\stupidBlip, { |outbus, freq = 440, amp = 1, detune = 1.003, time = 1|
+	var	sig = Blip.ar(freq * [1, detune], 15000 / freq, amp),
+		eg = EnvGen.kr(Env.perc(0.05, 0.95), timeScale: time, doneAction: 2);
+	Out.ar(outbus, sig * eg);
+}).add;
+
+();
+(
+var	lock = PR(\busLock).copy.prep,
+	bus = lock.bus,
+	freqs = #[60, 64, 67].midicps,
+	srcEv;
+
+~lock = lock;
+~srcEv = (instrument: \stupidBlip, freq: freqs, amp: 1, time: 1, target: m.synthgroup, bus: bus,
+	parent: ProtoEvent(\polySynthPlayer).parent).play;
+~srcEv.node.do(lock.addNode(_));
+
+~onept = ~pt.choose;
+~lpcEv = (instrument: \simpleLPCfx, target: m.effectgroup, inbus: bus, bus: m.inbus,
+	lpcbuf: ~lpcb, voxdur: ~voxdur, start: ~onept[0], end: ~onept[1], time: 1, amp: 1,
+	parent: ProtoEvent(\singleSynthPlayer).parent).play;
+~lock.addNode(~lpcEv.node);
+)
+
