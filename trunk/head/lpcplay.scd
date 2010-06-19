@@ -175,7 +175,7 @@ Proto {
 	};
 
 	~freeStuff = {
-		~bus /*.debug("freed")*/ .free;
+		~bus/*.debug("freed")*/.free;
 	};
 
 	~addNode = { |node|
@@ -217,6 +217,38 @@ SynthDef(\stupidBlip, { |outbus, freq = 440, amp = 1, detune = 1.003, time = 1|
 	Out.ar(outbus, sig * eg);
 }).add;
 
+
+// other synthdef
+WrapInstr("osc2.vosc3").openFile;  // wanted vosc3matrix - mei you
+
+~wt.free;
+~wt = Buffer.allocConsecutive(8, s, 2048, 1, { |buf, i|
+	var	amps = 1 ! 18,	// c. 800 Hz top freq, just for test
+		indices = (0..17).scramble.keep((i*1.5).round.asInteger);
+//	(i*1.5).round.do { indices.takeAt(indices.size.rand) };
+	indices.do { |i| amps[i] = rrand(0.0, 0.1) };
+	buf.sine1Msg(amps.debug(i))
+});
+
+~wt[7].plotWavetable;
+
+WrapInstr("osc2.vosc3").listArgs;
+d = WrapPatch("osc2.vosc3", [nil, `1, ~wt.first.bufnum, nil, Env.adsr(0.01, 0.2, 0.6, 0.1), nil, nil, `1.003]).asSynthDef.add;
+SynthDescLib.at(d.name.asSymbol).msgFuncKeepGate = true;
+
+e = m.play((instrument: d.name.asSymbol, vsens: 1, gate: 0.2));
+
+p = m.play(Pbind(
+	\instrument, d.name.asSymbol,
+	\vsens, 1,
+	\gate, 0.2,
+	\degree, Pwhite(0, 7, inf),
+	\dur, 0.25,
+	\bufmod, Pwhite(0, ~wt.size - 1.001, inf)
+));
+
+p.stop;
+
 ();
 (
 var	lock = PR(\busLock).copy.prep,
@@ -236,3 +268,33 @@ var	lock = PR(\busLock).copy.prep,
 ~lock.addNode(~lpcEv.node);
 )
 
+(
+(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
+	superPlay: ProtoEvent(\polySynthPlayer).v[\play],
+	play: {
+		~lock = PR(\busLock).copy.prep((
+			numCh: ~chan.inChannels, server: ~chan.server
+		));
+		~bus = ~lock.bus;
+		~outbus = ~chan.inbus;
+		~target = ~chan.synthgroup;
+		~chan = nil;
+		~superPlay.();
+// logic for lpc fx?
+	},
+	notifyDependents: {
+		~node.do { |node| ~lock.addNode(node) };
+		// lpc here?
+	}
+))) => ProtoEvent(\polySynthBusLock);
+)
+
+e = (instrument: d.name.asSymbol, vsens: 1, gate: 0.2, sustain: 5, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy);
+e.play;
+e.node[0].trace;
+e.node[0].dependants
+
+e.lock.listVars
+
+s.audioBusAllocator.debug
+s.audioBusAllocator.free(11)
