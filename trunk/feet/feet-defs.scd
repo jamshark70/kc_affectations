@@ -721,7 +721,7 @@ PR(\abstractProcess).clone {
 //	~filtAmp = Plazy { Pkey(\filtDecay).collect(~filtAmpSpec.map(_)) };
 
 	~modes0 = Mode.keys.asArray.select { |m| m.asString.last == $0 };
-	~bloxMode = Pclutch(Prand(p.modes0, inf), Pkey(\mnotesStep).abs > 0);
+	~bloxMode = Pclutch(Prand(~modes0, inf), Pkey(\mnotesStep).abs > 0);
 
 	~syncProb = 0.1;
 
