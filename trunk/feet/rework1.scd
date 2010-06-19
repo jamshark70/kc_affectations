@@ -178,6 +178,7 @@ p.gestures[\sprayStoF] = { |i, parms|
 
 p.play;
 
+p.numWalkers = 1;
 p.numWalkers = 2;
 p.gesture = Pn(\spray, inf);
 p.gsel = Pseq(#[unison, manySyncop], inf);
@@ -201,6 +202,18 @@ p.gesture = Pxrand(#[spray, sprayFtoS, sprayStoF, blipup], inf); //\spray;
 p.gsel = \unison;
 p.numWalkers = Pseq(#[3, 0], inf);
 p.preSync = 0;
+
+// dispatchability
+q = p.oneAggregateGesture;
+e = p.use { q.play(protoEvent: p.prepareEvent) };
+u = Updater(e, { |obj, what|
+	if(what == \stopped) {
+		u.remove;
+	};
+	what.debug("changed");
+});
+
+p.prepareEvent.inspect
 
 
 // blip up, blip down gestures
