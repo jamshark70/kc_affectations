@@ -363,7 +363,7 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 	userprep: {
 		~wt = Buffer.allocConsecutive(8, s, 2048, 1, { |buf, i|
 			var	amps = 1 ! 18,	// c. 800 Hz top freq, just for test
-				indices = (0..17).scramble.keep((i*1.5).round.asInteger);
+				indices = (1..17).scramble.keep(rrand(9, 12));
 			indices.do { |i| amps[i] = rrand(0.0, 0.1) };
 			buf.sine1Msg(amps)
 		});
@@ -435,26 +435,85 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 )
 
 p = BP(\vx);
-p.delta = Pwhite(1, 4, inf) * 0.125;
+p.delta = Pwhite(1, 3, inf) * 0.5;
 p.sustain = Pkey(\delta) * 0.9;
 
-p.degree = Pwhite(35, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10);
+p.degree = Pwhite(36, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10);
 p.amp = 1;
 
-p.lpcStart = p.voxdur - 0.1;
+p.lpcStart = Pwhite(Pkey(\ptstart), max(Pkey(\ptstart), Pkey(\ptend) - 0.2), inf);
 p.lpcEnd = Pkey(\start) + Pwhite(0.05, 0.2, inf);
+
+p.lpcStart = Pkey(\ptstart);
+p.lpcEnd = Pkey(\ptend);
+
+p.lpcStart = Pwhite(Pkey(\ptstart), Pkey(\ptend) - 0.05, inf);
+p.lpcEnd = Pkey(\start) + 0.05;
+
+p.bufmod = Pwhite(0, 6.998, inf);
+p.bufmod = 0;
+
+g = GenericGlobalControl(\bufmod, nil, 0, #[0, 6.998]); g.gui;
+p.bufmod = g.asMap;
+
+FxPatch(
+	[ 'busfx', 'chorus2' ], [ 20, 2, 2, 3, 0.011564949675432, 0.052749969028213, 0.0095969140264937, 2.094395164811, 0.52749969028213 ]
+)
+
 
 ~savebufmod = p.bufmod;
 p.bufmod = p.bufmod.trace;
 p.bufmod = ~savebufmod;
 
 
-a = {
-	var	pos = Line.kr(0.98, 1.02, 10);
-	LPCVals.kr(~lpcb, pos);
-	Silent.ar(1)
-}.play;
+SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 400, ampFactor = 0.01, xfscale = 0.25, lpf = 5000|
+	var	pos = Line.kr(start, end, time) / voxdur,
+ 		lpcv = LPCVals.ar(lpcbuf, pos),
+// 		src = Blip.ar(freq * [1, 1.003], 15000.0 / freq).sum,
+ 		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
+		sig = LPCSynth.ar(lpcbuf, noise, pos, amp * lpcv[1]),
+		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
+	sig = LPF.ar(sig, lpf);
+	Out.ar(outbus, Limiter.ar(sig * eg * ampFactor));
+}).add;
 
-a.free;
+SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 400, ampFactor = 0.01, xfscale = 0.25, lpf = 5000|
+	var	pos = Line.kr(start, end, time) / voxdur,
+ 		lpcv = LPCVals.ar(lpcbuf, pos),
+		src = Blip.ar(freq * [1, 1.003], 15000.0 / freq).sum,
+ 		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
+//		noise = WhiteNoise.ar(noiseMul),
+		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
+		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
+	sig = LPF.ar(sig, lpf);
+	Out.ar(outbus, Limiter.ar(sig * eg * ampFactor));
+}).add;
 
-p.lpcb.getn(0, 3, _.postln);
+
+p = ~pt.choose;
+a = m.play(\lpc1, [lpcbuf: ~lpcb, start: (p[0] - 0.1) / ~voxdur, end: (p[1] + 0.1) / ~voxdur, time: p[1] - p[0] * 3, amp: 1, freq: 200, noiseMul: 1, ampFactor: 1, xfscale: 0.5, lpf: 12000, hpf: 1600]);
+
+q = BP(\vx).chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3]); q.gui;
+
+		p.wt.do { |buf, i|
+			var	amps = 1 ! 18,	// c. 800 Hz top freq, just for test
+				indices = (1..17).scramble.keep(rrand(9, 12));
+			indices.do { |i| amps[i] = rrand(0.0, 0.1) };
+			buf.sine1(amps.debug(i))
+		};
+""
+
+SynthDescLib.at(p.objects[\wtblip].name.asSymbol)
+
+r = m.play(Pbind(
+	\instrument, p.objects[\wtblip].name,
+	\bufmod, PnNilSafe(Pseries(0, 1, p.wt.size), inf).min(6.999),
+	\detune, g.asMap,
+	\delta, 1,
+	\sustain, 0.9
+), (protoEvent: ProtoEvent(\singleSynthPlayer).copy));
+
+r.stop;
+
+g = GenericGlobalControl(\detune, nil, 1.003, \mydetune); g.gui;
+m.free;
