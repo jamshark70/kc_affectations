@@ -2,7 +2,8 @@
 
 SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0|
 	var	src = In.ar(inbus, 1),
-		pos = Line.kr(start, end, time) / voxdur,
+		// note, ar because LPCVals.ar with .kr pos input is broken
+		pos = Line.ar(start, end, time) / voxdur,
  		lpcv = LPCVals.ar(lpcbuf, pos),
  		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
 		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
