@@ -439,10 +439,22 @@ p.delta = Pwhite(1, 4, inf) * 0.125;
 p.sustain = Pkey(\delta) * 0.9;
 
 p.degree = Pwhite(35, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10);
-p.amp = 0.5;
+p.amp = 1;
 
+p.lpcStart = p.voxdur - 0.1;
 p.lpcEnd = Pkey(\start) + Pwhite(0.05, 0.2, inf);
 
 ~savebufmod = p.bufmod;
 p.bufmod = p.bufmod.trace;
 p.bufmod = ~savebufmod;
+
+
+a = {
+	var	pos = Line.kr(0.98, 1.02, 10);
+	LPCVals.kr(~lpcb, pos);
+	Silent.ar(1)
+}.play;
+
+a.free;
+
+p.lpcb.getn(0, 3, _.postln);
