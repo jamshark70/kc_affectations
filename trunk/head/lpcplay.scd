@@ -176,6 +176,7 @@ Proto {
 
 	~freeStuff = {
 		~bus/*.debug("freed")*/.free;
+		~killNodes.do(_.free);
 	};
 
 	~addNode = { |node|
@@ -227,7 +228,7 @@ WrapInstr("osc2.vosc3").openFile;  // wanted vosc3matrix - mei you
 		indices = (0..17).scramble.keep((i*1.5).round.asInteger);
 //	(i*1.5).round.do { indices.takeAt(indices.size.rand) };
 	indices.do { |i| amps[i] = rrand(0.0, 0.1) };
-	buf.sine1Msg(amps.debug(i))
+	buf.sine1Msg(amps)
 });
 
 ~wt[7].plotWavetable;
@@ -272,29 +273,85 @@ var	lock = PR(\busLock).copy.prep,
 (parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
 	superPlay: ProtoEvent(\polySynthPlayer).v[\play],
 	play: {
+		var	chan = ~chan;
 		~lock = PR(\busLock).copy.prep((
 			numCh: ~chan.inChannels, server: ~chan.server
 		));
 		~bus = ~lock.bus;
-		~outbus = ~chan.inbus;
 		~target = ~chan.synthgroup;
 		~chan = nil;
 		~superPlay.();
-// logic for lpc fx?
+
+		if(~lpcEv.size > 0) {
+			~lpcEv.putAll((
+				bus: chan.inbus,
+				target: chan.effectgroup,
+				chan: nil,
+				inbus: ~lock.bus,
+					// effectgroup might have post-lpc effect nodes (chorus etc.)
+					// so put lpc's up front
+				addAction: ~lpcEv[\addAction] ?? { \addToHead }
+			))
+			// cuz parent: don't work in putAll #@$*$&*$&@#312
+			.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
+			.play;
+			~lpcEv[\node].do { |node| ~lock.addNode(node) };
+		} {
+			~sendNode = Synth("mixers/Send" ++ chan.inChannels,
+				[busin: ~lock.bus, busout: chan.inbus, level: 1],
+				chan.effectgroup
+			);
+			~lock.killNodes = ~sendNode;
+		};
 	},
 	notifyDependents: {
 		~node.do { |node| ~lock.addNode(node) };
-		// lpc here?
 	}
 ))) => ProtoEvent(\polySynthBusLock);
 )
 
-e = (instrument: d.name.asSymbol, vsens: 1, gate: 0.2, sustain: 5, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy);
+~lpcEv = (instrument: \simpleLPCfx, target: m.effectgroup, inbus: bus, bus: m.inbus,
+	lpcbuf: ~lpcb, voxdur: ~voxdur, start: ~onept[0], end: ~onept[1], time: 1, amp: 1,
+
+
+~onept = ~pt.choose;
+e = (instrument: d.name.asSymbol, freq: 60.midicps * [1, 5/4, 3/2], vsens: 1, gate: 1, sustain: 5, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: (instrument: \simpleLPCfx, lpcbuf: ~lpcb, voxdur: ~voxdur, start: ~onept[0], end: ~onept[1], time: 5, amp: 1));
 e.play;
 e.node[0].trace;
+e.sendNode.trace;
 e.node[0].dependants
+
+e = { |i| (instrument: d.name.asSymbol, freq: (60.midicps * [1, 5/4, 3/2])[i], vsens: 1, gate: 1, sustain: 5, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: (instrument: \simpleLPCfx, lpcbuf: ~lpcb, voxdur: ~voxdur, start: (~onept = ~pt.choose)[0], end: ~onept[1], time: 5, amp: 1)) } ! 3;
+
+fork {
+	e.do { |ev| ev.play; 0.5.wait }
+};
+
+
+
+s.queryAllNodes;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	s.sendMsg(\n_trace, m[1]); // r.remove;
+}).add;
+
 
 e.lock.listVars
 
 s.audioBusAllocator.debug
 s.audioBusAllocator.free(11)
+
+();
+z = Pbind(
+	\a, 1,
+	\b, Pevent(Pbind(\c, 2, \d, 3), ())
+).asStream;
+
+z.next(());
+
+
+ (instrument: "mixers/Send" ++ chan.inChannels,
+				busin: ~lock.bus, busout: chan.inbus, level: 1, target: chan.effectgroup,
+				parent: ProtoEvent(\singleSynthPlayer).v.parent
+			).play;
