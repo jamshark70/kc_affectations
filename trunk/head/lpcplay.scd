@@ -18,6 +18,9 @@ MT(1).gui;
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
 
+(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
+topEnvironment[\dir] = Document.current.path.dirname.dirname +/+ "samples/feet";
+
 m = MixerChannel(\test1, s, 1, 2);
 n = MixerChannel(\test2, s, 2, 2);
 m => MCG(0); n => MCG(1);
@@ -201,7 +204,7 @@ Proto {
 )
 
 
-SynthDef(\simpleLPCfx, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000|
+SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0|
 	var	src = In.ar(inbus, 1),
 		pos = Line.kr(start, end, time) / voxdur,
  		lpcv = LPCVals.ar(lpcbuf, pos),
@@ -209,7 +212,7 @@ SynthDef(\simpleLPCfx, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, tim
 		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
 		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
 	sig = LPF.ar(sig, lpf);
-	Out.ar(outbus, Limiter.ar(sig * eg));
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), pan));
 }).add;
 
 SynthDef(\stupidBlip, { |outbus, freq = 440, amp = 1, detune = 1.003, time = 1|
@@ -274,8 +277,9 @@ var	lock = PR(\busLock).copy.prep,
 	superPlay: ProtoEvent(\polySynthPlayer).v[\play],
 	play: {
 		var	chan = ~chan;
+		~numCh ?? { ~numCh = ~chan.inChannels };
 		~lock = PR(\busLock).copy.prep((
-			numCh: ~chan.inChannels, server: ~chan.server
+			numCh: ~numCh, server: ~chan.server
 		));
 		~bus = ~lock.bus;
 		~target = ~chan.synthgroup;
@@ -297,7 +301,7 @@ var	lock = PR(\busLock).copy.prep,
 			.play;
 			~lpcEv[\node].do { |node| ~lock.addNode(node) };
 		} {
-			~sendNode = Synth("mixers/Send" ++ chan.inChannels,
+			~sendNode = Synth("mixers/Send" ++ ~numCh,
 				[busin: ~lock.bus, busout: chan.inbus, level: 1],
 				chan.effectgroup
 			);
@@ -342,16 +346,103 @@ e.lock.listVars
 s.audioBusAllocator.debug
 s.audioBusAllocator.free(11)
 
-();
-z = Pbind(
-	\a, 1,
-	\b, Pevent(Pbind(\c, 2, \d, 3), ())
-).asStream;
+~onept = ~pt.choose;
+e = (instrument: d.name.asSymbol, freq: 60.midicps * [1, 5/4, 3/2], vsens: 1, gate: 1, sustain: 5, chan: n, numCh: 1, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: (instrument: \simpleLPCfxPan, lpcbuf: ~lpcb, voxdur: ~voxdur, start: ~onept[0], end: ~onept[1], time: 5, amp: 1, pan: 1));
+e.play;
 
-z.next(());
+s.bufferAllocator.debug;
 
+(
+BP(\vx).free;
+PR(\basicSynthChooser).chuck(BP(\vx), nil, (
+	dir: topEnvironment[\dir] ?? { Document.current.path.dirname.dirname +/+ "samples/feet" },
+	lpcPath: "words-ana3.lpc.aif",
+	labelPath: "words-labels.txt",
+	audioPath: "words-mono.aiff",
+	event: (eventKey: \polySynthBusLock),
+	userprep: {
+		~wt = Buffer.allocConsecutive(8, s, 2048, 1, { |buf, i|
+			var	amps = 1 ! 18,	// c. 800 Hz top freq, just for test
+				indices = (0..17).scramble.keep((i*1.5).round.asInteger);
+			indices.do { |i| amps[i] = rrand(0.0, 0.1) };
+			buf.sine1Msg(amps)
+		});
 
- (instrument: "mixers/Send" ++ chan.inChannels,
-				busin: ~lock.bus, busout: chan.inbus, level: 1, target: chan.effectgroup,
-				parent: ProtoEvent(\singleSynthPlayer).v.parent
-			).play;
+// FIX THIS LATER!!!!
+		~lpcb = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
+		~pt = TabFileReader.read(~dir +/+ ~labelPath);
+		~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
+		SoundFile.use(~dir +/+ ~audioPath, { |file| ~voxdur = file.duration });
+	},
+	userfree: {
+		[~wt, ~lpcb].free;
+	},
+
+	degree: Pwhite(35, 49, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10),
+	mode: \default,
+	bufmod: Pwhite(0, Pfunc { ~wt.size - 1.001 }, inf),
+	amp: Pexprand(0.5, 1, inf),
+
+	objects: { (
+		wtblip: (
+			def: WrapPatch("osc2.vosc3", [nil, KrNumberEditor(1, #[0, 1]).lag_(nil), ~wt.first.bufnum, nil, Env.adsr(0.01, 0.2, 0.6, 0.1), nil, nil, `1.003]),
+			args: [
+				degree: BPStream(\degree),
+				mode: BPStream(\mode),
+				freq: Pfunc { |ev| ev[\mode].asMode.cps(ev[\degree]) },
+				bufmod: BPStream(\bufmod),
+				vsens: 1,
+				gate: BPStream(\amp),
+				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) }
+			]
+		)
+	) },
+
+	preparePlay: {
+		if(~needToFixSynthDescsOnce ? true) {
+			~objects.do { |obj|
+				SynthDescLib.at(obj.name.asSymbol).msgFuncKeepGate = true;
+			};
+			~needToFixSynthDescsOnce = false;
+		};
+	},
+
+	lpcInstr: \simpleLPCfxPan,
+	lpcStart: Pwhite(Pkey(\ptstart), Pkey(\ptend) - Pkey(\time), inf),
+	lpcEnd: Pkey(\start) + Pkey(\time),
+	lpcPan: Pwhite(-1.0, 1.0, inf),
+	lpcEv: Plazy { Pbind(
+		\instrument, BPStream(\lpcInstr),
+		\lpcbuf, ~lpcb,
+		\voxdur, ~voxdur,
+		\pt, Pxrand(~pt, inf),
+		#[ptstart, ptend], Pkey(\pt),
+		\start, BPStream(\lpcStart),
+		\end, BPStream(\lpcEnd),
+//		\time, // should be populated by sanitizeEvent
+		\amp, 1,
+		\pan, BPStream(\lpcPan)
+	) },
+// 	lpcEv: 0,  // 0.size == 0, so event will use a dummy Send synth
+	sanitizeEvent4lpc: { |ev, keys((time: \sustain))|
+		var	newEv = ();
+		keys.keysValuesDo { |k, v|
+			newEv[k] = ev[v];
+		};
+		newEv
+	}
+));
+)
+
+p = BP(\vx);
+p.delta = Pwhite(1, 4, inf) * 0.125;
+p.sustain = Pkey(\delta) * 0.9;
+
+p.degree = Pwhite(35, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10);
+p.amp = 0.5;
+
+p.lpcEnd = Pkey(\start) + Pwhite(0.05, 0.2, inf);
+
+~savebufmod = p.bufmod;
+p.bufmod = p.bufmod.trace;
+p.bufmod = ~savebufmod;
