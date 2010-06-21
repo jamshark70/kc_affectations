@@ -1,14 +1,15 @@
 
 
-SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0|
+SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, attack = 0.05, decay = 0.05|
 	var	src = In.ar(inbus, 1),
 		// note, ar because LPCVals.ar with .kr pos input is broken
 		pos = Line.ar(start, end, time) / voxdur,
  		lpcv = LPCVals.ar(lpcbuf, pos),
  		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
 		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
-		eg = EnvGen.kr(Env.linen(0.05, time - 0.1, 0.05), doneAction: 2);
+		eg = EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	sig = LPF.ar(sig, lpf);
+	sig = LeakDC.ar(sig);
 	Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), pan));
 }).add;
 
