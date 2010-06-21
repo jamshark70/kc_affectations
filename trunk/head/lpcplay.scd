@@ -368,7 +368,6 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 			buf.sine1Msg(amps)
 		});
 
-// FIX THIS LATER!!!!
 		~lpcb = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
 		~pt = TabFileReader.read(~dir +/+ ~labelPath);
 		~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
@@ -466,6 +465,7 @@ p.bufmod = p.bufmod.trace;
 p.bufmod = ~savebufmod;
 
 
+// with hpf on noise, ok whispering sound
 SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 400, ampFactor = 0.01, xfscale = 0.25, lpf = 5000|
 	var	pos = Line.kr(start, end, time) / voxdur,
  		lpcv = LPCVals.ar(lpcbuf, pos),
@@ -477,10 +477,12 @@ SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1
 	Out.ar(outbus, Limiter.ar(sig * eg * ampFactor));
 }).add;
 
+// comb is nice
 SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 400, ampFactor = 0.01, xfscale = 0.25, lpf = 5000|
 	var	pos = Line.kr(start, end, time) / voxdur,
  		lpcv = LPCVals.ar(lpcbuf, pos),
-		src = Blip.ar(freq * [1, 1.003], 15000.0 / freq).sum,
+		exc = WhiteNoise.ar(amp) * Decay2.ar(Impulse.ar(0), 0.01, 0.08),
+		src = CombL.ar(exc, 0.05, (freq * #[1, 1.003]).reciprocal, 20).sum,
  		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
 //		noise = WhiteNoise.ar(noiseMul),
 		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
@@ -490,8 +492,9 @@ SynthDef(\lpc1, { |outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1
 }).add;
 
 
+
 p = ~pt.choose;
-a = m.play(\lpc1, [lpcbuf: ~lpcb, start: (p[0] - 0.1) / ~voxdur, end: (p[1] + 0.1) / ~voxdur, time: p[1] - p[0] * 3, amp: 1, freq: 200, noiseMul: 1, ampFactor: 1, xfscale: 0.5, lpf: 12000, hpf: 1600]);
+a = m.play(\lpc1, [lpcbuf: ~lpcb, start: (p[0] - 0.1) / ~voxdur, end: (p[1] + 0.1) / ~voxdur, time: p[1] - p[0] * 3, amp: 1, freq: 200, noiseMul: 1, ampFactor: 1, xfscale: 0.25, lpf: 12000, hpf: 1600]);
 
 q = BP(\vx).chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3]); q.gui;
 
@@ -517,3 +520,112 @@ r.stop;
 
 g = GenericGlobalControl(\detune, nil, 1.003, \mydetune); g.gui;
 m.free;
+
+
+// comb with shaped noise
+~noisewt = Buffer.allocConsecutive(10, s, 4096, 1);
+
+SynthDef(\writeNoise, { |bufnum|
+	var	noise = WhiteNoise.ar, numfilt = 50,
+	filtered = Klank.ar(`[  // f, a, r
+		Pseries(20, 15000, numfilt).asStream.all * ({ ExpRand(0.95, 0.95.reciprocal) } ! numfilt),
+		1 ! numfilt,
+		{ ExpRand(0.01, 0.2) } ! numfilt
+	], noise),
+	recorder = RecordBuf.ar(filtered, bufnum, loop: 0, doneAction: 2),
+	peak = Peak.ar(filtered);
+	SendReply.ar(K2A.ar(Done.kr(recorder)), "/peak", peak, bufnum);
+}).add;
+
+SynthDef(\scaleBuf, { |bufnum, amp = 1|
+	RecordBuf.ar(
+		BufRd.ar(1, bufnum, Phasor.ar(end: BufFrames.ir(bufnum) + 10000), loop: 0, interpolation: 1)
+			* amp,
+		bufnum, loop: 0, doneAction: 2
+	)
+}).add;
+
+(
+o.remove;
+~n = ~noisewt.size;
+o = OSCresponderNode(s.addr, '/peak', { |t, r, m|
+	var	buf;
+	if((buf = ~noisewt.detect { |b| b.bufnum == m[2] }).notNil) {
+		~n = ~n - 1;
+		if(~n == 0) { r.remove; "done".postln };
+		Synth(\scaleBuf, [bufnum: m[2], amp: 0.98 / m[3]]);
+	};
+}).add;
+
+q = Pbind(
+	\instrument, \writeNoise,
+	\bufnum, Pseq(~noisewt, 1),
+	\delta, 0.01
+).play;
+)
+
+// assumes 2 bufs have same sample rate - exciter will be as long as the shorter buffer
+SynthDef(\comb1, { |bufnum1, bufnum2, xfade = 0, freq = 440, amp = 1, cdecay = 2, outbus|
+	var	exc2 = BufRd.ar(1, [bufnum1, bufnum2], Sweep.ar(1, BufSampleRate.ir(bufnum1)), loop: 0),
+		exc = XFade2.ar(exc2[0], exc2[1], xfade),
+		excTime = BufDur.ir([bufnum1, bufnum2]).reduce(\min),
+		excdecay = Decay2.kr(Impulse.kr(0), 0.01, excTime),
+		comb = CombL.ar(exc * excdecay, 0.05, freq.reciprocal, cdecay, amp);
+	DetectSilence.ar(comb, 0.001, doneAction: 2);
+	Out.ar(outbus, comb)
+}).add;
+
+
+// assumes 2 bufs have same sample rate - exciter will be as long as the shorter buffer
+SynthDef(\comb2, { |bufnum1, bufnum2, xfade = 0, freq = 440, amp = 1, cdecay = 2, gate = 1, outbus|
+	var	exc2 = BufRd.ar(1, [bufnum1, bufnum2], Sweep.ar(1, BufSampleRate.ir(bufnum1)), loop: 0),
+		exc = XFade2.ar(exc2[0], exc2[1], xfade),
+		excTime = BufDur.ir([bufnum1, bufnum2]).reduce(\min),
+		excdecay = Decay2.kr(Impulse.kr(0), 0.01, excTime),
+		comb = CombL.ar(exc * excdecay, 0.05, freq.reciprocal, cdecay, amp),
+		eg = EnvGen.kr(Env.asr(0.01, 1, 0.15), gate, doneAction: 2);
+//	DetectSilence.ar(comb, 0.001, doneAction: 2);
+	Out.ar(outbus, comb * eg)
+}).add;
+
+q = n.play(Pbind(
+	\instrument, \comb2,
+	#[bufnum1, bufnum2], Pxrand(~noisewt, inf).clump(2),
+	\xfade, Pwhite(-1.0, 1.0, inf),
+	\freq, Pwhite(28, 42, inf).collect { |x| Mode(\default).cps(x) },
+	\delta, 1,
+	\sustain, Pkey(\delta) * 1.4,
+	\cdecay, 25,
+	\amp, 1,
+	\numCh, 1,
+//	\chan, n,
+	\lpcEv, Pbind(
+		\instrument, \simpleLPCfxPan,
+		\lpcbuf, ~lpcb,
+		\voxdur, ~voxdur,
+		#[start, end], Prand(~pt, inf),
+		\amp, 3
+	) <> Pfunc { |ev| (time: ev.use { ~sustain.() }) }
+), (protoEvent: ProtoEvent(\polySynthBusLock).copy));
+
+q.stop;
+
+n.free;
+
+Pbind(
+	\instrument, \comb2,
+	#[bufnum1, bufnum2], Pxrand(~noisewt, inf).clump(2),
+	\xfade, Pwhite(-1.0, 1.0, inf),
+	\delta, 0.5,
+	\sustain, Pkey(\delta),
+	\cdecay, 25,
+	\amp, 1,
+	\numCh, 1,
+//	\chan, n,
+	\lpcEv, Pbind(
+		\instrument, \simpleLPCfxPan,
+		\lpcbuf, ~lpcb,
+		\voxdur, ~voxdur,
+		#[start, end], Prand(~pt, inf)
+	) <> Pfunc { |ev| (time: ev.use { ~sustain.() }) }
+).asStream.next(())
