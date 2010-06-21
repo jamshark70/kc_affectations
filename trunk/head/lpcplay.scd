@@ -424,7 +424,7 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 		[~wt, ~noisewt, ~lpcb].free;
 	},
 
-	degree: Pwhite(35, 49, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10),
+	degree: Pwhite(36, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10),
 	mode: \default,
 	bufmod: Pwhite(0, Pfunc { ~wt.size - 1.001 }, inf),
 	amp: Pexprand(0.5, 1, inf),
@@ -496,6 +496,8 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 	lpcStart: Pwhite(Pkey(\ptstart), Pkey(\ptend) - Pkey(\time), inf),
 	lpcEnd: Pkey(\start) + Pkey(\time),
 	lpcPan: Pwhite(-1.0, 1.0, inf),
+	lpcAtt: 0.05,
+	lpcDec: 0.05,
 	lpcEv: Plazy { Pbind(
 		\instrument, BPStream(\lpcInstr),
 		\lpcbuf, ~lpcb,
@@ -506,7 +508,9 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 		\end, BPStream(\lpcEnd),
 //		\time, // should be populated by sanitizeEvent
 		\amp, 1,
-		\pan, BPStream(\lpcPan)
+		\pan, BPStream(\lpcPan),
+		\attack, BPStream(\lpcAtt),
+		\decay, BPStream(\lpcDec)
 	) },
 // 	lpcEv: 0,  // 0.size == 0, so event will use a dummy Send synth
 	sanitizeEvent4lpc: { |ev, keys((time: \sustain))|
@@ -526,8 +530,15 @@ p.sustain = Pkey(\delta) * 0.9;
 p.degree = Pwhite(36, 44, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10);
 p.amp = 1;
 
-p.lpcStart = Pwhite(Pkey(\ptstart), max(Pkey(\ptstart), Pkey(\ptend) - 0.2), inf);
-p.lpcEnd = Pkey(\start) + Pwhite(0.05, 0.2, inf);
+p.lpcStart = Pwhite(Pkey(\ptstart), max(Pkey(\ptstart), Pkey(\ptend) - 0.15), inf);
+p.lpcEnd = Pkey(\start) + Pwhite(0.1, 0.15, inf);
+
+p.lpcStart = Pwhite(Pkey(\ptstart), max(Pkey(\ptstart), Pkey(\ptend) - Pfunc { ~lpcDur = rrand(0.1, 0.15) }), inf);
+p.lpcEnd = (Pkey(\start) + Pfunc { ~lpcDur });
+
+p.lpcEvStream.reset;
+
+p.lpcStartStream.next((ptstart: 0.1, ptend: 0.25));
 
 p.lpcStart = Pkey(\ptstart);
 p.lpcEnd = Pkey(\ptend);
@@ -537,6 +548,14 @@ p.lpcEnd = Pkey(\start) + 0.05;
 
 p.bufmod = Pwhite(0, 6.998, inf);
 p.bufmod = 0;
+
+// rapid overlapping
+p.delta = Pwrand([Pn(1, 2), 2, 3, 4, 5, 6], #[0.5, 4, 4, 2, 1, 0.5].normalizeSum, inf) * 0.125;
+p.sustain = (Pkey(\delta) * Pwhite(1.0, 3.0, inf)).clip(0.1, 1.2);
+p.lpcDec = Pkey(\time) * 0.4;
+p.lpcAtt = Pkey(\time) * 0.25;
+
+p.mode = Prand(Mode.keys.select { |key| key.asString.last == $0 }.asArray, inf);
 
 p.synth = p.synth.trace;
 p.synth = \comb1;
