@@ -372,9 +372,56 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 		~pt = TabFileReader.read(~dir +/+ ~labelPath);
 		~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
 		SoundFile.use(~dir +/+ ~audioPath, { |file| ~voxdur = file.duration });
+
+		~noisewt = Buffer.allocConsecutive(10, s, 4096, 1);
+
+		// generate noise exciter buffers, with individual resonant filter characteristics
+		fork {
+			var	n;
+			
+			SynthDef(\writeNoise, { |bufnum|
+				var	noise = WhiteNoise.ar, numfilt = 50,
+				filtered = Klank.ar(`[  // f, a, r
+					Pseries(20, 15000, numfilt).asStream.all * ({ ExpRand(0.95, 0.95.reciprocal) } ! numfilt),
+					1 ! numfilt,
+					{ ExpRand(0.01, 0.2) } ! numfilt
+				], noise),
+				recorder = RecordBuf.ar(filtered, bufnum, loop: 0, doneAction: 2),
+				peak = Peak.ar(filtered);
+				SendReply.ar(K2A.ar(Done.kr(recorder)), "/noisePeak", peak, bufnum);
+			}).add;
+			
+			// exciter buffer must be normalized - Klank result above is REALLY LOUD
+			SynthDef(\scaleBuf, { |bufnum, amp = 1|
+				RecordBuf.ar(
+					BufRd.ar(1, bufnum, Phasor.ar(end: BufFrames.ir(bufnum) + 10000), loop: 0, interpolation: 1)
+						* amp,
+					bufnum, loop: 0, doneAction: 2
+				)
+			}).add;
+
+			s.sync;
+			
+			n = ~noisewt.size;
+			~peakResp = OSCresponderNode(s.addr, '/noisePeak', e { |t, r, m|
+				var	buf;
+				// SendReply returns the bufnum as the reply ID m[2]
+				if((buf = ~noisewt.detect { |b| b.bufnum == m[2] }).notNil) {
+					n = n - 1;
+					if(n == 0) { r.remove; "BP(%) noise buffers done\n".postf(~collIndex.asCompileString) };
+					Synth(\scaleBuf, [bufnum: m[2], amp: 0.98 / m[3]]);
+				};
+			}).add;
+			
+			Pbind(
+				\instrument, \writeNoise,
+				\bufnum, Pseq(~noisewt, 1),
+				\delta, 0.05
+			).play;
+		};
 	},
 	userfree: {
-		[~wt, ~lpcb].free;
+		[~wt, ~noisewt, ~lpcb].free;
 	},
 
 	degree: Pwhite(35, 49, inf) -.x Pseries(0, Pwhite(1, 3, { rrand(1, 5) }), inf).clump(10),
@@ -392,6 +439,45 @@ PR(\basicSynthChooser).chuck(BP(\vx), nil, (
 				bufmod: BPStream(\bufmod),
 				vsens: 1,
 				gate: BPStream(\amp),
+				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) }
+			]
+		),
+		// unfiltered WhiteNoise -> CombL
+		comb1: (
+			def: SynthDef(\comb1, { |outbus, gate = 1, amp = 1, freq = 440, excTime = 0.08,
+					cdecay = 20, detune = 1.003|
+				var	exc = WhiteNoise.ar(amp) * Decay2.ar(Impulse.ar(0), 0.01, excTime),
+					sig = exc + CombL.ar(exc, 0.05, (freq * [1, detune]).reciprocal, cdecay).sum,
+					eg = EnvGen.kr(Env.asr(0.05, 1, 0.15), gate, doneAction: 2);
+				Out.ar(outbus, sig * eg);
+			}), //.add,
+			args: [
+				degree: BPStream(\degree),
+				mode: BPStream(\mode),
+				freq: Pfunc { |ev| ev[\mode].asMode.cps(ev[\degree]) },
+				amp: 1,
+				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) },
+			]
+		),
+		// buffers with filtered WhiteNoise -> CombL
+		comb2: (
+			def: SynthDef(\comb2, { |bufnum, freq = 440, amp = 1, cdecay = 2, gate = 1,
+					detune = 1.003, outbus|
+				var	excbuf = BufRd.ar(1, bufnum, Sweep.ar(1, BufSampleRate.ir(bufnum)), loop: 0) * amp,
+					excTime = BufDur.ir(bufnum),
+					excdecay = Decay2.kr(Impulse.kr(0), 0.01, excTime),
+					exc = excbuf * excdecay,
+					sig = exc + CombL.ar(exc, 0.05, (freq * [1, detune]).reciprocal, cdecay).sum,
+					eg = EnvGen.kr(Env.asr(0.01, 1, 0.15), gate, doneAction: 2);
+				Out.ar(outbus, sig * eg)
+			}), //.add,
+			args: [
+				degree: BPStream(\degree),
+				mode: BPStream(\mode),
+				freq: Pfunc { |ev| ev[\mode].asMode.cps(ev[\degree]) },
+				bufnum: Pxrand(~noisewt, inf).clump(Pfunc { |ev| ev[\degree].size }),
+				xfade: Pwhite(-1.0, 1.0, inf),
+				amp: 5,
 				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) }
 			]
 		)
@@ -452,12 +538,75 @@ p.lpcEnd = Pkey(\start) + 0.05;
 p.bufmod = Pwhite(0, 6.998, inf);
 p.bufmod = 0;
 
+p.synth = p.synth.trace;
+p.synth = \comb1;
+p.synth = \comb2;
+p.comb2amp = 5;
+
+z = p.comb2bufnum;
+p.comb2bufnum = p.comb2bufnum.trace;
+p.comb2bufnum = z;
+
+p.synth = Pfunc { ~objects.keys.choose };
+
+p.savelpc = p.lpcEv;
+p.lpcEv = Pfunc { 0 };
+p.lpcEv = p.savelpc;
+
+
+
 g = GenericGlobalControl(\bufmod, nil, 0, #[0, 6.998]); g.gui;
 p.bufmod = g.asMap;
 
 FxPatch(
 	[ 'busfx', 'chorus2' ], [ 20, 2, 2, 3, 0.011564949675432, 0.052749969028213, 0.0095969140264937, 2.094395164811, 0.52749969028213 ]
 )
+
+
+p.objects.collect(_.name);
+
+q = m.play(Pbind(
+	\instrument, \comb1,
+	\amp, 1,
+	\degree, Pwhite(-7, 7, inf),
+	\dur, 0.5
+));
+
+q.stop;
+
+q = m.play(Pbind(
+	\instrument, \comb1,
+	#[bufnum1, bufnum2], Pxrand(p.noisewt, inf).clump(2),
+	\xfade, Pwhite(-1.0, 1.0, inf),
+	\amp, 1,
+	\degree, Pwhite(-7, 7, inf),
+	\dur, 0.125
+));
+
+q.stop;
+
+
+p.lpcEv = Plazy { Pbind(
+		\instrument, BPStream(\lpcInstr),
+		\lpcbuf, ~lpcb,
+		\voxdur, ~voxdur,
+		\pt, Pxrand(~pt, inf),
+		#[ptstart, ptend], Pkey(\pt),
+		\start, BPStream(\lpcStart),
+		\end, BPStream(\lpcEnd),
+//		\time, // should be populated by sanitizeEvent
+		\amp, 1,
+		\pan, BPStream(\lpcPan)
+).trace(prefix: "\n") };
+
+Task {
+	p.noisewt.do { |buf|
+		buf.getToFloatArray(action: { |data|
+			[buf.bufnum, data.minItem, data.maxItem, data.squared.mean.sqrt].postln
+		});
+		0.2.wait;
+	};
+}.play(AppClock);
 
 
 ~savebufmod = p.bufmod;
@@ -584,10 +733,10 @@ SynthDef(\comb2, { |bufnum1, bufnum2, xfade = 0, freq = 440, amp = 1, cdecay = 2
 		excdecay = Decay2.kr(Impulse.kr(0), 0.01, excTime),
 		comb = CombL.ar(exc * excdecay, 0.05, freq.reciprocal, cdecay, amp),
 		eg = EnvGen.kr(Env.asr(0.01, 1, 0.15), gate, doneAction: 2);
-//	DetectSilence.ar(comb, 0.001, doneAction: 2);
 	Out.ar(outbus, comb * eg)
 }).add;
 
+p.use {
 q = n.play(Pbind(
 	\instrument, \comb2,
 	#[bufnum1, bufnum2], Pxrand(~noisewt, inf).clump(2),
@@ -604,28 +753,11 @@ q = n.play(Pbind(
 		\lpcbuf, ~lpcb,
 		\voxdur, ~voxdur,
 		#[start, end], Prand(~pt, inf),
-		\amp, 3
+		\amp, 1
 	) <> Pfunc { |ev| (time: ev.use { ~sustain.() }) }
 ), (protoEvent: ProtoEvent(\polySynthBusLock).copy));
+};
 
 q.stop;
 
 n.free;
-
-Pbind(
-	\instrument, \comb2,
-	#[bufnum1, bufnum2], Pxrand(~noisewt, inf).clump(2),
-	\xfade, Pwhite(-1.0, 1.0, inf),
-	\delta, 0.5,
-	\sustain, Pkey(\delta),
-	\cdecay, 25,
-	\amp, 1,
-	\numCh, 1,
-//	\chan, n,
-	\lpcEv, Pbind(
-		\instrument, \simpleLPCfxPan,
-		\lpcbuf, ~lpcb,
-		\voxdur, ~voxdur,
-		#[start, end], Prand(~pt, inf)
-	) <> Pfunc { |ev| (time: ev.use { ~sustain.() }) }
-).asStream.next(())
