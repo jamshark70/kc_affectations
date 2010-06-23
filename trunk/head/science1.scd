@@ -56,6 +56,60 @@ SynthDef(\partial, { |outbus, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
 	Out.ar(outbus, sig * eg);
 }).add;
 
+SynthDef(\partial1, { |outbus, freq = 440, amp = 1, time = 1|
+	var	sig = SinOsc.ar(freq, 0, amp),
+		eg = EnvGen.kr(Env(#[0, 1, 0], (time * 0.5) ! 2, \sine), doneAction: 2);
+	Out.ar(outbus, sig * eg);
+}).add;
+
+Env(#[0, 1, 0], 0.5 ! 2, \sine).plot
+
 m.play((instrument: \partial, freq: 32.midicps, amp: 0.2, sustain: 3));
 
-m.play((instrument: \partial, freq: 32.midicps * (1..3), ampLfoSpd: 0.25 * (1..3), offset: 4 * (1 - (1..3).reciprocal), amp: /*0.5 * (1..3).reciprocal*/ #[0.0, 0.8, 0.0], sustain: 12));
+m.play((instrument: \partial, freq: 32.midicps * (1..15), ampLfoSpd: 0.25 * (1..15), timingOffset: 4 * (1 - (1..15).reciprocal) * 0.5, amp: 0.5 /* * (1..15).reciprocal */, sustain: 12));
+
+m.play((instrument: \partial, freq: 32.midicps * (1..15), ampLfoSpd: 0.25 * (1..15), timingOffset: 4 * ((1..15).reciprocal) * 0.5, amp: 0.5 /* * (1..15).reciprocal */, sustain: 12));
+
+p = m.play(Pbind(
+	\instrument, \partial,
+	\ratio, Pseries(1, 1, 15),
+	\freq, 32.midicps * Pkey(\ratio),
+	\ampLfoSpd, 0.25 * Pkey(\ratio),
+	\timingOffset, 4 * 0.5 * (1 - Pkey(\ratio).reciprocal),
+	\amp, 0.5,
+	\sustain, (4*15) - Ptime() - Pkey(\timingOffset),
+	\delta, 4
+).trace);
+
+p.stop;
+
+m.play((instrument: \partial, freq: 32.midicps * 15, ampLfoSpd: 0.25 * 15, timingOffset: 4 * (1 - 15.reciprocal) * 0.5, amp: 0.5 /* * 15.reciprocal */, sustain: 12));
+
+// ok, how to control density with this?
+p = m.play(
+	Ppar({ |i|
+		Pbind(
+			\instrument, \partial1,
+			\ratio, i+1,
+			\freq, Pif(Pwhite(0.0, 1.0, inf) < (i+1).reciprocal, 32.midicps * Pkey(\ratio), \rest),
+			\time, 4 / Pkey(\ratio),
+			\timingOffset, 4 * 0.5 * (1 - Pkey(\ratio).reciprocal),
+			\amp, 0.5,
+			\delta, Pkey(\time)
+		)
+	} ! 15, inf)
+);
+
+Pbind(
+	\instrument, \partial2,
+	\freq, 32.midicps * (1..3),
+	\ampLfoSpd, (1..3),
+	\timingOffset, (1 - (1..3).reciprocal) * 0.5,
+	\amp, 0.5 * (1..3).reciprocal,
+	\sustain, 3,
+	\delta, Pn(3, 1),
+	\out, Pfunc { |ev| ev[\out].index + (0..2) }
+).record(numChannels: 3, out: 8);
+
+PeakMonitor(Bus(\audio, 0, 3, s))
+
