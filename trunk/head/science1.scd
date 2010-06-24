@@ -85,20 +85,13 @@ p.stop;
 
 m.play((instrument: \partial, freq: 32.midicps * 15, ampLfoSpd: 0.25 * 15, timingOffset: 4 * (1 - 15.reciprocal) * 0.5, amp: 0.5 /* * 15.reciprocal */, sustain: 12));
 
-// ok, how to control density with this?
-p = m.play(
-	Ppar({ |i|
-		Pbind(
-			\instrument, \partial1,
-			\ratio, i+1,
-			\freq, Pif(Pwhite(0.0, 1.0, inf) < (i+1).reciprocal, 32.midicps * Pkey(\ratio), \rest),
-			\time, 4 / Pkey(\ratio),
-			\timingOffset, 4 * 0.5 * (1 - Pkey(\ratio).reciprocal),
-			\amp, 0.5,
-			\delta, Pkey(\time)
-		)
-	} ! 15, inf)
-);
+// synchro test
+SynthDef(\partial2, { |out, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
+	var	lfo = SinOsc.kr(ampLfoSpd, -0.5pi, 0.5, 0.5) * amp,
+		sig = SinOsc.ar(freq, 0, lfo),
+		eg = EnvGen.kr(Env.asr(0.1, 1, 0.1), gate, doneAction: 2);
+	Out.ar(out, sig * eg);
+}).add;
 
 Pbind(
 	\instrument, \partial2,
@@ -111,5 +104,123 @@ Pbind(
 	\out, Pfunc { |ev| ev[\out].index + (0..2) }
 ).record(numChannels: 3, out: 8);
 
-PeakMonitor(Bus(\audio, 0, 3, s))
+// don't like it
+m.play(Pbind(
+	\instrument, \partial2,
+	\freq, 32.midicps * (1..3),
+	\ampLfoSpd, (1..3),
+	\timingOffset, ((1..3).reciprocal) * 0.5,
+	\amp, 0.5 * (1..3).reciprocal,
+	\sustain, 3,
+	\delta, Pn(3, 1)
+))
 
+
+// ok, how to control density with this?
+g = GenericGlobalControl(\density, nil, 0); g.gui;
+
+p = m.play(
+	Ppar({ |i|
+		Pbind(
+			\prob, g.asPattern + (i+1).reciprocal,
+			\type, Pif(Pwhite(0.0, 1.0, inf) < Pkey(\prob), \note, \rest),
+			\instrument, \partial1,
+			\ratio, i+1,
+			\freq, 32.midicps * Pkey(\ratio),
+			\time, 4 / Pkey(\ratio),
+			\timingOffset, 4 * 0.5 * (1 - Pkey(\ratio).reciprocal),
+			\amp, 0.5,
+			\delta, Pkey(\time)
+		)
+	} ! 15, inf)
+);
+
+p.stop;
+
+Event.default.eventTypes.keys
+
+~p = { |pat, clock(TempoClock.default), quant, mixer(m)|
+	mixer.play(pat, (quant: quant, clock: clock, protoEvent: ProtoEvent(\singleSynthPlayer).copy))
+};
+
+n = 12;
+d = 60;
+~p.(Ptpar([
+	{ |i| d * (1 - (i+1).reciprocal) } ! n,
+	{ |i|
+		Pbind(
+			\instrument, \partial1,
+			\ratio, i+1,
+			\freq, 32.midicps * Pkey(\ratio),
+			\time, d / Pkey(\ratio),
+			// 		\timingOffset, d * 0.5 * (1 - Pkey(\ratio).reciprocal),
+			\amp, 0.5,
+			\delta, Pfin(i+1 * 2, Pkey(\time)),
+			\grain, true
+		)
+	} ! n
+].flop.flat, 1));
+
+m.scope
+
+// this allows me to speed up the envelope in RT
+c = Buffer.alloc(s, 1024, 1, { |buf| buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024)) });
+
+// egRate == 1 corresponds to 1 sec dur; 0.25 = 4 sec
+SynthDef(\partial1a, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, egBuf|
+	var	sig = SinOsc.ar(freq, 0, amp),
+		egpos = Sweep.kr(1, egRate * egRateMul),
+		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2);
+	FreeSelf.kr(egpos >= 1.0);
+	Out.ar(outbus, sig * eg);
+}).add;
+
+SynthDef(\partial1b, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, egBuf,
+	panWidth = 0, panCtr = 0|
+	var	sig = SinOsc.ar(freq, 0, amp),
+		swRate = egRate * egRateMul,
+		egpos = Sweep.kr(1, swRate),
+		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
+		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0);
+	FreeSelf.kr(egpos >= 1.0);
+	Out.ar(outbus, Pan2.ar(sig * eg, pan));
+}).add;
+
+t = TempoClock.new;
+
+g = GenericGlobalControl(\egRate, nil, 1/12, [1/60, 10, \exp]); g.gui;
+u.remove;
+u = Updater(g, { |obj, parms|
+	if(parms.tryPerform(\at, \what) == \value) {
+		t.tempo = g.value
+	}
+});
+
+m.startRecord(thisProcess.platform.recordingsDir +/+ "partials1.aiff");
+
+n = MixingBoard.at(0).mixers[1].mixer;
+
+~num = 30;
+p = ~p.(Ptpar([
+	// because I'm not halving the offsets, this breaks apart the partials
+	{ |i| (1 - (i+1).reciprocal) } ! ~num,
+	{ |i|
+		Pbind(
+			\instrument, \partial1b,
+			\ratio, i+1,
+			\freq, 32.midicps * Pkey(\ratio),
+//			\time, Pkey(\ratio).reciprocal,
+			\egRate, g.asMap,
+			\egRateMul, i+1,
+			\egBuf, c,
+			\amp, 0.2,
+			\delta, Pkey(\egRateMul).reciprocal,
+			\panWidth, i/(~num-1),
+			\grain, true //,
+//			\debug, true
+		)
+	} ! ~num
+].flop.flat, 1), t, 1, n);
+
+p.stop
+m.stopRecord;
