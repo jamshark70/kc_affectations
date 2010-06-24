@@ -37,6 +37,8 @@ k = VoicerMIDISocket(0, VP(0).v);
 
 4.do { |i| CC(("k" ++ i).asSymbol) => VP(0) };
 
+~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
+
 ~rvbmc => MCG(6);
 ~master => MCG(7);
 MixingBoard.at(0).refresh;
@@ -53,13 +55,13 @@ SynthDef(\partial, { |outbus, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
 	var	lfo = SinOsc.kr(ampLfoSpd, -0.5pi, 0.5, 0.5) * amp,
 		sig = SinOsc.ar(freq, 0, lfo),
 		eg = EnvGen.kr(Env.asr(0.1, 1, 0.1), gate, doneAction: 2);
-	Out.ar(outbus, sig * eg);
+	OffsetOut.ar(outbus, sig * eg);
 }).add;
 
 SynthDef(\partial1, { |outbus, freq = 440, amp = 1, time = 1|
 	var	sig = SinOsc.ar(freq, 0, amp),
 		eg = EnvGen.kr(Env(#[0, 1, 0], (time * 0.5) ! 2, \sine), doneAction: 2);
-	Out.ar(outbus, sig * eg);
+	OffsetOut.ar(outbus, sig * eg);
 }).add;
 
 Env(#[0, 1, 0], 0.5 ! 2, \sine).plot
@@ -90,7 +92,7 @@ SynthDef(\partial2, { |out, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
 	var	lfo = SinOsc.kr(ampLfoSpd, -0.5pi, 0.5, 0.5) * amp,
 		sig = SinOsc.ar(freq, 0, lfo),
 		eg = EnvGen.kr(Env.asr(0.1, 1, 0.1), gate, doneAction: 2);
-	Out.ar(out, sig * eg);
+	OffsetOut.ar(out, sig * eg);
 }).add;
 
 Pbind(
@@ -172,7 +174,7 @@ SynthDef(\partial1a, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, 
 		egpos = Sweep.kr(1, egRate * egRateMul),
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2);
 	FreeSelf.kr(egpos >= 1.0);
-	Out.ar(outbus, sig * eg);
+	OffsetOut.ar(outbus, sig * eg);
 }).add;
 
 SynthDef(\partial1b, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, egBuf,
@@ -183,16 +185,61 @@ SynthDef(\partial1b, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, 
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
 		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0);
 	FreeSelf.kr(egpos >= 1.0);
-	Out.ar(outbus, Pan2.ar(sig * eg, pan));
+	OffsetOut.ar(outbus, Pan2.ar(sig * eg, pan));
 }).add;
 
-t = TempoClock.new;
+
+SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
+	egRate = 1, egRateMul = 1, egSusPt = 0.5, egBuf,
+	panWidth = 0, panCtr = 0, gate = 1|
+	var	sig = SinOsc.ar(freq, 0, amp),
+		swRate = egRate * egRateMul,
+		posTest = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
+		egpos = Sweep.kr(1, swRate * (((gate <= 0) + (posTest < egSusPt)) > 0)),
+		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
+		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0);
+	LocalOut.kr(egpos);
+	FreeSelf.kr(egpos >= 1.0);
+	OffsetOut.ar(outbus, Pan2.ar(sig * eg, pan));
+}).add;
+
+x = n.play(\partial1bgated, [freq: 220, amp: 0.4, egBuf: c]);
+x.trace
+x.release;
+
+0.2.acos / pi + 0.5
+c.get((((0.2 * 2 - 1).acos / 2pi + 0.5) * c.numFrames).asInteger, _.postln)
+
+n.play((instrument: \partial1bgated, freq: 32.midicps * (1..40), amp: 0.1, egRate: (1..40) / 8, egBuf: c,
+	timingOffset: 8 * 0.5 * (1 - (1..40).reciprocal), sustain: 12 - (8 * 0.5 * (1 - (1..40).reciprocal))));
+
+var pt = ~pt.choose.postln;
+(
+chan: n, instrument: \partial1bgated,
+freq: 40.midicps * (1..80), amp: 0.1, egRate: 50, egBuf: c,
+sustain: 3,
+lpcEv: (
+	instrument: \simpleLPCfxPan, lpcbuf: ~lpcb, voxdur: ~voxdur,
+	start: pt[0], end: pt[1], time: 3
+)
+)
+.parent_(ProtoEvent(\polySynthBusLock).v.parent)
+.play;
+
+a = m.play { Blip.ar(32.midicps, 15000 / 32.midicps, 0.5) };
+a.free
+
+32.midicps * 40
+
+n.scope
+
+t.stop; t = TempoClock(queueSize: 2048).permanent_(true);
 
 g = GenericGlobalControl(\egRate, nil, 1/12, [1/60, 10, \exp]); g.gui;
 u.remove;
 u = Updater(g, { |obj, parms|
 	if(parms.tryPerform(\at, \what) == \value) {
-		t.tempo = g.value
+		t.tempo = obj.value
 	}
 });
 
@@ -200,13 +247,18 @@ m.startRecord(thisProcess.platform.recordingsDir +/+ "partials1.aiff");
 
 n = MixingBoard.at(0).mixers[1].mixer;
 
-~num = 30;
-p = ~p.(Ptpar([
 	// because I'm not halving the offsets, this breaks apart the partials
-	{ |i| (1 - (i+1).reciprocal) } ! ~num,
+
+h = GenericGlobalControl(\offsetmul, nil, 0.5, #[0, 0.5]); h.gui;
+j = GenericGlobalControl(\holdbias, nil, 1, #[1, 20, \lin, 1]); j.gui;
+
+~num = 24;
+p = ~p.(Ptpar([
+	({ |i| (1 - (i+1).reciprocal) * 0.5 } ! ~num).postln,
 	{ |i|
 		Pbind(
-			\instrument, \partial1b,
+			\instrument, \partial1bgated,
+			\numHold, Pwhite(1, j.asPattern, inf),
 			\ratio, i+1,
 			\freq, 32.midicps * Pkey(\ratio),
 //			\time, Pkey(\ratio).reciprocal,
@@ -214,13 +266,94 @@ p = ~p.(Ptpar([
 			\egRateMul, i+1,
 			\egBuf, c,
 			\amp, 0.2,
-			\delta, Pkey(\egRateMul).reciprocal,
-			\panWidth, i/(~num-1),
-			\grain, true //,
+			\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
+			\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
+			\panWidth, 0, // i/(~num-1),
+			\timingOffset, (1 - (i+1).reciprocal) * h.asPattern//,
+//			\grain, true //,
 //			\debug, true
+		) //.trace(key: \numHold)
+	} ! ~num
+].flop.flat, 1), t, nil, n);
+
+p.stop;
+m.stopRecord;
+
+n.scope;
+
+
+~num = 20;
+p = ~p.(Ptpar([
+	({ |i| (1 - (i+1).reciprocal) * 0.5 } ! ~num).postln,
+	{ |i|
+		Pbind(
+			\instrument, Pn(\partial1b, 2),
+			\ratio, i+1,
+			\freq, 32.midicps * Pkey(\ratio),
+//			\time, Pkey(\ratio).reciprocal,
+			\egRate, g.asMap,
+			\egRateMul, i+1,
+			\egBuf, c,
+			\amp, 0.2,
+			\time, Pkey(\ratio).reciprocal,
+			\delta, Pkey(\egRateMul).reciprocal,
+			\panWidth, 0, // i/(~num-1),
+			\timingOffset, (1 - (i+1).reciprocal) * h.asPattern,
+			\grain, true
 		)
 	} ! ~num
-].flop.flat, 1), t, 1, n);
+].flop.flat, inf), t, nil, n);
 
-p.stop
-m.stopRecord;
+p.stop;
+
+p = ~p.(
+	Pspawner({ |sp|
+		(1..50).do { |num|
+			sp.seq(
+				Pfindur(2, Ptpar([
+					{ |i| (1 - (i+1).reciprocal) * 0.5 } ! num,
+					{ |i|
+						Pbind(
+							\instrument, Pn(\partial1bgated, 2),
+							\numHold, if(i > 0, j.asPattern, 1),
+							\ratio, i+1,
+							\freq, 32.midicps * Pkey(\ratio),
+							\egRate, g.asMap,
+							\egRateMul, i+1,
+							\egBuf, c,
+							\amp, 0.4,
+//							\time, Pkey(\ratio).reciprocal,
+							\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
+							\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
+							\panWidth, 0, // i/(num-1),
+							\timingOffset, (1 - (i+1).reciprocal) * h.asPattern//,
+//							\grain, true
+						)
+					} ! num
+				].lace(num*2), 1))
+			)
+		}
+	}),
+t, nil, n);
+
+p.stop;
+
+
+0.2.acos / pi + 0.5
+c.get((((0.2 * 2 - 1).acos / 2pi + 0.5) * c.numFrames).asInteger, _.postln)
+
+z = { |i|
+	(type: \on, instrument: \partial1bgated,
+		freq: 32.midicps * (i+1), egRate: 0.5, egRateMul: (i+1), egBuf: c, amp: 0.4,
+		timingOffset: 2 * 0.5 * (1 - (i+1).reciprocal)
+	)
+} ! 15;
+
+z.do { |e| n.play(e) };
+
+// --> sawtooth (egSusPt formula gets fractional index into buffer where the desired magnitude is)
+z.do { |e, i| e.putAll((type: \set, args: #[], egRateMul: 0.1,
+	egSusPt: acos((i+1).reciprocal * 2 - 1) / 2pi + 0.5).postln).play;
+};
+
+z.do { |e| e.type_(\off).play };
