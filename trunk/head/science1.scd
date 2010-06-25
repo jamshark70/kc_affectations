@@ -421,8 +421,48 @@ MIDIPort.sources
 j = MIDIThruSocket(#[1, \omni], #[0, 0]);
 
 
-p = Pspawner({ |sp|
-	var notes = [
-		#[56, 58, 56, 54, 56, 58, 61, 56],
-		#[63, 61, 63, 66, 68, 66, 64, 63],
-		
+WrapInstr("analog.saw", { |freq, gate = 1, detune = 1.003, ffreq = 2000, env, vsens = 0.5|
+
+d = WrapPatch("analog.saw", [nil, nil, nil, `18000, Env.adsr(0.1, 0.2, 0.6, 0.5), 0.8]).asSynthDef.add;
+SynthDescLib.at(d.name.asSymbol).msgFuncKeepGate = true;
+
+
+SynthDef(\ringzFade, { |inbus, outbus, ffreq = 5000, filtAtk = 0.2, filtDcy = 0.22, time = 1|
+	var	sig = In.ar(inbus, 1),
+		eg = EnvGen.kr(Env(#[0, 1, 0], 0.5 ! 2, \sine), timeScale: time, doneAction: 2);
+	sig = Formlet.ar(sig, ffreq, filtAtk, filtDcy);
+	Out.ar(outbus, Limiter.ar(sig) * eg);
+}).add;
+
+SynthDef(\lpfxfer, { |inbus, outbus, ffreq = 2000|
+	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq));
+}).add;
+
+e = (
+	parent: ProtoEvent(\polySynthFxPatLock).v.parent,
+	instrument: d.name.asSymbol,
+	freq: 56.midicps * (4..6) / 4,
+	sustain: 15,
+	gate: 0.5,
+	chan: m,
+	fxPatEv: (
+		pat: Pfindur(15, 
+			Pseq([
+				(//parent: ProtoEvent(\singleSynthPlayer).v.parent[\play].postcs,
+					instrument: \lpfxfer, ffreq: 900, delta: 0, collIndex: \dummy,
+					notifyDependents: { ~lock.killNodes = ~lock.killNodes.add(~node); ~lock.killNodes.postln }
+				),
+				Pbind(
+					\instrument, \ringzFade,
+					\ffreq, Pexprand(1000, 9000, inf),
+					\filtAtk, 0.1,
+					\filtDcy, Pkey(\filtAtk) * Pexprand(1.05, 1.25, inf),
+					\time, 1.5,
+					\delta, 0.5
+				)
+			], 1)
+		)
+	)
+).play;
+
+e.node.do(_.free);
