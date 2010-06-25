@@ -395,8 +395,10 @@ WrapInstr("analog.saw", { |freq, gate = 1, detune = 1.003, ffreq = 2000, env, vs
 	LPF.ar(sig, ffreq, eg)
 }, [\freq, NoLagControlSpec(0, 1), \mydetune, \freq, EnvSpec(Env.adsr), nil]);
 
-z = TuningRatios(12, 32.midicps, 32, [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 7/4, 3/2 * 5/4]).root_(8);
-z.tunings = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 2 / (9/8), 3/2 * 5/4];
+z = TuningRatios(12, 32.midicps, 32, [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4]).root_(8);
+
+// this one cheats and tunes E-nat to F-nat = M3 over Db, and F-nat to P5 over Bb
+z = TuningRatios(12, tunings: [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 5/4, 9/8 * 3/2, 16/9, 3/2 * 5/4]).root_(8).calibrate(32.midicps, 32);
 
 z.tunings.asRational
 
@@ -405,5 +407,22 @@ MIDIPort.autoFreeSockets = true;
 v = WrapInstr("analog.saw").miditest(0, initArgs: [env: Env.adsr(0.1, 0.2, 0.6, 0.5)], target: m);
 k = MIDIPort.search(v);
 k.midiToFreq = z;
+z;
 
 // need CompositeTuning - F-nat is a problem
+
+4/%3 * 5/4
+9/%8 * 3/2
+
+k.midiToFreq = nil;
+k.midiToFreq
+
+MIDIPort.sources
+j = MIDIThruSocket(#[1, \omni], #[0, 0]);
+
+
+p = Pspawner({ |sp|
+	var notes = [
+		#[56, 58, 56, 54, 56, 58, 61, 56],
+		#[63, 61, 63, 66, 68, 66, 64, 63],
+		
