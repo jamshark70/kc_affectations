@@ -53,13 +53,13 @@ MixingBoard.at(0).refresh;
 
 SynthDef(\partial, { |outbus, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
 	var	lfo = SinOsc.kr(ampLfoSpd, -0.5pi, 0.5, 0.5) * amp,
-		sig = SinOsc.ar(freq, 0, lfo),
+		sig = FSinOsc.ar(freq, 0, lfo),
 		eg = EnvGen.kr(Env.asr(0.1, 1, 0.1), gate, doneAction: 2);
 	OffsetOut.ar(outbus, sig * eg);
 }).add;
 
 SynthDef(\partial1, { |outbus, freq = 440, amp = 1, time = 1|
-	var	sig = SinOsc.ar(freq, 0, amp),
+	var	sig = FSinOsc.ar(freq, 0, amp),
 		eg = EnvGen.kr(Env(#[0, 1, 0], (time * 0.5) ! 2, \sine), doneAction: 2);
 	OffsetOut.ar(outbus, sig * eg);
 }).add;
@@ -90,7 +90,7 @@ m.play((instrument: \partial, freq: 32.midicps * 15, ampLfoSpd: 0.25 * 15, timin
 // synchro test
 SynthDef(\partial2, { |out, gate = 1, freq = 440, amp = 1, ampLfoSpd = 1|
 	var	lfo = SinOsc.kr(ampLfoSpd, -0.5pi, 0.5, 0.5) * amp,
-		sig = SinOsc.ar(freq, 0, lfo),
+		sig = FSinOsc.ar(freq, 0, lfo),
 		eg = EnvGen.kr(Env.asr(0.1, 1, 0.1), gate, doneAction: 2);
 	OffsetOut.ar(out, sig * eg);
 }).add;
@@ -170,7 +170,7 @@ c = Buffer.alloc(s, 1024, 1, { |buf| buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5],
 
 // egRate == 1 corresponds to 1 sec dur; 0.25 = 4 sec
 SynthDef(\partial1a, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, egBuf|
-	var	sig = SinOsc.ar(freq, 0, amp),
+	var	sig = FSinOsc.ar(freq, 0, amp),
 		egpos = Sweep.kr(1, egRate * egRateMul),
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2);
 	FreeSelf.kr(egpos >= 1.0);
@@ -179,7 +179,7 @@ SynthDef(\partial1a, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, 
 
 SynthDef(\partial1b, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, egBuf,
 	panWidth = 0, panCtr = 0|
-	var	sig = SinOsc.ar(freq, 0, amp),
+	var	sig = FSinOsc.ar(freq, 0, amp),
 		swRate = egRate * egRateMul,
 		egpos = Sweep.kr(1, swRate),
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
@@ -192,10 +192,12 @@ SynthDef(\partial1b, { |outbus, freq = 440, amp = 1, egRate = 1, egRateMul = 1, 
 SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
 	egRate = 1, egRateMul = 1, egSusPt = 0.5, egBuf,
 	panWidth = 0, panCtr = 0, gate = 1|
-	var	sig = SinOsc.ar(freq, 0, amp),
+	var	sig = FSinOsc.ar(freq, 0, amp),
 		swRate = egRate * egRateMul,
 		posTest = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
-		egpos = Sweep.kr(1, swRate * (((gate <= 0) + (posTest < egSusPt)) > 0)),
+		notReachedSusPt = BinaryOpUGen('==', sign(egSusPt - posTest), swRate.sign),
+		egpos = Sweep.kr(1, swRate * (((gate <= 0) + notReachedSusPt) > 0)),
+// 		egpos = Sweep.kr(1, swRate * (((gate <= 0) + (posTest < egSusPt)) > 0)),
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
 		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0);
 	LocalOut.kr(egpos);
@@ -345,15 +347,63 @@ c.get((((0.2 * 2 - 1).acos / 2pi + 0.5) * c.numFrames).asInteger, _.postln)
 z = { |i|
 	(type: \on, instrument: \partial1bgated,
 		freq: 32.midicps * (i+1), egRate: 0.5, egRateMul: (i+1), egBuf: c, amp: 0.4,
+		// this is the 'i' recip * 1/2 / egRate
 		timingOffset: 2 * 0.5 * (1 - (i+1).reciprocal)
 	)
 } ! 15;
 
 z.do { |e| n.play(e) };
 
+// slow fade, replace with real Sawtooth
+
+// egRateMul: cover half env cycle in 5 sec
+// 0.2 = 1/5; egRate = 0.5 which accounts for the half cycle
+// really it should be egRate / desiredTime / 0.5 * (numh / (i+1))
+z.do { |e, i|
+	e.putAll((type: \set, args: #[], egRateMul: 0.2 * 15 / (i+1), timingOffset: 0)).play;
+	e.type_(\off).play;
+};
+a = m.play {
+	var	sig = Saw.ar(32.midicps),
+		fswp = EnvGen.kr(Env(#[48, 780, 780, 8000], #[5, 6, 7], \exp));
+	LPF.ar(sig, fswp)
+};
+
+a.trace
+a.free;
+32.midicps * 15
+
 // --> sawtooth (egSusPt formula gets fractional index into buffer where the desired magnitude is)
-z.do { |e, i| e.putAll((type: \set, args: #[], egRateMul: 0.1,
+z.do { |e, i| e.putAll((type: \set, args: #[], egRateMul: 0.25,
 	egSusPt: acos((i+1).reciprocal * 2 - 1) / 2pi + 0.5).postln).play;
 };
 
-z.do { |e| e.type_(\off).play };
+//z.do { |e| e.putAll((egRateMul: -0.1, egSusPt: 0.5)).play };
+
+z.do { |e| e.egRateMul_(0.5).play; e.type_(\off).play };
+
+s.sendMsg(\n_trace, z[0][\id][0])
+z.do { |e| e.hasGate_(false).play };
+
+
+// notes
+
+WrapInstr("analog.saw", { |freq, gate = 1, detune = 1.003, ffreq = 2000, env, vsens = 0.5|
+	var	amp = (Latch.kr(gate, gate) - 1) * vsens + 1,
+		sig = Saw.ar(freq * [1, detune], amp).sum,
+		eg = EnvGen.kr(env, gate, doneAction: 2);
+	LPF.ar(sig, ffreq, eg)
+}, [\freq, NoLagControlSpec(0, 1), \mydetune, \freq, EnvSpec(Env.adsr), nil]);
+
+z = TuningRatios(12, 32.midicps, 32, [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 7/4, 3/2 * 5/4]).root_(8);
+z.tunings = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 2 / (9/8), 3/2 * 5/4];
+
+z.tunings.asRational
+
+MIDIPort.autoFreeSockets = true;
+
+v = WrapInstr("analog.saw").miditest(0, initArgs: [env: Env.adsr(0.1, 0.2, 0.6, 0.5)], target: m);
+k = MIDIPort.search(v);
+k.midiToFreq = z;
+
+// need CompositeTuning - F-nat is a problem
