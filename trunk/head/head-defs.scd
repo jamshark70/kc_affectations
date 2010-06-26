@@ -69,7 +69,6 @@ Proto {
 PR(\busLock).clone {
 	~busFreeDelay = 1;
 	~freeStuff = {
-"freeStuff".debug;
 		~stopThings.do(_.stop);
 		~killNodes.do(_.free);
 		AppClock.sched(~busFreeDelay, e { ~bus.free });
