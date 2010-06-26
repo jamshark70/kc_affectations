@@ -427,36 +427,79 @@ d = WrapPatch("analog.saw", [nil, nil, nil, `18000, Env.adsr(0.1, 0.2, 0.6, 0.5)
 SynthDescLib.at(d.name.asSymbol).msgFuncKeepGate = true;
 
 
-SynthDef(\ringzFade, { |inbus, outbus, ffreq = 5000, filtAtk = 0.2, filtDcy = 0.22, time = 1|
+SynthDef(\ringzFadePan, { |inbus, outbus, ffreq = 5000, filtAtk = 0.2, filtDcy = 0.22, time = 1,
+	pan = 0|
 	var	sig = In.ar(inbus, 1),
 		eg = EnvGen.kr(Env(#[0, 1, 0], 0.5 ! 2, \sine), timeScale: time, doneAction: 2);
 	sig = Formlet.ar(sig, ffreq, filtAtk, filtDcy);
-	Out.ar(outbus, Limiter.ar(sig) * eg);
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg));
 }).add;
 
-SynthDef(\lpfxfer, { |inbus, outbus, ffreq = 2000|
-	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq));
+SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000|
+	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq) ! 2);
 }).add;
 
+SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1|
+	var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
+		amps = NamedControl.kr(\amps, 1 ! 5),
+		qs = NamedControl.kr(\qs, 0.1 ! 5),
+		sig = In.ar(inbus, 1);
+	ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	sig = BBandPass.ar(sig, ffreqs, qs, amps).sum;
+	Out.ar(outbus, sig ! 2);
+}).add;
+
+(
 e = (
 	parent: ProtoEvent(\polySynthFxPatLock).v.parent,
 	instrument: d.name.asSymbol,
 	freq: 56.midicps * (4..6) / 4,
 	sustain: 15,
 	gate: 0.5,
-	chan: m,
+	chan: n,
+	numCh: 1,
+	busFreeDelay: 1.5,
 	fxPatEv: (
 		pat: Pfindur(15, 
-			Pseq([
-				(//parent: ProtoEvent(\singleSynthPlayer).v.parent[\play].postcs,
-					instrument: \lpfxfer, ffreq: 900, delta: 0, collIndex: \dummy,
-					notifyDependents: { ~lock.killNodes = ~lock.killNodes.add(~node); ~lock.killNodes.postln }
-				),
+			Ppar([
+// 				(
+// 					instrument: \lpfxfer2, ffreq: 900, delta: 0, collIndex: \dummy,
+// 					notifyDependents: { ~lock.killNodes = ~lock.killNodes.add(~node) }
+// 				),
+
+// use ssplayer+trigger
+				Pmono(\formantXfer2,
+					#[ffreqs, amps, qs], Pfunc { FormantTable.get(FormantTable.keys.choose.postln) },
+					\delta, Pwhite(1.0, 3.0, inf)
+				).collect { |ev|
+					thisThread.clock.sched(0.01, {
+						ev[\lock].killNodes = ev[\node].debug("set killnode");
+					});
+					ev
+				}
+				<> Pfunc { |ev|
+					Event.default.putAll((
+						out: ev[\bus],
+						target: ev[\target],
+						inbus: ev[\lock].bus,
+						addAction: ev[\addAction] ?? { \addToHead }
+					))
+				},
+// 				Pbind(
+// 					\instrument, \formantXfer2,
+// 					#[ffreqs, amps, qs], FormantTable.get(\tenorU),
+// 					\delta, Pn(0, 1),
+// 					\collIndex, \dummy,
+// 					\notifyDependents, { ~lock.killNodes = ~lock.killNodes.add(~node) }
+// 				).trace,
 				Pbind(
-					\instrument, \ringzFade,
+					\instrument, \ringzFadePan,
 					\ffreq, Pexprand(1000, 9000, inf),
 					\filtAtk, 0.1,
 					\filtDcy, Pkey(\filtAtk) * Pexprand(1.05, 1.25, inf),
+					\pan, Pwhite(0.7, 1.0, inf) * Prand(#[-1, 1], inf),
 					\time, 1.5,
 					\delta, 0.5
 				)
@@ -464,5 +507,9 @@ e = (
 		)
 	)
 ).play;
+)
 
 e.node.do(_.free);
+
+FormantTable.keys
+z = FormantTable.get(\tenorU);
