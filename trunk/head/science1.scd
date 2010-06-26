@@ -1,5 +1,7 @@
 // head - harmonic series -> intellectual exploration
 
+// to do: reverb for chorus process
+
 
 SynthDescLib.global.browse;
 Object.browse;
@@ -8,6 +10,7 @@ s.queryAllNodes;
 MIDIPort.init([2]);
 MIDIPort.autoFreeSockets = false;
 
+MT(1).free;
 MT(1).gui;
 
 ChuckableBrowser.newWindow;
@@ -434,19 +437,30 @@ SynthDef(\ringzFadePan, { |inbus, outbus, ffreq = 5000, filtAtk = 0.2, filtDcy =
 	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg * amp));
 }).add;
 
+SynthDef(\ringzFadeEnv, { |inbus, outbus, filtAtk = 0.2, filtDcy = 0.22, time = 1,
+	pan = 0, amp = 1|
+	var	sig = In.ar(inbus, 1),
+		eg = EnvGen.kr(Env(#[0, 1, 0], 0.5 ! 2, \sine), timeScale: time, doneAction: 2),
+		freqEnv = NamedControl.kr(\freqEnv, Env(#[2000, 2000], #[1]).asArray.extend(24, 0)),
+		ffreq = EnvGen.kr(freqEnv, timeScale: time);
+	sig = Formlet.ar(sig, ffreq, filtAtk, filtDcy);
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg * amp));
+}).add;
+
 SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000|
 	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq) ! 2);
 }).add;
 
-SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1|
+SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1/*, noiseAmp = 0.1*/|
 	var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
 		amps = NamedControl.kr(\amps, 1 ! 5),
 		qs = NamedControl.kr(\qs, 0.1 ! 5),
-		sig = In.ar(inbus, 1);
+		sig = In.ar(inbus, 1); //,
+//		noise = PinkNoise.ar(noiseAmp * Amplitude.kr(sig));
 	ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 	amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 	qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
-	sig = BBandPass.ar(sig, ffreqs, qs, amps).sum;
+	sig = BBandPass.ar(sig /*+ noise*/, ffreqs, qs, amps).sum;
 	Out.ar(outbus, sig ! 2);
 }).add;
 
@@ -504,3 +518,203 @@ s.audioBusAllocator.debug
 FormantTable.keys
 z = FormantTable.get(\tenorU);
 
+if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
+
+MIDIRecBuf(\t1, [#[56, 58, 56], 16, 14.5, 0.5].asNotes, (voice: \tenor)) => MBM(0);
+MIDIRecBuf(\a1, [#[68, 66, 68], 16, 14.5, 0.5].asNotes, (voice: \alto)) => MBM(0);
+
+(
+WrapInstr("analog.sawB", { |freq, gate = 1, detune = 1.003, ffreq = 2000, vsens = 0.5
+	att = 0.1, dec = 0.2, sus = 0.6, rel = 0.5, fLowRatio = 0.05|
+	var	amp = (Latch.kr(gate, gate) - 1) * vsens + 1,
+		sig = Saw.ar(freq * [1, detune], amp).sum,
+		env = Env.adsr(att, dec, sus, rel),
+		eg = EnvGen.kr(env, gate, doneAction: 2),
+		fcurve = EnvGen.kr(Env([fLowRatio, 1], [att], \exp));
+	LPF.ar(sig, ffreq * fcurve, eg)
+}, [\freq, NoLagControlSpec(0, 1), \mydetune, \freq, nil, #[0.01, 20.0], #[0.01, 20.0], #[0, 1], #[0.01, 20.0]]);
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthFxPatLock, addAction: \addToHead);
+
+	~seqKeys = #[t1, a1];
+	~att = Pkey(\sustain) * 0.3;
+	~dec = Pkey(\sustain) * 0.1;
+	~rel = Pkey(\sustain) * 0.4;
+	~fLow = 0.05;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, completionFunc: { |chan|
+			~chorus = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.036937527208376, 0.11364637357074, 0.0062137993811117, 0.69813170599922, 0.82540422302882]);
+		});
+
+		~def = WrapPatch("analog.sawB", [nil, nil, nil, `18000, 0.8])
+			.asSynthDef.add;
+		~defname = ~def.name.asSymbol;
+		SynthDescLib.at(~defname).msgFuncKeepGate = true;
+
+		~alto = ~formantKeys.("alto");
+		~tenor = ~formantKeys.("tenor");
+		~bass = ~formantKeys.("bass");
+
+//		~noiseCtl = GenericGlobalControl(\noiseLevel, nil, 0.1, \amp);
+	};
+
+//	~useGui = { |vpi| ~noiseCtl => VP(vpi) };
+
+	~freeCleanup = { [~chan/*, ~noiseCtl*/].free };
+
+	~fx = Pfunc { ~fxPool.keys.choose };
+
+	// NOTE: These will be evaluated in the Proto's context
+	~fxPool = (
+		rainbow: { |ev|
+			var	up = rrand(0.3, 0.6);
+			Pbind(
+				\instrument, \ringzFadePan,
+				\ffreq, Env(#[2500, 9000, 2500], [up, 1-up] * ev[\sustain], \sine),
+				\filtAtk, Pexprand(0.08, 0.2, inf),
+				\filtDcy, Pkey(\filtAtk) + Pwhite(0.05, 0.3, inf),
+				\time, Pwhite(1.8, 3.2, inf),
+				\delta, Pexprand(0.25, 0.8, inf),
+				\pan, Pwhite(0.7, 1.0, inf) * Prand(#[-1, 1], inf),
+				\amp, 0.05
+			)
+		},
+		rainbow1: { |ev|
+			var	up = rrand(0.15, 0.75), atk;
+			Pn((
+				instrument: \ringzFadeEnv,
+				freqEnv: Env(#[2500, 9000, 2500], [up, 1-up] * ev[\sustain], \sine),
+				filtAtk: atk = exprand(0.08, 0.2),
+				filtDcy: atk + rrand(0.05, 0.3),
+				time: ev[\sustain],
+				delta: 1,
+				pan: rrand(0.7, 1.0) * #[-1, 1].choose,
+				amp: 0.05
+			), 1)
+		}
+	);
+
+	~formantKeys = { |string|
+		FormantTable.keys.select { |key| key.asString.contains(string) }.asArray
+	};
+
+	~asPattern = {
+		~fxStream ?? { ~makeStreamForKey.(\fx) };
+		Pfunc { |ev| ~preprocessNote.(ev) }
+		<>
+		Plazy {
+			// change this later
+			Ppar(
+				~seqKeys.collect { |key|
+					Pbind(
+						\instrument, ~def.name,
+						\note, MBM(0)[key].asPattern,
+						\delta, Pfunc { |ev| ev[\note].dur },
+						\sustain, Pfunc { |ev| ev[\note].length },
+						\att, BPStream(\att), \dec, BPStream(\dec), \rel, BPStream(\rel),
+						\fLowRatio, BPStream(\fLow),
+						\chan, ~chan,
+						\numCh, 1,
+						\fxProto, \singleSynthPlayNotify,
+						\busFreeDelay, 3.2,
+						\fxPatEv, Pbind(
+							\syllable, Pxrand(MBM(0)[key].properties[\voice].envirGet, inf),
+							\pat, Pfunc { |ev|
+								var	fspecs = FormantTable.at(ev[\syllable]),
+									fxPat;
+								fxPat = ~fxPool[~fxStream.next(ev)].(ev);
+								Pseq([
+									Pn((
+										instrument: \formantXfer2,
+										ffreqs: fspecs[0],
+										amps: fspecs[1],
+										qs: fspecs[2],
+										sustain: nil,
+										delta: 0,
+//										noiseAmp: ~noiseCtl.asMap,
+										collIndex: ~collIndex,
+										notifyDependents: { ~lock.killNodes = ~node }
+									), 1),
+									if(fxPat.notNil) { Pfindur(ev[\sustain], fxPat) }
+								])
+							}
+						)
+					)
+				}
+			)
+		}
+	};
+
+	~preprocessNote = { |ev|
+		var	note;
+		// yeah, isKindOf = bad, but this could be called with an Event.silent
+		if((note = ev[\note]).isKindOf(SequenceNote)) {
+			ev.freq_(note.freq.midicps)/*.sustain_(note.length)*/.gate_(note.gate)
+		}; // { "not a sequencenote".postln; note.postcs };
+		ev
+	};
+} => PR(\counterpoint);
+)
+
+BP(\c).free;
+PR(\counterpoint) => BP(\c);
+0 => BP(\c);
+
+q = BP(\c).chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3]); q.gui;
+BP(\c).event.addAction = \addToHead;
+
+BP(\c).fx = \rainbow;
+BP(\c).fx = \none;
+
+#[att, dec, rel].do { |k| BP(\c)[k] = BP(\c)[k].trace(prefix: k) };
+
+BP(\c).att = Pkey(\sustain) * 0.55;
+BP(\c).dec = Pkey(\sustain) * 0.1;
+BP(\c).rel = Pkey(\sustain) * 0.35;
+BP(\c).fLow = 0.008;
+
+BP(\c).noiseCtl.spec = #[0.1, 8.0, \exp];
+
+#[alto, tenor, bass].do { |k| BP(\c)[k] = [(k ++ "A").asSymbol].postln }; ""
+
+s.queryAllNodes;
+s.sendMsg(\n_trace, 5065)
+
+MCG(2).v.mixer.free
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	s.sendMsg(\n_trace, m[1]); r.remove;
+}).add;
+
+BP(\c).fxPool.rainbow1 = { |ev|
+			var	up = rrand(0.15, 0.75), atk;
+			Pn((
+				instrument: \ringzFadeEnv,
+				freqEnv: Env(#[600, 14000, 600], [up, 1-up], \sine),
+				filtAtk: atk = exprand(0.08, 0.2),
+				filtDcy: atk + rrand(0.05, 0.3),
+				time: ev[\sustain],
+				delta: 1,
+				pan: rrand(0.7, 1.0) * #[-1, 1].choose,
+				amp: 0.5
+			), 1)
+		}
+
+
+
+BP(\c).fxPool.rainbow = { |ev|
+			var	up = rrand(0.3, 0.6);
+			Pbind(
+				\instrument, \ringzFadePan,
+				\ffreq, Env(#[1800, 9000, 1800], [up, 1-up] * ev[\sustain], \sine),
+				\filtAtk, 0.02, // Pexprand(0.08, 0.2, inf),
+				\filtDcy, Pkey(\filtAtk) + Pwhite(0.05, 0.1, inf),
+				\time, Pwhite(0.9, 1.7, inf),
+				\delta, Pexprand(0.1, 0.4, inf),
+				\pan, Pwhite(0.7, 1.0, inf) * Prand(#[-1, 1], inf),
+				\amp, 0.05
+			)//.trace(key: \ffreq)
+		}
