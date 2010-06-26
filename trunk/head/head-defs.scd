@@ -127,16 +127,19 @@ PR(\busLock).clone {
 		if(~fxPatEv.size > 0 and: { ~fxPatEv[\pat].notNil }) {
 			~fxPatEv[\streamPlayer] = ~fxPatEv[\pat].play(
 				thisThread.clock,
-				Event(parent: ProtoEvent(~fxProto ?? { \singleSynthPlayer }).v.parent.copy.putAll((
-					bus: chan.inbus,
-					target: chan.effectgroup,
-					chan: nil,
-					inbus: ~lock.bus,
-					lock: ~lock,
-						// effectgroup might have post-lpc effect nodes (chorus etc.)
-						// so put lpc's up front
-					addAction: ~fxPatEv[\addAction] ?? { \addToHead }
-				))),
+				Event(
+					proto: (
+						bus: chan.inbus,
+						target: chan.effectgroup,
+						chan: nil,
+						inbus: ~lock.bus,
+						lock: ~lock,
+							// effectgroup might have post-lpc effect nodes (chorus etc.)
+							// so put lpc's up front
+						addAction: ~fxPatEv[\addAction] ?? { \addToHead }
+					),
+					parent: ProtoEvent(~fxProto ?? { \singleSynthPlayer }).v.parent.copy
+				),
 				~fxPatEv[\quant]
 			);
 			~lock.stopThings = [~fxPatEv[\streamPlayer]];
