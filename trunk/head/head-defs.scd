@@ -99,6 +99,7 @@ PR(\busLock).clone {
 				target: chan.effectgroup,
 				chan: nil,
 				inbus: ~lock.bus,
+				collIndex: ~collIndex,
 					// effectgroup might have post-lpc effect nodes (chorus etc.)
 					// so put lpc's up front
 				addAction: ~lpcEv[\addAction] ?? { \addToHead }
@@ -134,6 +135,7 @@ PR(\busLock).clone {
 						chan: nil,
 						inbus: ~lock.bus,
 						lock: ~lock,
+						collIndex: ~collIndex,
 							// effectgroup might have post-lpc effect nodes (chorus etc.)
 							// so put lpc's up front
 						addAction: ~fxPatEv[\addAction] ?? { \addToHead }
