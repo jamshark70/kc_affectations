@@ -426,13 +426,12 @@ WrapInstr("analog.saw", { |freq, gate = 1, detune = 1.003, ffreq = 2000, env, vs
 d = WrapPatch("analog.saw", [nil, nil, nil, `18000, Env.adsr(0.1, 0.2, 0.6, 0.5), 0.8]).asSynthDef.add;
 SynthDescLib.at(d.name.asSymbol).msgFuncKeepGate = true;
 
-
 SynthDef(\ringzFadePan, { |inbus, outbus, ffreq = 5000, filtAtk = 0.2, filtDcy = 0.22, time = 1,
-	pan = 0|
+	pan = 0, amp = 1|
 	var	sig = In.ar(inbus, 1),
 		eg = EnvGen.kr(Env(#[0, 1, 0], 0.5 ! 2, \sine), timeScale: time, doneAction: 2);
 	sig = Formlet.ar(sig, ffreq, filtAtk, filtDcy);
-	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg));
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg * amp));
 }).add;
 
 SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000|
@@ -451,57 +450,46 @@ SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1|
 	Out.ar(outbus, sig ! 2);
 }).add;
 
+SynthDescLib.at(\formantXfer2).msgFunc.postcs
+
 (
 e = (
 	parent: ProtoEvent(\polySynthFxPatLock).v.parent,
 	instrument: d.name.asSymbol,
 	freq: 56.midicps * (4..6) / 4,
-	sustain: 15,
+	sustain: 25,
 	gate: 0.5,
 	chan: n,
 	numCh: 1,
 	busFreeDelay: 1.5,
+	fxProto: \monoSupport,
+	formantKeys: FormantTable.keys.select { |key| key.asString.contains("tenor") }.asArray,
 	fxPatEv: (
-		pat: Pfindur(15, 
+		pat: Pfindur({ ~sustain },
 			Ppar([
-// 				(
-// 					instrument: \lpfxfer2, ffreq: 900, delta: 0, collIndex: \dummy,
-// 					notifyDependents: { ~lock.killNodes = ~lock.killNodes.add(~node) }
-// 				),
-
-// use ssplayer+trigger
-				Pmono(\formantXfer2,
-					#[ffreqs, amps, qs], Pfunc { FormantTable.get(FormantTable.keys.choose.postln) },
-					\delta, Pwhite(1.0, 3.0, inf)
-				).collect { |ev|
-					thisThread.clock.sched(0.01, {
-						ev[\lock].killNodes = ev[\node].debug("set killnode");
-					});
-					ev
-				}
-				<> Pfunc { |ev|
-					Event.default.putAll((
-						out: ev[\bus],
-						target: ev[\target],
-						inbus: ev[\lock].bus,
-						addAction: ev[\addAction] ?? { \addToHead }
-					))
-				},
-// 				Pbind(
-// 					\instrument, \formantXfer2,
-// 					#[ffreqs, amps, qs], FormantTable.get(\tenorU),
-// 					\delta, Pn(0, 1),
-// 					\collIndex, \dummy,
-// 					\notifyDependents, { ~lock.killNodes = ~lock.killNodes.add(~node) }
-// 				).trace,
+				Pbind(
+					\instrument, \formantXfer2,
+					\protoEvent, Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
+					// outer event (holding formantKeys) should be current when Plazy fires
+					#[ffreqs, amps, qs], Pnsym(Plazy { Pxrand(~formantKeys, inf) }, FormantTable),
+					\trig, 1,
+					\delta, Pwhite(0.5, 1.5, inf),
+					\slideTime, 0.4,
+					\collIndex, \dummy,
+					\notifyDependents, { ~lock.killNodes = ~node },
+					\node, Pfunc { |ev| ev[\lock].killNodes ? 0 }
+				),
 				Pbind(
 					\instrument, \ringzFadePan,
+					\protoEvent, \singleSynthPlayNotify,
 					\ffreq, Pexprand(1000, 9000, inf),
 					\filtAtk, 0.1,
 					\filtDcy, Pkey(\filtAtk) * Pexprand(1.05, 1.25, inf),
 					\pan, Pwhite(0.7, 1.0, inf) * Prand(#[-1, 1], inf),
 					\time, 1.5,
-					\delta, 0.5
+					\delta, 0.5,
+					\amp, 0.3,
+					\notifyDependents, 0
 				)
 			], 1)
 		)
@@ -511,5 +499,8 @@ e = (
 
 e.node.do(_.free);
 
+s.audioBusAllocator.debug
+
 FormantTable.keys
 z = FormantTable.get(\tenorU);
+
