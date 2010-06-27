@@ -311,16 +311,21 @@ p = ~p.(Ptpar([
 
 p.stop;
 
+n.startRecord(thisProcess.platform.recordingsDir +/+ "h-series.aiff");
+
+~num = 24;
 p = ~p.(
 	Pspawner({ |sp|
-		(1..50).do { |num|
+		Pwhile1({ |inval, next| next < 18 }, Pseries(1, Pstutter(8, Pseries(1, 1, inf)), inf)).trace
+		.do { |num|
 			sp.seq(
 				Pfindur(2, Ptpar([
 					{ |i| (1 - (i+1).reciprocal) * 0.5 } ! num,
 					{ |i|
 						Pbind(
 							\instrument, Pn(\partial1bgated, 2),
-							\numHold, if(i > 0, j.asPattern, 1),
+// 							\numHold, if(i > 0, j.asPattern, 1),
+							\numHold, if(i == 0, 1, max(num / 4, 1)),
 							\ratio, i+1,
 							\freq, 32.midicps * Pkey(\ratio),
 							\egRate, g.asMap,
@@ -337,12 +342,34 @@ p = ~p.(
 					} ! num
 				].lace(num*2), 1))
 			)
-		}
+		};
+		sp.seq(
+			Ptpar([
+				({ |i| (1 - (i+1).reciprocal) * 0.5 } ! ~num).postln,
+				{ |i|
+					Pbind(
+						\instrument, \partial1bgated,
+						\numHold, Pwhite(1, j.asPattern, inf),
+						\ratio, i+1,
+						\freq, 32.midicps * Pkey(\ratio),
+						\egRate, g.asMap,
+						\egRateMul, i+1,
+						\egBuf, c,
+						\amp, 0.2,
+						\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
+						\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
+						\panWidth, 0, // i/(~num-1),
+						\timingOffset, (1 - (i+1).reciprocal) * h.asPattern//,
+					) //.trace(key: \numHold)
+				} ! ~num
+			].flop.flat, 1)
+		)
 	}),
 t, nil, n);
 
 p.stop;
-
+s.queryAllNodes
+n.stopRecord;
 
 0.2.acos / pi + 0.5
 c.get((((0.2 * 2 - 1).acos / 2pi + 0.5) * c.numFrames).asInteger, _.postln)
@@ -447,8 +474,8 @@ SynthDef(\ringzFadeEnv, { |inbus, outbus, filtAtk = 0.2, filtDcy = 0.22, time = 
 	Out.ar(outbus, Pan2.ar(Limiter.ar(sig), pan, eg * amp));
 }).add;
 
-SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000|
-	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq) ! 2);
+SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000, lpfxAmp = 0.3|
+	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq, lpfxAmp) ! 2);
 }).add;
 
 SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1/*, noiseAmp = 0.1*/|
@@ -569,6 +596,91 @@ MIDIRecBuf(\a2c, [
 	0.5
 ].asNotes, ~aprop) => MBM(0);
 
+MIDIRecBuf(\a2d1, [
+	#[68, 67, 68, 70, 72, 68, 67, 67, 65, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 0.5, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 0.5, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2d2, [
+	// 61: better to tune Db vs. Ab rather than Bb
+	#[63, 61, 63, 68, 65, 61, 63],
+	#[1, 0.5, 1, 0.5, 1, 2, 3],
+	#[1, 0.5, 1, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+
+MIDIRecBuf(\t3, [
+	#[56, 58, 60, 61.01, 63, 61, 60, 58, 56],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\a31, [
+	#[63, 61, 63, 65.01, 67, 65, 63, 61, 63],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MBM(0)[\a2c].copy.name_(\a32) => MBM(0);
+
+
+MIDIRecBuf(\a41, [
+	#[68, 70, 72, 73, 72, 70, 68],
+	#[1, 1, 1, 2, 1, 3, 3],
+	#[1, 1, 1, 2, 1, 3, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a42, [
+	#[63, 65.01, 66, 65.01, 67, 68, 67, 63],
+	#[1, 1, 1, 1, 1, 3, 1, 3],
+	#[1, 1, 1, 1, 1, 3, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t4, [
+	#[60, 58, 56, 58, 63, 63, 61, 60],
+	#[1, 1, 1, 1, 1, 2, 2, 3],
+	#[1, 1, 1, 1, 1, 2, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\b4, [
+	#[44, 49.01, 48, 46, 44, 51, 44],
+	#[1, 1, 1, 2, 1, 3, 3],
+	#[1, 1, 1, 2, 1, 3, 3],
+	0.5
+].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
+
+
+MBM(0)[\a41].copy.name_(\a51) => MBM(0);
+MBM(0)[\a51].notes.last.dur_(5).length_(5);
+
+MIDIRecBuf(\a52, [
+	#[r, 63, 65, 67, 68, 66, 65.01, 65, 63, 61, 60],
+	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2],
+	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t5, [
+	#[r, 63, 61, 60, 58, 61, 56, 63],
+	#[5, 1, 1, 1, 1, 1, 2, 2],
+	#[5, 1, 1, 1, 1, 1, 2, 2],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\b5, [
+	#[r, 44, 46, 48, 49.01, 49, 48, 46, 44],
+	#[5, 1, 1, 1, 1, 1, 1, 1, 2],
+	#[5, 1, 1, 1, 1, 1, 1, 1, 2],
+	0.5
+].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
 
 
 (
@@ -591,6 +703,9 @@ PR(\abstractProcess).clone {
 	~rel = 1; // Pkey(\sustain) * 0.4;
 	~fLow = 0.05;
 	~rhyScale = 1;
+
+	~lpfxferFreq = 900;
+	~lpfxferAmp = 0.3;
 
 	~prep = {
 		~chan = MixerChannel(~collIndex, s, 2, 2, completionFunc: { |chan|
@@ -651,6 +766,8 @@ PR(\abstractProcess).clone {
 
 	~asPattern = {
 		~fxStream ?? { ~makeStreamForKey.(\fx) };
+		~lpfxferFreqStream ?? { ~makeStreamForKey.(\lpfxferFreq) };
+		~lpfxferAmpStream ?? { ~makeStreamForKey.(\lpfxferAmp) };
 		Pfunc { |ev| ~preprocessNote.(ev) }
 		<>
 		Plazy {
@@ -677,7 +794,9 @@ PR(\abstractProcess).clone {
 								fxPat = ~fxPool[~fxStream.next(ev)].(ev);
 								Pseq([
 									Pn((
-										instrument: \formantXfer2,
+										instrument: MBM(0)[key].properties[\xfer] ?? { \formantXfer2 },
+										ffreq: ~lpfxferFreqStream.next(ev),
+										lpfxAmp: ~lpfxferAmpStream.next(ev),
 										ffreqs: fspecs[0],
 										amps: fspecs[1],
 										qs: fspecs[2],
@@ -701,7 +820,14 @@ PR(\abstractProcess).clone {
 		var	note;
 		// yeah, isKindOf = bad, but this could be called with an Event.silent
 		if((note = ev[\note]).isKindOf(SequenceNote)) {
-			ev.freq_(~tun.cps(note.freq))/*.sustain_(note.length)*/.gate_(note.gate)
+			if(note.freq.isSymbol) {
+				ev[\instrument] = \rest;
+//				ev = Event.silent(note.dur)
+			} {
+				ev.freq_(note.freq.asArray.collect(~tun.cps(_)))
+					/*.sustain_(note.length)*/
+					.gate_(note.gate)
+			};
 		}; // { "not a sequencenote".postln; note.postcs };
 		ev
 	};
@@ -717,9 +843,19 @@ BP(\c).seqKeys = #[t1, a1b];
 BP(\c).seqKeys = #[t2, a2];
 BP(\c).seqKeys = #[t2, a2b];
 BP(\c).seqKeys = #[t2, a2c];
+BP(\c).seqKeys = #[t2, a2d1, a2d2];
+BP(\c).seqKeys = #[t3, a31, a32];
+BP(\c).seqKeys = #[a41, a42, t4, b4];
+BP(\c).seqKeys = #[a51, a52, t5, b5];
+
+
+BP(\c).rhyScale = 1;
 
 #[att, dec, rel].do { |k| BP(\c)[k] = 0.25 };
 BP(\c).fx = \none;
+BP(\c).fx = \rainbow;
+
+BP(\c).lpfxferAmp = 0.25;
 
 
 Error.debug = true;
