@@ -586,9 +586,9 @@ PR(\abstractProcess).clone {
 	~event = (eventKey: \polySynthFxPatLock, addAction: \addToHead);
 
 	~seqKeys = #[t1, a1];
-	~att = Pkey(\sustain) * 0.3;
-	~dec = Pkey(\sustain) * 0.1;
-	~rel = Pkey(\sustain) * 0.4;
+	~att = 1; // Pkey(\sustain) * 0.3;
+	~dec = 1; // Pkey(\sustain) * 0.1;
+	~rel = 1; // Pkey(\sustain) * 0.4;
 	~fLow = 0.05;
 	~rhyScale = 1;
 
@@ -711,6 +711,19 @@ PR(\abstractProcess).clone {
 BP(\c).free;
 PR(\counterpoint) => BP(\c);
 0 => BP(\c);
+BP(\c).tun = ~tun;
+
+BP(\c).seqKeys = #[t1, a1b];
+BP(\c).seqKeys = #[t2, a2];
+BP(\c).seqKeys = #[t2, a2b];
+BP(\c).seqKeys = #[t2, a2c];
+
+#[att, dec, rel].do { |k| BP(\c)[k] = 0.25 };
+BP(\c).fx = \none;
+
+
+Error.debug = true;
+Error.debug = false;
 
 q = BP(\c).chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3]); q.gui;
 BP(\c).event.addAction = \addToHead;
