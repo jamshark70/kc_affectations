@@ -93,7 +93,6 @@ PR(\busLock).clone {
 			~playExtraProcess.(chan);
 			~node.do { |node| ~lock.addNode(node) };
 		} {
-"no nodes created; freeing lock".debug;
 			~lock.freeStuff;
 		};
 	},
