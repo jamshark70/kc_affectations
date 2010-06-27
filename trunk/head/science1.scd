@@ -518,10 +518,58 @@ s.audioBusAllocator.debug
 FormantTable.keys
 z = FormantTable.get(\tenorU);
 
+z = TuningRatios(12, tunings: [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 5/4, 9/8 * 3/2, 16/9, 3/2 * 5/4]).root_(8).calibrate(32.midicps, 32);
+
 if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
 
-MIDIRecBuf(\t1, [#[56, 58, 56], 16, 14.5, 0.5].asNotes, (voice: \tenor)) => MBM(0);
-MIDIRecBuf(\a1, [#[68, 66, 68], 16, 14.5, 0.5].asNotes, (voice: \alto)) => MBM(0);
+~ratios = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4];
+~tun = CompositeTuning([
+	TuningRatios(12, tunings: ~ratios),
+	TuningRatios(12, tunings: ~ratios.copy.putEach(#[5, 9, 10], [27/20, 27/16, 9/5]))
+]).root_(8).calibrate(32.midicps, 32);
+
+~tun.cps(61)
+(~tun.cps(61.01) / ~tun.cps(58)).asRational
+
+~tun.cps(68) absdif: 68.midicps
+
+~tprop = (type: \c, voice: \tenor);
+~aprop = (type: \c, voice: \alto);
+
+MIDIRecBuf(\t1, [#[56, 58, 56], 16, 15.5, 0.5].asNotes, ~tprop) => MBM(0);
+MIDIRecBuf(\a1, [#[68, 66.01, 68], 16, 15.5, 0.5].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a1b, [#[68, 66.01, 68] - 5, 16, 15.5, 0.5].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t2, [
+	#[56, 58, 56, 54, 56, 61, 58, 56],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\a2, [
+	#[63, 65.01, 63, 61, 63, 68, 65.01, 63],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2b, [
+	#[63, 65.01, 63, 61, 63, 68, 65.01, 67, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2c, [
+	#[68, 67, 68, 70, 72, 68, 67, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 2, 1, 3],
+	#[1, 0.5, 0.5, 0.5, 0.5, 2, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+
 
 (
 WrapInstr("analog.sawB", { |freq, gate = 1, detune = 1.003, ffreq = 2000, vsens = 0.5
@@ -542,6 +590,7 @@ PR(\abstractProcess).clone {
 	~dec = Pkey(\sustain) * 0.1;
 	~rel = Pkey(\sustain) * 0.4;
 	~fLow = 0.05;
+	~rhyScale = 1;
 
 	~prep = {
 		~chan = MixerChannel(~collIndex, s, 2, 2, completionFunc: { |chan|
@@ -553,9 +602,9 @@ PR(\abstractProcess).clone {
 		~defname = ~def.name.asSymbol;
 		SynthDescLib.at(~defname).msgFuncKeepGate = true;
 
-		~alto = ~formantKeys.("alto");
-		~tenor = ~formantKeys.("tenor");
-		~bass = ~formantKeys.("bass");
+		~alto = ~formantKeys.("altoA");
+		~tenor = ~formantKeys.("tenorA");
+		~bass = ~formantKeys.("bassA");
 
 //		~noiseCtl = GenericGlobalControl(\noiseLevel, nil, 0.1, \amp);
 	};
@@ -611,8 +660,9 @@ PR(\abstractProcess).clone {
 					Pbind(
 						\instrument, ~def.name,
 						\note, MBM(0)[key].asPattern,
-						\delta, Pfunc { |ev| ev[\note].dur },
-						\sustain, Pfunc { |ev| ev[\note].length },
+						\rhyScale, BPStream(\rhyScale),
+						\delta, Pfunc { |ev| ev[\note].dur * ev[\rhyScale] },
+						\sustain, Pfunc { |ev| ev[\note].length * ev[\rhyScale] },
 						\att, BPStream(\att), \dec, BPStream(\dec), \rel, BPStream(\rel),
 						\fLowRatio, BPStream(\fLow),
 						\chan, ~chan,
@@ -651,7 +701,7 @@ PR(\abstractProcess).clone {
 		var	note;
 		// yeah, isKindOf = bad, but this could be called with an Event.silent
 		if((note = ev[\note]).isKindOf(SequenceNote)) {
-			ev.freq_(note.freq.midicps)/*.sustain_(note.length)*/.gate_(note.gate)
+			ev.freq_(~tun.cps(note.freq))/*.sustain_(note.length)*/.gate_(note.gate)
 		}; // { "not a sequencenote".postln; note.postcs };
 		ev
 	};
