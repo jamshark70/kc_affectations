@@ -89,8 +89,13 @@ PR(\busLock).clone {
 		~chan = nil;
 		~superPlay.();
 
-		~playExtraProcess.(chan);
-		~node.do { |node| ~lock.addNode(node) };
+		if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
+			~playExtraProcess.(chan);
+			~node.do { |node| ~lock.addNode(node) };
+		} {
+"no nodes created; freeing lock".debug;
+			~lock.freeStuff;
+		};
 	},
 	playExtraProcess: { |chan|
 		if(~lpcEv.size > 0) {
