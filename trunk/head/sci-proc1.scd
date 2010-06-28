@@ -89,22 +89,57 @@ SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
 
 (
 Proto {
+	~fund = 32.midicps;
+	~event = (eventKey: \singleSynthPlayNotify);
+	~quant = NilTimeSpec.new;
+	~initTempo = 0.1;
+	~tempoSpec = #[0.01, 10, \exp].asSpec;
+	~alwaysReset = true;
+
 	~prep = {
-		~tc = TempoClock(0.1, queueSize: 2048).permanent_(true);
-		~tempoCtl = GenericGlobalControl(\tempo, nil, 0.1, #[0.01, 10, \exp]);
+		~clock = TempoClock(~initTempo, queueSize: 2048).permanent_(true);
+		~tempoCtl = GenericGlobalControl(\tempo, nil, ~initTempo, ~tempoSpec);
 		~upd = Updater(~tempoCtl, e { |obj, msg|
 			if(msg[\what] == \value) {
-				~tc.tempo = obj.value
+				~clock.tempo = obj.value
 			};
+		});
+
+		// how much of a note's duration to hold in the middle
+		~holdPctCtl = GenericGlobalControl(\holdPct, nil, 0);
+
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~egbuf = Buffer.alloc(s, 1024, 1, { |buf|
+			buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024))
 		});
 	};
 
-	~useGui = { |vpi| ~tempoCtl => VP(vpi) };
+	~asPattern = {
+		Pseq([
+			Pfuncn {
+				~goTime = thisThread.beats;
+				0
+			},
+			Pbind(
+				\instrument, \partial1bgated,
+				\freq, ~fund,
+				\egRate, ~tempoCtl.asMap,
+				\egRateMul, (1 - ~holdPctCtl.asPattern).max(0.001).reciprocal,
+				\delta, 1,
+				\sustain, ((~holdPctCtl.asPattern - 1) * 0.5 + 1) * Pkey(\delta),
+				\amp, 1,
+				\egBuf, ~egbuf,
+				\chan, ~chan
+			)
+		])
+	};
+
+	~useGui = { |vpi| ~tempoCtl => VP(vpi); ~holdPctCtl => VP(vpi) };
 
 	~freeCleanup = {
 		~upd.remove;
-		~tc.stop;
-		~tempoCtl.free;
+		~clock.stop;
+		[~tempoCtl, ~holdPctCtl, ~chan, ~egbuf].free;
 	}
 } => BP(\mstClock);
 );
@@ -115,35 +150,75 @@ PR(\abstractProcess).clone {
 	~cl = \mstClock;
 	~alwaysReset = true;
 
-	~fund = 32.midicps;
+	~low = 2;
+	~high = 32;
+	~rat = Pwhile1({ |in, item| item <= ~high }, Pseries(~low, 1, inf))
+		++ (Pexprand(Pfunc { ~low }, Pfunc { ~high }, inf)
+			.round(1).reject { |x| ~activeRatios.includes(x) });
+	~numEv = Pfunc { |ratio| ratio } * Pwhite(1.5, 4) * Pseries(1, 0.02, inf);
 
 	~prep = {
-		~master ?? { ~master = topEnvironment[\master] };
-		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+// 		~master ?? { ~master = topEnvironment[\master] };
+// 		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
 
-		~egbuf = Buffer.alloc(s, 1024, 1, { |buf|
-			buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024))
-		});
-
-		~clock = BP(~cl).tc;
-		~tempoCtl = BP(~cl).tempoCtl;
-
-		~activeRatios = Set.new;
+		~clImport.();
+		~procInit.();
 
 		~makeGResponder.();
 		currentEnvironment
 	};
 
+	~procInit = {
+		~activeRatios = Set.new;
+		~fullSet = (~low .. ~high).asFloat.as(Set);
+	};
+
+	~clImportKeys = #[clock, tempoCtl, fund, chan, egbuf, holdPctCtl];
+	~clImport = {
+		~clImportKeys.do { |key|
+			key.envirPut(BP(~cl)[key])
+		}
+	};
+
 	~freeCleanup = {
-		[~chan, ~egbuf].free;
+//		[~chan, ~egbuf].free;
 		~removeGResponder.();
+		~procFree.();
 	};
 
 	~stopCleanup = {
 		~activeRatios = Set.new;
 	};
 
+	~low_ = { |newLow = 2|
+		var	minI = ~fullSet.minItem;
+		if(newLow < minI) {	// extending low range lower
+			(newLow .. minI - 1).do { |i| ~fullSet.add(i.asFloat) }
+		} {
+			if(newLow > minI) {
+				(minI .. newLow - 1).do { |i| ~fullSet.remove(i.asFloat) }
+			}
+		};
+		~low = newLow;
+		currentEnvironment
+	};
+
+	~high_ = { |newHigh = 2|
+		var	maxI = ~fullSet.maxItem;
+		if(newHigh < maxI) {
+			(newHigh + 1 .. maxI).do { |i| ~fullSet.remove(i.asFloat) }
+		} {
+			if(newHigh > maxI) {
+				(maxI + 1 .. newHigh).do { |i| ~fullSet.add(i.asFloat) }
+			}
+		};
+		~high = newHigh;
+		currentEnvironment
+	};
+
 	~asPattern = {
+		~makeStreamForKey.(\rat);
+		~makeStreamForKey.(\numEv);
 		Pspawner({ |sp|
 			~spawner = sp;
 			~spawnerStarted = thisThread.beats;	// for scheduling
@@ -153,9 +228,8 @@ PR(\abstractProcess).clone {
 				\instrument, \rest,
 				\delta, 0.1 * Ptempo()
 			));
-
 			// fundamental pulse
-			sp.par(~oneStream.(1, inf));
+//			sp.par(~oneStream.(1, inf));
 		});
 	};
 
@@ -186,10 +260,8 @@ PR(\abstractProcess).clone {
 	// this can be called by any gesture-trigger responder
 	~addAStream = {
 		var	ratio, numEv, test;
-		// took way too long to figure this out but...
-		// this test is OK if both are Sets (not IdentitySets) and fullSet starts at 1.0
-		// this is faster b/c == fails if the collection sizes are different
-		if(~isPlaying and: { not(~fullSet == ~activeRatios) }) {
+		// 'any' test is slightly slower than != but !='s size check is not safe
+		if(~isPlaying and: { ~fullSet.any { |item| ~activeRatios.includes(item).not } }) {
 			ratio = ~ratStream.next;
 			~spawner.par(
 				~oneStream.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
@@ -220,7 +292,60 @@ PR(\abstractProcess).clone {
 	};
 } => PR(\hs1);
 
+PR(\hs1).clone {
+	~procInit = {
+		~tophCtl = GenericGlobalControl(\numh, nil, 2, #[2, 60, lin, 1]);
 
+		// start in sync with master clock
+		// 'beats' doesn't work for this, @#$#*&$*#
+		// so I have to hack it in the fricken pattern
+		~quant = NilTimeSpec.new;
+	};
+	~procFree = { ~tophCtl.free };
+	~useGui = { |vpi| ~tophCtl => VP(vpi) };
+	~makeGResponder = 0;
+	~removeGResponder = 0;
+
+	~asPattern = {
+		Pspawner { |sp|
+			var	num;
+			if((num = thisThread.beats - BP(~cl).goTime) > 0) {
+				sp.wait((num.trunc - num + 1));
+				loop {
+					num = ~tophCtl.value.asInteger - 1;
+					sp.par(
+						Ptpar([
+							({ |i| i = i + 2; (1 - i.reciprocal) } ! num).debug("offsets"),
+							{ |i|
+								i = i + 2;
+								Pbind(
+									\chan, ~chan,
+									\instrument, Pn(\partial1bgated, 2),
+									\numHold, 1, //if(i == 0, 1, max(num / 4, 1)),
+									\ratio, i,
+									\freq, ~fund * Pkey(\ratio),
+									\egRate, ~tempoCtl.asMap,
+									\egRateMul, i,
+									\egBuf, ~egbuf,
+									\amp, 1,
+									\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
+									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
+									\panWidth, 0 //, // i/(num-1),
+	// h spec has max 0.5
+	//								\timingOffset, (1 - i.reciprocal) * h.asPattern//,
+								)
+							} ! num
+						].lace(num*2), 1)
+					);
+					sp.wait(2);
+				}
+			}; // else, do nothing and spawner ends
+		};
+	};
+} => PR(\hsSweep);
+
+// PR(\hs1).clone {
+// } => PR(\hsDrone);
 );
 
 BP(\hs).free;
@@ -228,6 +353,9 @@ PR(\hs1) => BP(\hs);
 0 => BP(\hs);
 
 p = BP(\hs);
+
+BP(\hswp).free;
+PR(\hsSweep) => BP(\hswp);
 
 // Pwxrand((2..20), (2..20).reciprocal.normalizeSum, inf);
 //p.rat = \patRejectLastN.eval(Pexprand(2, Pseries(2, 1, 20) ++ Pn(20, inf), inf).round(1), 1);
