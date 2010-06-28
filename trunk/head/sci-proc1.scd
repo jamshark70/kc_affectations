@@ -27,7 +27,7 @@ VoicerProxy.new => VP.prNew(0);
 4.do { VP(0).v.addControlProxy(nil, true) };
 VP(0).v.gui;
 
-k = VoicerMIDISocket(0, VP(0).v);
+//k = VoicerMIDISocket(0, VP(0).v);
 
 {	var cc;
 	8.do {
@@ -118,7 +118,8 @@ PR(\abstractProcess).clone {
 	~fund = 32.midicps;
 
 	~prep = {
-		~chan = MixerChannel(~collIndex, s, 2, 2);
+		~master ?? { ~master = topEnvironment[\master] };
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
 
 		~egbuf = Buffer.alloc(s, 1024, 1, { |buf|
 			buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024))
@@ -127,26 +128,20 @@ PR(\abstractProcess).clone {
 		~clock = BP(~cl).tc;
 		~tempoCtl = BP(~cl).tempoCtl;
 
-		~activeRatios = IdentitySet.new;
+		~activeRatios = Set.new;
+
+		~makeGResponder.();
+		currentEnvironment
 	};
 
 	~freeCleanup = {
 		[~chan, ~egbuf].free;
-		if(~window.notNil and: { ~window.isClosed.not }) { ~window.close };
+		~removeGResponder.();
 	};
 
-/*
-	~recvEventNotify = { |node, ev|
-		var	ratio = ev[\ratio];
-		if(ev[\instrument] != \rest) {
-			~activeRatios.add(ratio);
-			OSCpathResponder(~chan.server.addr, ['/n_end', node.nodeID], e { |time, resp, msg|
-				resp.remove;
-				~activeRatios.remove(ratio);
-			}).add;
-		};
+	~stopCleanup = {
+		~activeRatios = Set.new;
 	};
-*/
 
 	~asPattern = {
 		Pspawner({ |sp|
@@ -160,15 +155,13 @@ PR(\abstractProcess).clone {
 			));
 
 			// fundamental pulse
-			sp.par(~onePattern.(1, inf));
+			sp.par(~oneStream.(1, inf));
 		});
 	};
 
-	~onePattern = { |ratio = 1, repeats = 1, pbindf|
+	~oneStream = { |ratio = 1, repeats = 1, pbindf|
 		var	self = currentEnvironment,
-			result = Pfset(
-				{ self.activeRatios.add(ratio).debug(">> activeRatios") },
-				Pfin(repeats, Pbind(
+			result = Pfin(repeats, Pbind(
 				\instrument, \partial1bgated,
 				\ratio, ratio,
 				\freq, BPStream(\fund) * ratio,
@@ -178,16 +171,56 @@ PR(\abstractProcess).clone {
 				\sustain, Pkey(\delta) * 0.5,
 				\egBuf, ~egbuf,
 				\chan, ~chan
-				)),
-				{ self.activeRatios.remove(ratio); self.activeRatios.debug("<< activeRatios") }
-			);
+			));
 		if(pbindf.notNil) {
-			Pbindf(result, *pbindf)
+			result = Pbindf(result, *pbindf)
 		} {
 			result
 		};
+		~activeRatios.add(ratio);
+		// note, this doesn't empty activeRatios if the process is stopped manually
+		// (but stopCleanup does)
+		CleanupStream(result.asStream, { self.activeRatios.remove(ratio) });
+	};
+
+	// this can be called by any gesture-trigger responder
+	~addAStream = {
+		var	ratio, numEv, test;
+		// took way too long to figure this out but...
+		// this test is OK if both are Sets (not IdentitySets) and fullSet starts at 1.0
+		// this is faster b/c == fails if the collection sizes are different
+		if(~isPlaying and: { not(~fullSet == ~activeRatios) }) {
+			ratio = ~ratStream.next;
+			~spawner.par(
+				~oneStream.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
+					[amp: ~makeAmpPattern.(numEv)]),
+				0.1)
+		};
+	};
+
+	~makeAmpPattern = { |numEv| Pgeom.fromEndpoints(1, rrand(0.02, 0.18), numEv) };
+
+	~makeGResponder = {
+		~window = ResizeFlowWindow(~collIndex, Rect.aboutPoint(Window.screenBounds.center, 75, 25));
+		~btn = Button(~window, Rect(0, 0, 140, 40))
+			.states_([["GO"], ["full", Color.black, Color.new255(255, 200, 200)]])
+			.font_(Font.default.copy.size_(28))
+			.action_(e { |view|
+				if(~addAStream.().isNil) {
+					(e { view.value = 0 }).defer(0.5);
+				} {
+					view.value = 0;
+				};
+			});
+		~window.recursiveResize.front;
+	};
+
+	~removeGResponder = { 
+		if(~window.notNil and: { ~window.isClosed.not }) { ~window.close };
 	};
 } => PR(\hs1);
+
+
 );
 
 BP(\hs).free;
@@ -197,12 +230,13 @@ PR(\hs1) => BP(\hs);
 p = BP(\hs);
 
 // Pwxrand((2..20), (2..20).reciprocal.normalizeSum, inf);
-p.rat = \patRejectLastN.eval(Pexprand(2, Pseries(2, 1, 20) ++ Pn(20, inf), inf).round(1), 1);
-p.rat = Pexprand(2, Pclutch(Pseries(2, 1, 20), Pdiff(Ptime()) > 0) ++ Pn(20, inf), inf).round(1).reject { |x|
-	~activeRatios.includes(x)
-};
+//p.rat = \patRejectLastN.eval(Pexprand(2, Pseries(2, 1, 20) ++ Pn(20, inf), inf).round(1), 1);
+//p.rat = Pexprand(2, Pclutch(Pseries(2, 1, { ~fullSet.size - 1 }), Pdiff(Ptime()) > 0) ++ Pn(20, inf), inf).round(1).reject { |x| ~activeRatios.includes(x) };
 
-p.fullSet = (1..20).as(IdentitySet);
+p.rat = Pseries(2.0, 1.0, { ~fullSet.size - 1 }) ++ (Pexprand(2, Plazy { Pn(~fullSet.maxItem, inf) }, inf).round(1).reject { |x| ~activeRatios.includes(x) });
+p.numEv = Pfunc { |ratio| ratio } * Pwhite(1.5, 4) * Pseries(1, 0.02, inf);
+
+p.fullSet = (1..50).asFloat.as(Set);
 
 p.makeGui = {
 	~window = ResizeFlowWindow(~collIndex, Rect.aboutPoint(Window.screenBounds.center, 75, 25));
@@ -210,10 +244,15 @@ p.makeGui = {
 		.states_([["GO"]])
 		.font_(Font.default.copy.size_(28))
 		.action_(e {
-			var	ratio;
-			if((~fullSet - ~activeRatios).size > 0) {
+			var	ratio, numEv, test;
+			// took way too long to figure this out but...
+			// this test is OK if both are Sets (not IdentitySets) and fullSet starts at 1.0
+			// this is faster b/c == fails if the collection sizes are different
+			if(not(~fullSet == ~activeRatios)) {
 				ratio = ~ratStream.next;
-				~spawner.par(~onePattern.(ratio, (rrand(1.5, 4) * ratio).asInteger),
+				~spawner.par(
+					~onePattern.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
+						[amp: Pgeom.fromEndpoints(1, 0.1, numEv)]),
 					0.1)
 			};
 		});
@@ -223,7 +262,6 @@ p.makeGui = {
 p.makeGui;
 
 p.activeRatios;
+p.activeRatios.includes(1.0);
 
 
-
-(1..20).as(IdentitySet) - #[5, 18, 16, 8, 6, 10, 4, 14, 11, 1, 13, 12, 3, 7, 20, 9, 15, 2, 19, 17].as(IdentitySet)
