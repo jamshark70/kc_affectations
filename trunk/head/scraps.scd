@@ -21,3 +21,7 @@
 			);
 
 
+		// took way too long to figure this out but...
+		// this test is OK if both are Sets (not IdentitySets) and fullSet starts at 1.0
+		// this is faster b/c == fails if the collection sizes are different
+
