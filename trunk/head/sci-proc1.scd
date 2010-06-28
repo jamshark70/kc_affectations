@@ -251,26 +251,35 @@ PR(\abstractProcess).clone {
 		} {
 			result
 		};
-		~activeRatios.add(ratio);
 		// note, this doesn't empty activeRatios if the process is stopped manually
 		// (but stopCleanup does)
-		CleanupStream(result.asStream, { self.activeRatios.remove(ratio) });
+		result = CleanupStream(result.asStream, e {
+			~streamEndHook.(result, ratio);
+		});
 	};
 
 	// this can be called by any gesture-trigger responder
 	~addAStream = {
-		var	ratio, numEv, test;
+		var	ratio, numEv, test, stream;
 		// 'any' test is slightly slower than != but !='s size check is not safe
 		if(~isPlaying and: { ~fullSet.any { |item| ~activeRatios.includes(item).not } }) {
 			ratio = ~ratStream.next;
-			~spawner.par(
+			stream = ~spawner.par(
 				~oneStream.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
 					[amp: ~makeAmpPattern.(numEv)]),
-				0.1)
+				0.1);
+			~streamHook.(stream, ratio);
 		};
 	};
 
 	~makeAmpPattern = { |numEv| Pgeom.fromEndpoints(1, rrand(0.02, 0.18), numEv) };
+
+	~streamHook = { |stream, ratio|
+		~activeRatios.add(ratio);
+	};
+	~streamEndHook = { |stream, ratio|
+		~activeRatios.remove(ratio);
+	};
 
 	~makeGResponder = {
 		~window = ResizeFlowWindow(~collIndex, Rect.aboutPoint(Window.screenBounds.center, 75, 25));
@@ -296,9 +305,7 @@ PR(\hs1).clone {
 	~procInit = {
 		~tophCtl = GenericGlobalControl(\numh, nil, 2, #[2, 60, lin, 1]);
 
-		// start in sync with master clock
-		// 'beats' doesn't work for this, @#$#*&$*#
-		// so I have to hack it in the fricken pattern
+		// see pattern for sync with master clock
 		~quant = NilTimeSpec.new;
 	};
 	~procFree = { ~tophCtl.free };
@@ -331,8 +338,6 @@ PR(\hs1).clone {
 									\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
 									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
 									\panWidth, 0 //, // i/(num-1),
-	// h spec has max 0.5
-	//								\timingOffset, (1 - i.reciprocal) * h.asPattern//,
 								)
 							} ! num
 						].lace(num*2), 1)
@@ -344,8 +349,52 @@ PR(\hs1).clone {
 	};
 } => PR(\hsSweep);
 
-// PR(\hs1).clone {
-// } => PR(\hsDrone);
+();
+PR(\hs1).clone {
+	~minTop = 2;
+	~maxTop = 60;
+	~procInit = {
+		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, lin, 1]);
+		~tophCtl.addDependant(currentEnvironment);
+		// 0 is a dummy value
+		~hStreams = Array.newClear(~maxTop + 1).putEach((0..~minTop - 1), 0);
+
+		~offsetCtl = GenericGlobalControl(\offset, nil, 0.5, #[0, 0.5]);
+
+		// see pattern for sync with master clock
+		~quant = NilTimeSpec.new;
+	};
+	~procFree = { [~tophCtl, ~offsetCtl].free };
+	~useGui = { |vpi| ~tophCtl => VP(vpi); ~offsetCtl => VP(vpi) };
+	~makeGResponder = 0;
+	~removeGResponder = 0;
+
+	// inherit asPattern from hs1:
+	// this process uses the same technique of adding harmonics dynamically
+	~streamHook = { |stream, ratio|
+		
+	};
+	~streamEndHook = { |stream, ratio|
+		
+	};
+
+	// added by changing tophCtl, which calls back here:
+	~update = { |obj, msg|
+		var	i;
+		if(obj === ~tophCtl and: { msg[\what] == \value }) {
+			if((i = ~hStreams.detectIndex(_.isNil)).isNil) {
+				i = ~maxTop;
+			};
+			if(i < obj.value) {
+				// remove streams
+			} {
+				if(i < obj.value) {
+					// add streams
+				}
+			}
+		};
+	};
+} => PR(\hsDrone);
 );
 
 BP(\hs).free;
