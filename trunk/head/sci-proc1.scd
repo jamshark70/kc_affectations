@@ -24,7 +24,7 @@ m => MCG(0); n => MCG(1);
 #[master, rvbmc, rvb].do(_.envirPut(nil));
 
 VoicerProxy.new => VP.prNew(0);
-4.do { VP(0).v.addControlProxy(nil, true) };
+8.do { VP(0).v.addControlProxy(nil, true) };
 VP(0).v.gui;
 
 //k = VoicerMIDISocket(0, VP(0).v);
@@ -36,7 +36,7 @@ VP(0).v.gui;
 	};
 }.value;
 
-4.do { |i| CC(("k" ++ i).asSymbol) => VP(0) };
+8.do { |i| CC(("k" ++ i).asSymbol) => VP(0) };
 
 ~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
 
@@ -228,14 +228,13 @@ PR(\abstractProcess).clone {
 				\instrument, \rest,
 				\delta, 0.1 * Ptempo()
 			));
-			// fundamental pulse
-//			sp.par(~oneStream.(1, inf));
+			~initStreams.(sp);
 		});
 	};
 
 	~oneStream = { |ratio = 1, repeats = 1, pbindf|
 		var	self = currentEnvironment,
-			result = Pfin(repeats, Pbind(
+			result = Pbind(
 				\instrument, \partial1bgated,
 				\ratio, ratio,
 				\freq, BPStream(\fund) * ratio,
@@ -245,14 +244,13 @@ PR(\abstractProcess).clone {
 				\sustain, Pkey(\delta) * 0.5,
 				\egBuf, ~egbuf,
 				\chan, ~chan
-			));
+			);
 		if(pbindf.notNil) {
 			result = Pbindf(result, *pbindf)
-		} {
-			result
 		};
-		// note, this doesn't empty activeRatios if the process is stopped manually
-		// (but stopCleanup does)
+		if(repeats.notNil) { result = Pfin(repeats, result) };
+		// note, this doesn't call endhook if the process is stopped manually
+		// (you should supply stopCleanup to handle it for that case)
 		result = CleanupStream(result.asStream, e {
 			~streamEndHook.(result, ratio);
 		});
@@ -303,7 +301,7 @@ PR(\abstractProcess).clone {
 
 PR(\hs1).clone {
 	~procInit = {
-		~tophCtl = GenericGlobalControl(\numh, nil, 2, #[2, 60, lin, 1]);
+		~tophCtl = GenericGlobalControl(\numh, nil, 2, #[2, 60, \lin, 1]);
 
 		// see pattern for sync with master clock
 		~quant = NilTimeSpec.new;
@@ -322,7 +320,7 @@ PR(\hs1).clone {
 					num = ~tophCtl.value.asInteger - 1;
 					sp.par(
 						Ptpar([
-							({ |i| i = i + 2; (1 - i.reciprocal) } ! num).debug("offsets"),
+							({ |i| i = i + 2; (1 - i.reciprocal) } ! num),
 							{ |i|
 								i = i + 2;
 								Pbind(
@@ -354,10 +352,10 @@ PR(\hs1).clone {
 	~minTop = 2;
 	~maxTop = 60;
 	~procInit = {
-		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, lin, 1]);
+		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 		~tophCtl.addDependant(currentEnvironment);
 		// 0 is a dummy value
-		~hStreams = Array.newClear(~maxTop + 1).putEach((0..~minTop - 1), 0);
+		~hStreams = Array.newClear(~maxTop + 1).overWrite(0 ! ~minTop);
 
 		~offsetCtl = GenericGlobalControl(\offset, nil, 0.5, #[0, 0.5]);
 
@@ -369,29 +367,88 @@ PR(\hs1).clone {
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
-	// inherit asPattern from hs1:
-	// this process uses the same technique of adding harmonics dynamically
-	~streamHook = { |stream, ratio|
-		
-	};
-	~streamEndHook = { |stream, ratio|
-		
+	~stopCleanup = {
+		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
 	};
 
-	// added by changing tophCtl, which calls back here:
+	// inherit asPattern from hs1:
+	// this process uses the same technique of adding harmonics dynamically
+/*
+	~oneStream = { |ratio = 1, repeats = 1, pbindf|
+		var	self = currentEnvironment,
+			result = Pfin(repeats, Pbind(
+				\instrument, \partial1bgated,
+				\ratio, ratio,
+				\freq, BPStream(\fund) * ratio,
+				\egRate, ~tempoCtl.asMap,
+				\egRateMul, ratio,
+				\delta, ratio.reciprocal,
+				\sustain, Pkey(\delta) * 0.5,
+				\egBuf, ~egbuf,
+				\chan, ~chan
+			));
+		if(pbindf.notNil) {
+			result = Pbindf(result, *pbindf)
+		} {
+			result
+		};
+		// note, this doesn't empty activeRatios if the process is stopped manually
+		// (but stopCleanup does)
+		result = CleanupStream(result.asStream, e {
+			~streamEndHook.(result, ratio);
+		});
+	};
+*/
+
+	// this can be called by any gesture-trigger responder
+	~addAStream = { |ratio = 2|
+		var	stream, sync;
+		if(~hStreams[ratio].isNil) {
+			sync = ((0.1 * ~clock.tempo) + ~clock.beats - BP(~cl).goTime).roundUp(ratio.reciprocal)
+				+ BP(~cl).goTime - ~clock.beats;
+			stream = ~spawner.par(~oneStream.(ratio, nil), sync,
+				[timingOffset: (1 - (ratio+1).reciprocal) * ~offsetCtl.asPattern]
+			);
+			~streamHook.(stream, ratio);
+		};
+	};
+
+	~initStreams = {
+		(~minTop .. ~tophCtl.value.asInteger).do { |i|
+			~addAStream.(i)
+		};
+	};
+
+//	~makeAmpPattern = { |numEv| Pgeom.fromEndpoints(1, rrand(0.02, 0.18), numEv) };
+
+	~streamHook = { |stream, ratio|
+		~hStreams[ratio] = stream;
+	};
+	~streamEndHook = { |stream, ratio|
+		~hStreams[ratio] = nil;
+	};
+
+	// changing tophCtl value calls back here:
 	~update = { |obj, msg|
 		var	i;
-		if(obj === ~tophCtl and: { msg[\what] == \value }) {
-			if((i = ~hStreams.detectIndex(_.isNil)).isNil) {
-				i = ~maxTop;
+		if(~isPlaying and: { obj === ~tophCtl and: { msg[\what] == \value } }) {
+			if((i = ~hStreams.indexOf(nil)).isNil) {
+				i = ~maxTop + 1;
 			};
-			if(i < obj.value) {
-				// remove streams
+			if(i <= obj.value) {
+				// add streams
+				(i .. obj.value.asInteger).do { |ratio|
+					~addAStream.(ratio)
+				};
 			} {
-				if(i < obj.value) {
-					// add streams
-				}
-			}
+				if(i > (obj.value + 1)) {
+					// remove streams
+					(obj.value.asInteger + 1 .. i - 1).do { |ratio|
+						~spawner.suspend(~hStreams[ratio]);
+						~hStreams[ratio] = nil;
+					};
+				};
+			};
 		};
 	};
 } => PR(\hsDrone);
@@ -405,6 +462,10 @@ p = BP(\hs);
 
 BP(\hswp).free;
 PR(\hsSweep) => BP(\hswp);
+
+BP(\hsd).free;
+PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
+
 
 // Pwxrand((2..20), (2..20).reciprocal.normalizeSum, inf);
 //p.rat = \patRejectLastN.eval(Pexprand(2, Pseries(2, 1, 20) ++ Pn(20, inf), inf).round(1), 1);
@@ -442,3 +503,43 @@ p.activeRatios;
 p.activeRatios.includes(1.0);
 
 
+
+// sequence it!
+(
+BP(\hstrig).free;
+Proto {
+	~quant = 0;
+	~delta = Pexprand(0.04, 0.2, inf) * Plazy { Env(#[20, 1], #[120], \exp).asStream };
+	~event = (play: {
+		BP(\hs).addAStream;
+	});
+	~asPattern = {
+		Pbind(\delta, BPStream(\delta, resetSource: true))
+	};
+} => BP(\hstrig);
+)
+
+(
+c = BP(\mstClock).clock;
+t = TLSequenceIterator([
+	{	BP(\hs).low_(2).high_(24);
+		0
+	},
+	bpCmd: (name: \mstClock),
+	12,
+	bpCmd: (name: \hs),
+	0.1,
+	bpCmd: (name: \hstrig, dur: 120, doReset: true),
+
+	// start hswp
+	// automate tophCtl with dependency to raise BP(\hs).low
+
+	\cmdSync,
+	funcCmd: (func: { ~iterator.stop })
+]).play(argClock: SystemClock);
+)
+
+t.stop
+
+
+BP(\hstrig).delta = Pexprand(0.04, 0.2, inf) * Plazy { Env(#[32, 1], #[120], \exp).asStream };
