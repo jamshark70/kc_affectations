@@ -300,14 +300,17 @@ PR(\abstractProcess).clone {
 } => PR(\hs1);
 
 PR(\hs1).clone {
+	~minTop = 2;
+	~maxTop = 32;
 	~procInit = {
-		~tophCtl = GenericGlobalControl(\numh, nil, 2, #[2, 60, \lin, 1]);
+		~lowhCtl = GenericGlobalControl(\lowh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
+		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 
 		// see pattern for sync with master clock
 		~quant = NilTimeSpec.new;
 	};
-	~procFree = { ~tophCtl.free };
-	~useGui = { |vpi| ~tophCtl => VP(vpi) };
+	~procFree = { [~lowhCtl, ~tophCtl].free };
+	~useGui = { |vpi| ~lowhCtl => VP(vpi); ~tophCtl => VP(vpi) };
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
@@ -317,12 +320,10 @@ PR(\hs1).clone {
 			if((num = thisThread.beats - BP(~cl).goTime) > 0) {
 				sp.wait((num.trunc - num + 1));
 				loop {
-					num = ~tophCtl.value.asInteger - 1;
+//					num = ~tophCtl.value.asInteger - 1;
 					sp.par(
-						Ptpar([
-							({ |i| i = i + 2; (1 - i.reciprocal) } ! num),
-							{ |i|
-								i = i + 2;
+						Ptpar((~lowhCtl.value.asInteger .. ~tophCtl.value.asInteger).collect({ |i|
+							[	(1 - i.reciprocal),
 								Pbind(
 									\chan, ~chan,
 									\instrument, Pn(\partial1bgated, 2),
@@ -337,9 +338,9 @@ PR(\hs1).clone {
 									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
 									\panWidth, 0 //, // i/(num-1),
 								)
-							} ! num
-						].lace(num*2), 1)
-					);
+							]
+						}).flat, 1
+					));
 					sp.wait(2);
 				}
 			}; // else, do nothing and spawner ends
@@ -350,7 +351,7 @@ PR(\hs1).clone {
 ();
 PR(\hs1).clone {
 	~minTop = 2;
-	~maxTop = 60;
+	~maxTop = 40;
 	~procInit = {
 		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 		~tophCtl.addDependant(currentEnvironment);
@@ -373,32 +374,6 @@ PR(\hs1).clone {
 
 	// inherit asPattern from hs1:
 	// this process uses the same technique of adding harmonics dynamically
-/*
-	~oneStream = { |ratio = 1, repeats = 1, pbindf|
-		var	self = currentEnvironment,
-			result = Pfin(repeats, Pbind(
-				\instrument, \partial1bgated,
-				\ratio, ratio,
-				\freq, BPStream(\fund) * ratio,
-				\egRate, ~tempoCtl.asMap,
-				\egRateMul, ratio,
-				\delta, ratio.reciprocal,
-				\sustain, Pkey(\delta) * 0.5,
-				\egBuf, ~egbuf,
-				\chan, ~chan
-			));
-		if(pbindf.notNil) {
-			result = Pbindf(result, *pbindf)
-		} {
-			result
-		};
-		// note, this doesn't empty activeRatios if the process is stopped manually
-		// (but stopCleanup does)
-		result = CleanupStream(result.asStream, e {
-			~streamEndHook.(result, ratio);
-		});
-	};
-*/
 
 	// this can be called by any gesture-trigger responder
 	~addAStream = { |ratio = 2|
@@ -517,7 +492,53 @@ Proto {
 		Pbind(\delta, BPStream(\delta, resetSource: true))
 	};
 } => BP(\hstrig);
+
+BP(\fmt).free;
+PR(\basicSynthChooser).chuck(BP(\fmt), nil, (
+	chan: BP(\mstClock).chan,
+	isFx: true,
+	alwaysReset: true,
+	event: (eventKey: \monoSupport),
+	userprep: {
+		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
+	},
+	delta: Pexprand(0.1, 0.9, inf), // Pexprand(1.0, 4.0, inf),
+	objects: (
+		fmt: (
+			def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1, amp = 1|
+				var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
+					amps = NamedControl.kr(\amps, 1 ! 5),
+					qs = NamedControl.kr(\qs, 0.1 ! 5),
+					sig = In.ar(inbus, 1), sig2,
+					wet = Linen.kr(gate, 1, 1, 1, doneAction: 2);
+				ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+				amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+				qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+				sig2 = BBandPass.ar(sig, ffreqs, qs, amps).sum * amp;
+				sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
+				ReplaceOut.ar(outbus, sig ! 2);
+			}),
+			args: [
+				protoEvent: Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
+				#[ffreqs, amps, qs], Pnsym(Plazy { Pxrand(~fmtKeys, inf) }, FormantTable),
+				ffreqs: Pkey(\ffreqs) * Pexprand(0.95, 0.95.reciprocal, inf).clump(5),
+				trig: 1,
+				slideTime: Pkey(\delta) * Pwhite(0.4, 0.8, inf),
+				inbus: Plazy { Pn(~chan.inbus, inf) },
+				node: Pfunc { ~node ? 0 },
+				sustain: inf,
+				amp: 17.dbamp
+			]
+		)
+	),
+	recvEventNotify: { |node, event|
+		~node = node;
+	},
+ 	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) }
+));
 )
+
+BP(\mstClock).chan.startRecord(thisProcess.platform.recordingsDir +/+ "harmonics-demo.aiff");
 
 (
 c = BP(\mstClock).clock;
@@ -526,20 +547,89 @@ t = TLSequenceIterator([
 		0
 	},
 	bpCmd: (name: \mstClock),
-	12,
-	bpCmd: (name: \hs),
+	6,
+	bpCmd: (name: \hs, prepareBP: { |bp|
+		bp.use {
+			~lastRise = 1;
+			~rat = Pswitch1([
+				Pwhile1({ |in, item| ~lastRise = item; item <= ~high }, Pseries(~low, 1, inf)),
+				(Pexprand(Pfunc { ~low }, Pfunc { ~high }, inf)
+					.round(1).reject { |x| ~activeRatios.includes(x) });
+			], Pfunc {
+				(~lastRise.linexp(~low, ~high, 0.001, 1)/*.debug("coin")*/.coin
+				or: { ~activeRatios.includes(~lastRise+1.0)/*.debug("already playing %".format(~lastRise+1))*/ })
+				.binaryValue
+			});
+		};
+	}),
 	0.1,
-	bpCmd: (name: \hstrig, dur: 120, doReset: true),
+	bpCmd: (name: \hstrig, /*dur: 120,*/ doReset: true),
 
-	// start hswp
-	// automate tophCtl with dependency to raise BP(\hs).low
+	55,
+	bpCmd: (name: \hswp, prepareBP: { |bp|
+		bp.lowhCtl.value = 2;
+		bp.tophCtl.value = 2;
+	}),
+	gcAutoSynthCmd: (
+		gc: BP(\hswp).tophCtl, name: \ctlPoint, outName: \outbus,
+		value: 32, time: 60, curve: 1.6,
+		setDoneSignal: {
+			~upd = Updater(~gc, e { |obj, msg|
+				var	val;
+				if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hs).low }) {
+					if(val < BP(\hs).high) {
+						BP(\hs).low = val+1;
+					} {
+						BP(#[hs, hstrig]).stop;
+					}
+				};
+			});
+		},
+		clearDoneSignal: { ~upd.remove }
+	),
 
+	32,
+	bpCmd: (name: \hsd, prepareBP: { |bp|
+		bp.tophCtl.value = 2;
+	}),
+	gcAutoSynthCmd: (
+		gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
+		value: 32, time: 60, curve: 1.6,
+		setDoneSignal: {
+			~upd = Updater(~gc, e { |obj, msg|
+				var	val;
+				if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hswp).low }) {
+					if(val < BP(\hswp).tophCtl.value) {
+						BP(\hswp).lowhCtl.value = val+1;
+					} {
+						BP(\hswp).stop;
+					}
+				};
+			});
+		},
+		clearDoneSignal: { ~upd.remove; BP(\hswp).stop }
+	),
+	\cmdSync,
+	bpCmd: (name: \fmt),
+	45,
+	gcAutoSynthCmd: (
+		gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
+		value: 2, time: 40, curve: -1.6
+	),
 	\cmdSync,
 	funcCmd: (func: { ~iterator.stop })
 ]).play(argClock: SystemClock);
 )
 
 t.stop
+BP(\mstClock).chan.stopRecord;
 
+t.isPlaying
 
 BP(\hstrig).delta = Pexprand(0.04, 0.2, inf) * Plazy { Env(#[32, 1], #[120], \exp).asStream };
+
+BP(\mstClock).fund * 32
+FormantTable.keys.select { |k| k.asString.contains("tenor") }.do { |k| FormantTable.at(k).postln }; ""
+
+BP(\fmt).delta = Pexprand(0.1, 0.9, inf);
+BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
