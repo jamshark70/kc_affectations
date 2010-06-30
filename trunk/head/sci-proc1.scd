@@ -108,7 +108,11 @@ Proto {
 		// how much of a note's duration to hold in the middle
 		~holdPctCtl = GenericGlobalControl(\holdPct, nil, 0);
 
-		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master, completionFunc: { |chan|
+			// adding harmonics increases volume a lot
+			// this reduces the amp variation from about 20dB to about 6
+			chan.playfx(Instr("busfx.companderd"), [0, 2, 0.03, 1.0, 0.10660504994928, 0.0022888750750465, 0.1821720077621, 7.2629183877784, 0.005]);
+		});
 		~egbuf = Buffer.alloc(s, 1024, 1, { |buf|
 			buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024))
 		});
@@ -264,7 +268,10 @@ PR(\abstractProcess).clone {
 			ratio = ~ratStream.next;
 			stream = ~spawner.par(
 				~oneStream.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
-					[amp: ~makeAmpPattern.(numEv)]),
+					[	amp: ~makeAmpPattern.(numEv),
+						panCtr: rrand(ratio / ~high - 0.4, ratio / ~high) * #[-1, 1].choose,
+						panWidth: (1 - Pkey(\panCtr).abs) * (ratio / ~high)
+					]),
 				0.1);
 			~streamHook.(stream, ratio);
 		};
@@ -300,6 +307,7 @@ PR(\abstractProcess).clone {
 } => PR(\hs1);
 
 PR(\hs1).clone {
+	~alwaysReset = true;
 	~minTop = 2;
 	~maxTop = 32;
 	~procInit = {
@@ -314,13 +322,22 @@ PR(\hs1).clone {
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
+	~panGen = Pif(Pfunc { |num| num > 1 }, Prand(#[lr, rl, ctrout, scatter], inf), \zero);
+	~lr = Plazy { |num| Pseries.fromEndpoints(-1.0, 1.0, num) };
+	~rl = Plazy { |num| Pseries.fromEndpoints(1.0, -1.0, num) };
+	~ctrout = Plazy { |num| Pseries.fromEndpoints(0.0, 1.0, num) * Pseq(#[-1, 1], inf, { 2.rand }) };
+	~scatter = Pwhite(-1.0, 1.0, inf);
+	~zero = 0;
+
 	~asPattern = {
+		~makeStreamForKey.(\panGen);
 		Pspawner { |sp|
-			var	num;
+			var	num, panGen;
 			if((num = thisThread.beats - BP(~cl).goTime) > 0) {
 				sp.wait((num.trunc - num + 1));
 				loop {
-//					num = ~tophCtl.value.asInteger - 1;
+					num = ~tophCtl.value.asInteger - ~lowhCtl.value.asInteger + 1;
+					panGen = ~panGenStream.next(num).envirGet.asStream;
 					sp.par(
 						Ptpar((~lowhCtl.value.asInteger .. ~tophCtl.value.asInteger).collect({ |i|
 							[	(1 - i.reciprocal),
@@ -333,10 +350,12 @@ PR(\hs1).clone {
 									\egRate, ~tempoCtl.asMap,
 									\egRateMul, i,
 									\egBuf, ~egbuf,
-									\amp, 1,
+									// empirically, unity gain is about 4dB too loud
+									\amp, -4.dbamp,
 									\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
 									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
-									\panWidth, 0 //, // i/(num-1),
+									\panCtr, panGen.next(num),
+									\panWidth, 0
 								)
 							]
 						}).flat, 1
@@ -381,8 +400,12 @@ PR(\hs1).clone {
 		if(~hStreams[ratio].isNil) {
 			sync = ((0.1 * ~clock.tempo) + ~clock.beats - BP(~cl).goTime).roundUp(ratio.reciprocal)
 				+ BP(~cl).goTime - ~clock.beats;
-			stream = ~spawner.par(~oneStream.(ratio, nil), sync,
-				[timingOffset: (1 - (ratio+1).reciprocal) * ~offsetCtl.asPattern]
+			stream = ~spawner.par(~oneStream.(ratio, nil, 
+				[	timingOffset: (1 - (ratio+1).reciprocal) * ~offsetCtl.asPattern,
+					panCtr: 0,
+					panWidth: ratio / ~tophCtl.value
+				]),
+				sync
 			);
 			~streamHook.(stream, ratio);
 		};
@@ -503,31 +526,37 @@ PR(\basicSynthChooser).chuck(BP(\fmt), nil, (
 		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
 	},
 	delta: Pexprand(0.1, 0.9, inf), // Pexprand(1.0, 4.0, inf),
+	formant: Plazy { Pxrand(~fmtKeys, inf) },
+	fadeIn: 8,
+	fadeOut: 4,
 	objects: (
 		fmt: (
-			def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1, amp = 1|
+			def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1, amp = 1,
+					fadeIn = 5, fadeOut = 5|
 				var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
 					amps = NamedControl.kr(\amps, 1 ! 5),
 					qs = NamedControl.kr(\qs, 0.1 ! 5),
-					sig = In.ar(inbus, 1), sig2,
-					wet = Linen.kr(gate, 1, 1, 1, doneAction: 2);
+					sig = In.ar(inbus, 2), sig2,
+					wet = Linen.kr(gate, fadeIn, 1, fadeOut, doneAction: 2);
 				ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 				amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 				qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 				sig2 = BBandPass.ar(sig, ffreqs, qs, amps).sum * amp;
 				sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
-				ReplaceOut.ar(outbus, sig ! 2);
+				ReplaceOut.ar(outbus, sig);
 			}),
 			args: [
 				protoEvent: Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
-				#[ffreqs, amps, qs], Pnsym(Plazy { Pxrand(~fmtKeys, inf) }, FormantTable),
+				#[ffreqs, amps, qs], Pnsym(BPStream(\formant), FormantTable),
 				ffreqs: Pkey(\ffreqs) * Pexprand(0.95, 0.95.reciprocal, inf).clump(5),
 				trig: 1,
 				slideTime: Pkey(\delta) * Pwhite(0.4, 0.8, inf),
 				inbus: Plazy { Pn(~chan.inbus, inf) },
 				node: Pfunc { ~node ? 0 },
 				sustain: inf,
-				amp: 17.dbamp
+				amp: 12.5.dbamp,
+				fadeIn: BPStream(\fadeIn),
+				fadeOut: BPStream(\fadeOut)
 			]
 		)
 	),
@@ -539,6 +568,19 @@ PR(\basicSynthChooser).chuck(BP(\fmt), nil, (
 )
 
 BP(\mstClock).chan.startRecord(thisProcess.platform.recordingsDir +/+ "harmonics-demo.aiff");
+
+(
+BP.all.free;
+Fact(\mstClock) => BP(\mstClock);
+
+PR(\hs1) => BP(\hs);
+Fact(\hstrig) => BP(\hstrig);
+
+PR(\hsSweep) => BP(\hswp);
+
+PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
+Fact(\formantfx1) => BP(\fmt);
+)
 
 (
 c = BP(\mstClock).clock;
@@ -556,14 +598,21 @@ t = TLSequenceIterator([
 				(Pexprand(Pfunc { ~low }, Pfunc { ~high }, inf)
 					.round(1).reject { |x| ~activeRatios.includes(x) });
 			], Pfunc {
-				(~lastRise.linexp(~low, ~high, 0.001, 1)/*.debug("coin")*/.coin
+				(~lastRise.linexp(~low, ~high, 0.005, 1)/*.debug("coin")*/.coin
 				or: { ~activeRatios.includes(~lastRise+1.0)/*.debug("already playing %".format(~lastRise+1))*/ })
 				.binaryValue
 			});
 		};
 	}),
 	0.1,
-	bpCmd: (name: \hstrig, /*dur: 120,*/ doReset: true),
+	bpCmd: (name: \hstrig, doReset: true, setDoneSignal: { |bp|
+		~upd = Updater(BP(\hs), e { |obj, what|
+			if(what == \allChildrenStopped) {
+				~upd.remove;
+				BP(\hs).stop;
+			}
+		});
+	}),
 
 	55,
 	bpCmd: (name: \hswp, prepareBP: { |bp|
@@ -580,7 +629,7 @@ t = TLSequenceIterator([
 					if(val < BP(\hs).high) {
 						BP(\hs).low = val+1;
 					} {
-						BP(#[hs, hstrig]).stop;
+						BP(#[hstrig]).stop;
 					}
 				};
 			});
