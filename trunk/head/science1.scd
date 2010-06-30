@@ -728,7 +728,7 @@ PR(\abstractProcess).clone {
 
 	~freeCleanup = { [~chan/*, ~noiseCtl*/].free };
 
-	~fx = Pfunc { ~fxPool.keys.choose };
+	~fx = \none; // Pfunc { ~fxPool.keys.choose };
 
 	// NOTE: These will be evaluated in the Proto's context
 	~fxPool = (
@@ -768,33 +768,41 @@ PR(\abstractProcess).clone {
 		~fxStream ?? { ~makeStreamForKey.(\fx) };
 		~lpfxferFreqStream ?? { ~makeStreamForKey.(\lpfxferFreq) };
 		~lpfxferAmpStream ?? { ~makeStreamForKey.(\lpfxferAmp) };
-		Pfunc { |ev| ~preprocessNote.(ev) }
-		<>
-		Plazy {
-			// change this later
-			Ppar(
-				~seqKeys.collect { |key|
-					Pbind(
-						\instrument, ~def.name,
-						\note, MBM(0)[key].asPattern,
-						\rhyScale, BPStream(\rhyScale),
-						\delta, Pfunc { |ev| ev[\note].dur * ev[\rhyScale] },
-						\sustain, Pfunc { |ev| ev[\note].length * ev[\rhyScale] },
-						\att, BPStream(\att), \dec, BPStream(\dec), \rel, BPStream(\rel),
-						\fLowRatio, BPStream(\fLow),
-						\chan, ~chan,
-						\numCh, 1,
-						\fxProto, \singleSynthPlayNotify,
-						\busFreeDelay, 3.2,
-						\fxPatEv, Pbind(
-							\syllable, Pxrand(MBM(0)[key].properties[\voice].envirGet, inf),
-							\pat, Pfunc { |ev|
-								var	fspecs = FormantTable.at(ev[\syllable]),
-									fxPat;
-								fxPat = ~fxPool[~fxStream.next(ev)].(ev);
+		// currentEnvironment is a Proto; doesn't work for valueEnvir
+		Plazy { |ev| currentEnvironment.env.use { ~patternTemplate.(ev) } }
+			.collect { |ev| ~preprocessNote.(ev) }
+	};
+
+();
+
+	~patternTemplate = { |ev|
+		// change this later
+		Ppar(
+			~seqKeys.collect { |key|
+				~currentKey = key;
+				Pbind(
+					\instrument, ~def.name,
+					// valueEnvir to allow subclasses to get arguments dynamically
+					\note, ~notePattern.valueEnvir,
+					\rhyScale, BPStream(\rhyScale),
+					\delta, Pfunc { |ev| ev[\note].dur * ev[\rhyScale] },
+					\sustain, Pfunc { |ev| ev[\note].length * ev[\rhyScale] },
+					\att, BPStream(\att), \dec, BPStream(\dec), \rel, BPStream(\rel),
+					\fLowRatio, BPStream(\fLow),
+					\chan, ~chan,
+					\numCh, 1,
+					\fxProto, \singleSynthPlayNotify,
+					\busFreeDelay, 3.2,
+					\fxPatEv, Pbind(
+						\syllable, ~vocKey.valueEnvir,
+						\pat, Pfunc { |ev|
+							var	fspecs = FormantTable.at(ev[\syllable]),
+								fxPat;
+							currentEnvironment.env.use {
+							fxPat = ~fxPool[~fxStream.next(ev)].(ev);
 								Pseq([
 									Pn((
-										instrument: MBM(0)[key].properties[\xfer] ?? { \formantXfer2 },
+										instrument: ~xferKey.valueEnvir,
 										ffreq: ~lpfxferFreqStream.next(ev),
 										lpfxAmp: ~lpfxferAmpStream.next(ev),
 										ffreqs: fspecs[0],
@@ -802,19 +810,22 @@ PR(\abstractProcess).clone {
 										qs: fspecs[2],
 										sustain: nil,
 										delta: 0,
-//										noiseAmp: ~noiseCtl.asMap,
 										collIndex: ~collIndex,
 										notifyDependents: { ~lock.killNodes = ~node }
 									), 1),
 									if(fxPat.notNil) { Pfindur(ev[\sustain], fxPat) }
 								])
 							}
-						)
+						}
 					)
-				}
-			)
-		}
+				)
+			}
+		)
 	};
+
+	~notePattern = { |currentKey| MBM(0)[currentKey].asPattern };
+	~vocKey = { |currentKey| Pxrand(MBM(0)[currentKey].properties[\voice].envirGet, inf) };
+	~xferKey = { |currentKey| MBM(0)[currentKey].properties[\xfer] ?? { \formantXfer2 } };
 
 	~preprocessNote = { |ev|
 		var	note;
@@ -848,6 +859,7 @@ BP(\c).seqKeys = #[t3, a31, a32];
 BP(\c).seqKeys = #[a41, a42, t4, b4];
 BP(\c).seqKeys = #[a51, a52, t5, b5];
 
+MBM(0)[\b5]
 
 BP(\c).rhyScale = 1;
 
