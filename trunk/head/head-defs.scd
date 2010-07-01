@@ -203,7 +203,8 @@ make: { |name|
 			// how much of a note's duration to hold in the middle
 			~holdPctCtl = GenericGlobalControl(\holdPct, nil, 0);
 
-			~chan = MixerChannel(~collIndex, s, 2, 2, outbus: master, completionFunc: { |chan|
+			~chan = MixerChannel(~collIndex, s, 2, 2, outbus: master);
+			~chan2 = MixerChannel(~collIndex ++ "2", s, 2, 2, outbus: master, completionFunc: { |chan|
 				// adding harmonics increases volume a lot
 				// this reduces the amp variation from about 20dB to about 6
 				chan.playfx(Instr("busfx.companderd"), [0, 2, 0.03, 1.0, 0.10660504994928, 0.0022888750750465, 0.1821720077621, 7.2629183877784, 0.005]);
@@ -270,11 +271,13 @@ PR(\abstractProcess).clone {
 		~fullSet = (~low .. ~high).asFloat.as(Set);
 	};
 
-	~clImportKeys = #[clock, tempoCtl, fund, chan, egbuf, holdPctCtl];
+	~clImportKeys = #[clock, tempoCtl, fund, chan2, egbuf, holdPctCtl];
 	~clImport = {
 		~clImportKeys.do { |key|
 			key.envirPut(BP(~cl)[key])
-		}
+		};
+		// HACK
+		~chan = ~chan2;
 	};
 
 	~freeCleanup = {
@@ -561,7 +564,7 @@ PR(\hs1).clone {
 (make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		chan: BP(\mstClock).chan,
+		chan: BP(\mstClock).chan2,
 		isFx: true,
 		alwaysReset: true,
 		event: (eventKey: \monoSupport),
