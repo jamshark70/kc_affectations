@@ -614,3 +614,435 @@ PR(\hs1).clone {
 	));
 }, type: \bp) => Fact(\formantfx1);
 
+
+// choral
+
+if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
+
+~ratios = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4];
+~tun = CompositeTuning([
+	TuningRatios(12, tunings: ~ratios),
+	TuningRatios(12, tunings: ~ratios.copy.putEach(#[5, 9, 10], [27/20, 27/16, 9/5]))
+]).root_(8).calibrate(32.midicps, 32);
+
+~tprop = (type: \c, voice: \tenor);
+~aprop = (type: \c, voice: \alto);
+
+MIDIRecBuf(\t1, [#[56, 58, 56], 16, 15.5, 0.5].asNotes, ~tprop) => MBM(0);
+MIDIRecBuf(\a1, [#[68, 66.01, 68], 16, 15.5, 0.5].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a1b, [#[68, 66.01, 68] - 5, 16, 15.5, 0.5].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t2, [
+	#[56, 58, 56, 54, 56, 61, 58, 56],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\a2, [
+	#[63, 65.01, 63, 61, 63, 68, 65.01, 63],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2b, [
+	#[63, 65.01, 63, 61, 63, 68, 65.01, 67, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2c, [
+	#[68, 67, 68, 70, 72, 68, 67, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 2, 1, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 2, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2d1, [
+	#[68, 67, 68, 70, 72, 68, 67, 67, 65, 68],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 0.5, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 1.5, 0.12, 0.4, 0.4, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a2d2, [
+	// 61: better to tune Db vs. Ab rather than Bb
+	#[63, 61, 63, 68, 65, 61, 63],
+	#[1, 0.5, 1, 0.5, 1, 2, 0.1],
+	#[1, 0.5, 1, 0.5, 1, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+
+MIDIRecBuf(\t3, [
+	#[56, 58, 60, 61.01, 63, 61, 60, 58, 56],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\a31, [
+	#[63, 62, 63, 65.01, 67, 65, 63, 62, 63],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 0.1],
+	#[1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MBM(0)[\a2c].copy.name_(\a32) => MBM(0);
+
+
+MIDIRecBuf(\a41, [
+	#[68, 70, 72, 73, 72, 70, 68],
+	#[1, 1, 1, 2, 1, 3, 0.1],
+	#[1, 1, 1, 2, 1, 3, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a42, [
+	#[63, 65.01, 66, 65.01, 67, 68, 67, 63],
+	#[1, 1, 1, 1, 1, 3, 1, 0.1],
+	#[1, 1, 1, 1, 1, 3, 1, 3],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t4, [
+	#[60, 58, 56, 58, 63, 63, 61, 60],
+	#[1, 1, 1, 1, 1, 2, 2, 0.1],
+	#[1, 1, 1, 1, 1, 2, 2, 3],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\b4, [
+	#[44, 49.01, 48, 46, 44, 51, 44],
+	#[1, 1, 1, 2, 1, 3, 0.1],
+	#[1, 1, 1, 2, 1, 3, 3],
+	0.5
+].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
+
+
+MBM(0)[\a41].copy.name_(\a51) => MBM(0);
+MBM(0)[\a51].notes.last.length_(8);
+
+MIDIRecBuf(\a52, [
+	#[r, 63, 65, 67, 68, 66, 65.01, 65, 63, 61, 60],
+	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 0.1],
+	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 5],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\t5, [
+	#[r, 63, 61, 60, 58, 61, 56, 63],
+	#[5, 1, 1, 1, 1, 1, 2, 0.1],
+	#[5, 1, 1, 1, 1, 1, 2, 5],
+	0.5
+].asNotes, ~tprop) => MBM(0);
+
+MIDIRecBuf(\b5, [
+	#[r, 44, 46, 48, 49.01, 49, 48, 46, 44],
+	#[5, 1, 1, 1, 1, 1, 1, 1, 0.1],
+	#[5, 1, 1, 1, 1, 1, 1, 1, 5],
+	0.5
+].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
+
+
+WrapInstr("analog.sawB", { |freq, gate = 1, detune = 1.003, ffreq = 2000, vsens = 0.5
+	att = 0.1, dec = 0.2, sus = 0.6, rel = 0.5, fLowRatio = 0.05|
+	var	amp = (Latch.kr(gate, gate) - 1) * vsens + 1,
+		sig = Saw.ar(freq * [1, detune], amp).sum,
+		env = Env.adsr(att, dec, sus, rel),
+		eg = EnvGen.kr(env, gate, doneAction: 2),
+		fcurve = EnvGen.kr(Env([fLowRatio, 1], [att], \exp));
+	LPF.ar(sig, ffreq * fcurve, eg)
+}, [\freq, NoLagControlSpec(0, 1), \mydetune, \freq, nil, #[0.01, 20.0], #[0.01, 20.0], #[0, 1], #[0.01, 20.0]]);
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthFxPatLock, addAction: \addToHead);
+
+	~seqKeys = #[t1, a1];
+	~att = 1; // Pkey(\sustain) * 0.3;
+	~dec = 1; // Pkey(\sustain) * 0.1;
+	~rel = 1; // Pkey(\sustain) * 0.4;
+	~fLow = 0.05;
+	~rhyScale = 1;
+	~legato = 0.93;
+	~tempoPat = 42/60;
+
+	~lpfxferFreq = 900;
+	~lpfxferAmp = 0.3;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, completionFunc: { |chan|
+			~chorus = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.036937527208376, 0.11364637357074, 0.0062137993811117, 0.69813170599922, 0.82540422302882]);
+		});
+
+		~def = WrapPatch("analog.sawB", [nil, nil, nil, `18000, 0.8])
+			.asSynthDef.add;
+		~defname = ~def.name.asSymbol;
+		SynthDescLib.at(~defname).msgFuncKeepGate = true;
+
+		~alto = ~formantKeys.("alto");
+		~tenor = ~formantKeys.("tenor");
+		~bass = ~formantKeys.("bass");
+	};
+
+	~freeCleanup = { [~chan/*, ~noiseCtl*/].free };
+
+	~fx = \none; // Pfunc { ~fxPool.keys.choose };
+	~fxProto = \monoSupport;
+	~vowel = Pclutch(Pxrand(['A', 'E', 'I', 'O', 'U'], inf), Pdiff(Ptime()) > 0);
+
+	~ratios = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4];
+	~tun = CompositeTuning([
+		TuningRatios(12, tunings: ~ratios),
+		TuningRatios(12, tunings: ~ratios.copy.putEach(#[5, 9, 10], [27/20, 27/16, 9/5]))
+	]).root_(8).calibrate(32.midicps, 32);
+
+	// NOTE: These will be evaluated in the Proto's context
+	~fxPool = (
+		rainbow: { |ev|
+			var	up = rrand(0.3, 0.6);
+			Pbind(
+				\instrument, \ringzFadePan,
+				\ffreq, Env(#[2500, 9000, 2500], [up, 1-up] * ev[\sustain], \sine),
+				\filtAtk, Pexprand(0.08, 0.2, inf),
+				\filtDcy, Pkey(\filtAtk) + Pwhite(0.05, 0.3, inf),
+				\time, Pwhite(1.8, 3.2, inf),
+				\delta, Pexprand(0.25, 0.8, inf),
+				\pan, Pwhite(0.7, 1.0, inf) * Prand(#[-1, 1], inf),
+				\amp, 0.05
+			)
+		},
+		rainbow1: { |ev|
+			var	up = rrand(0.15, 0.75), atk;
+			Pn((
+				instrument: \ringzFadeEnv,
+				freqEnv: Env(#[2500, 9000, 2500], [up, 1-up] * ev[\sustain], \sine),
+				filtAtk: atk = exprand(0.08, 0.2),
+				filtDcy: atk + rrand(0.05, 0.3),
+				time: ev[\sustain],
+				delta: 1,
+				pan: rrand(0.7, 1.0) * #[-1, 1].choose,
+				amp: 0.05
+			), 1)
+		}
+	);
+
+	~formantKeys = { |string|
+		FormantTable.keys.select { |key| key.asString.contains(string) }.asArray
+	};
+
+	~asPattern = {
+		~fxStream ?? { ~makeStreamForKey.(\fx) };
+		~lpfxferFreqStream ?? { ~makeStreamForKey.(\lpfxferFreq) };
+		~lpfxferAmpStream ?? { ~makeStreamForKey.(\lpfxferAmp) };
+		~vowelStream ?? { ~makeStreamForKey.(\vowel) };
+		// currentEnvironment is a Proto; doesn't work for valueEnvir
+		Plazy { |ev|
+			Pbind(\tempo, Pclutch(~tempoPat.(ev), Pdiff(Ptime()) > 0))
+			<>
+			~patternTemplate.(ev)
+		}.collect { |ev| ~preprocessNote.(ev) }
+	};
+
+	~evalEnvir = { |key| currentEnvironment.env.use { key.envirGet.valueEnvir } };
+
+	~patternTemplate = { |ev|
+		Ppar(
+			~seqKeys.collect { |key|
+				~currentKey = key;
+				Pbind(
+					\instrument, ~defname,
+					// valueEnvir to allow subclasses to get arguments dynamically
+					\note, ~evalEnvir.(\notePattern),
+					\rhyScale, BPStream(\rhyScale),
+					\delta, Pfunc { |ev| ev[\note].dur * ev[\rhyScale] },
+					\legato, BPStream(\legato),
+					\sustain, Pfunc { |ev| ev[\note].length * ev[\rhyScale] * ev[\legato] },
+					\att, BPStream(\att), \dec, BPStream(\dec), \rel, BPStream(\rel),
+					\fLowRatio, BPStream(\fLow),
+					\chan, ~chan,
+					\numCh, 1,
+					\fxKey, BPStream(\fx),
+					\fxProto, BPStream(\fxProto),
+					\busFreeDelay, 3.2,
+					\fxPatEv, Pbind(
+						\syllable, ~evalEnvir.(\vocKey),
+						\pat, Pfunc { |ev|
+							var	fspecs = FormantTable.at(ev[\syllable]),
+								fxPat, lockref;
+							fxPat = ~fxPool[ev[\fxKey]].(ev);
+							Pseq([
+								Pn(~xferEvent.(ev, fspecs, lockref = `nil), 1),
+								if(fxPat.notNil) {
+									Pfindur(ev[\sustain],
+										fxPat <> Pbind(\protoEvent, \singleSynthPlayNotify,
+											\lock, Pfunc { lockref.value }))
+								}
+							])
+						}
+					)
+				)
+			}
+		)
+	};
+
+	~notePattern = { |currentKey| MBM(0)[currentKey].asPattern };
+	~vocKey = { |currentKey|
+		var	prefix = MBM(0)[currentKey].properties[\voice];
+		~vowelStream.collect { |vowel| (prefix ++ vowel).asSymbol }
+	};
+	~xferKey = { |currentKey| MBM(0)[currentKey].properties[\xfer] ?? { \formantXfer2 } };
+
+	~preprocessNote = { |ev|
+		var	note;
+		// yeah, isKindOf = bad, but this could be called with an Event.silent
+		if((note = ev[\note]).isKindOf(SequenceNote)) {
+			if(note.freq.isSymbol) {
+				ev[\instrument] = \rest;
+//				ev = Event.silent(note.dur)
+			} {
+				ev.freq_(note.freq.asArray.collect(~tun.cps(_)))
+					/*.sustain_(note.length)*/
+					.gate_(note.gate)
+			};
+		}; // { "not a sequencenote".postln; note.postcs };
+		ev
+	};
+
+	~xferEvent = { |ev, fspecs, lockref|
+		(
+			protoEvent: \singleSynthPlayNotify,
+			instrument: ~evalEnvir.(\xferKey),
+			ffreq: ~lpfxferFreqStream.next(ev),
+			lpfxAmp: ~lpfxferAmpStream.next(ev),
+			ffreqs: fspecs[0],
+			amps: fspecs[1],
+			qs: fspecs[2],
+			sustain: nil,
+			delta: 0.1,
+			collIndex: ~collIndex,
+			notifyDependents: {
+				lockref.value = ~lock;
+				~lock.killNodes = ~lock.killNodes.add(~node);
+			}
+		)
+	};
+} => PR(\counterpoint);
+
+();
+PR(\counterpoint).clone {
+	~parentBP = \c;
+	~importKeys = #[chan, alto, tenor, defname, tun];
+	~prep = {
+		if(BP.exists(~parentBP).not) {
+			Error("BP(%) must be created first".format(~parentBP.asCompileString)).throw;
+		};
+		~importKeys.do { |key| key.envirPut(BP(~parentBP)[key]) };
+		~parmKeys.do { |key| ~makeStreamForKey.(key) };
+	};
+	~freeCleanup = 0;
+
+	~fx = \vowelChange;
+
+	~fxPool = (
+		vowelChange: { |ev|
+			var	prefix = ev[\syllable].asString.drop(-1);
+			Pbind(
+				\protoEvent, \singleSynthTrigger,
+				\node, Pfunc { |ev| ev[\lock].killNodes.asArray.detect(_.isKindOf(Synth)) },
+				\trig, 1,
+				#[ffreqs, amps, rqs], Pnsym(
+					Pxrand(#['A', 'E', 'I', 'O', 'U'], inf)
+						.collect { |vowel| (prefix ++ vowel).asSymbol },
+					FormantTable
+				),
+				\delta, Pexprand(0.8, 1.8, inf),
+				\slideTime, Pkey(\delta) * Pwhite(0.4, 0.7, inf)
+			)
+		}
+	);
+
+	// the meat!
+	~seqKeys = #[not_applicable];
+	~parmKeys = #[p5, sharp, shortFirst, dur, legato, gate, shortDur, oneNote];
+	~oneNote = Pwhite(0.0, 1.0, inf) < 0.5; //true;
+	~p5 = Pwhite(0.0, 1.0, inf) < 0.5; //false;  // false == 8ve
+	~sharp = Pwhite(0.0, 1.0, inf) < 0.5; //true;  // true == raise cadence note
+	~shortFirst = Pwhite(0.0, 1.0, inf) < 0.5; //true;
+	~dur = Pwhite(0.65, 1, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+	~shortDur = Pwhite(1.2, 2.2, inf);
+	~legato = 1; //Pwhite(1.02, 1.1, inf);
+	~gate = Pif(Pfunc { |n| n > 1 },
+		Pseq(#[0.6, 1.0, 0.6], inf) * Pwhite(0.5, 0.7, inf),
+		Pwhite(0.4, 1.0, inf)
+	);
+
+	~lpfEnv = {
+		var	up = rrand(0.3, 0.7);
+		Env([200, 14000, 200], [up, 1-up], \exp);
+	};
+
+	~superPattern = ~asPattern;
+	~asPattern = {
+		var	self = currentEnvironment, resp;
+		Pfset({ ~lpfbus = Bus.control(s, 1) },
+			Ptpar([
+				0, ~superPattern.(),
+				0.01, Pfuncn { |ev|
+					(	type: \on, instrument: \ctlEnv, outbus: ev[\lpfbus],
+						time: self[\phraseDur] + self[\relStream].next(ev),
+						connect: 0, env: self.lpfEnv,
+						group: self.chan.synthgroup,
+						callback: { |event|
+							resp = OSCpathResponder(s.addr, ['/n_end', event[\id][0]], {
+								ev[\lpfbus].free; resp.remove;
+							}).add
+						},
+						delta: 0
+					).parent_(nil)  // force default parent event
+				},
+			])//,
+//			{	(e { ~lpfbus.free }).defer(5.0) }
+		)
+	};
+
+	// important: must output SequenceNotes
+	~notePattern = { //|p5, sharp, shortFirst|
+		// 61.01 is needed for Bb/Db and Bb/Gb
+		// .01 has no effect on D-nat or G-nat (already tuned pure against Bb)
+		var	freqs = if(~oneNoteStream.next) { #[[56, 63]] } {
+				[
+					#[56, 58, 56],
+					[63, 61.01 + ~sharpStream.next.binaryValue, 63]
+						+ (5 * ~p5Stream.next.not.binaryValue)
+				].flop
+			},
+			fsize = freqs.size,
+			durs = { ~durStream.next(fsize) } ! fsize, notes;
+
+		if(~shortFirstStream.next) { durs[0] = ~shortDurStream.next(fsize) };
+		~phraseDur = durs.sum;	// BAD HACK
+		notes = freqs.collect { |f, i|
+			SequenceNote(f, durs[i], durs[i] * ~legatoStream.next, ~gateStream.next(fsize))
+		};
+		notes.last.dur_(0.1);
+		Pseq(notes, 1)
+	};
+
+	// not using MIDIRecBufs for this so I must override these funcs too
+	~vocKey = {
+		var	prefix = ["tenor", "alto"].choose;
+		~vowelStream.collect { |vowel| (prefix ++ vowel).asSymbol }
+	};
+	~xferKey = \formantXfer2;
+
+	~superXferEvent = ~xferEvent;
+	~xferEvent = { |ev, fspecs, lockref|
+		~superXferEvent.(ev, fspecs, lockref).put(\lpfreq, ev[\lpfbus].asMap)
+	};
+} => PR(\cadences);
+
+
