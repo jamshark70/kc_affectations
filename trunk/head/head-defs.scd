@@ -95,6 +95,7 @@ PR(\busLock).clone {
 		} {
 			~lock.freeStuff;
 		};
+		if(~tempo.isNumber) { thisThread.clock.tempo = ~tempo }
 	},
 	playExtraProcess: { |chan|
 		if(~lpcEv.size > 0) {
