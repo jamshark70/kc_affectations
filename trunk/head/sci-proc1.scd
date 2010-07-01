@@ -580,6 +580,14 @@ PR(\hsSweep) => BP(\hswp);
 
 PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
 Fact(\formantfx1) => BP(\fmt);
+
+BP(\cpt).free;
+PR(\counterpoint) => BP(\cpt);
+0 => BP(\cpt);
+
+BP(\cd).free;
+PR(\cadences).chuck(BP(\cd), nil, (parentBP: \cpt));
+0 => BP(\cd);
 )
 
 (
@@ -682,3 +690,98 @@ FormantTable.keys.select { |k| k.asString.contains("tenor") }.do { |k| FormantTa
 
 BP(\fmt).delta = Pexprand(0.1, 0.9, inf);
 BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
+
+
+
+// choral with drone
+(
+t = TLSequenceIterator([
+	[0.5, bpCmd: (name: #[mstClock, fmt, hsd])],
+	gcAutoSynthCmd: (gc: BP(\hsd).tophCtl, name: \ctlEnv, outName: \outbus,
+		connect: 0, env: Env(#[2, 32], #[12], 2)),
+	\cmdSync,
+	4, //{ rrand(10.0, 18.0) },
+
+	bpCmd: (name: \cd, prepareBP: { |p|
+		p.tempoPat = 1;
+		p.chan.level = -3.8.dbamp;
+		p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.p5_(false).sharp_(false).shortFirst_(false).oneNote_(true);
+	}),
+	\cmdSync,
+	25, //{ rrand(10.0, 16.0) },
+
+	bpCmd: (name: \cd, prepareBP: { |p|
+		p.oneNote_(false);
+	}),
+	\cmdSync,
+	10, //{ rrand(6.0, 14.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.seqKeys = #[t2];
+		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
+		p.att_(0.7).rel_(0.9).dec_(1.2);
+	}),
+	\cmdSync,
+	2, //{ rrand(6.0, 9.0) },
+
+	bpCmd: (name: \cd, prepareBP: { |p|
+		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.p5_(true).shortFirst_(true);
+	}),
+	\cmdSync,
+	{ rrand(8.0, 12.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.seqKeys = #[t2, a2];
+	}),
+	\cmdSync,
+	2, //{ rrand(6.0, 9.0) },
+
+	bpCmd: (name: \cd, prepareBP: { |p|
+//		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.sharp_(true);
+	}),
+	\cmdSync,
+	{ rrand(8.0, 12.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.seqKeys = #[t3, a31, a32];
+	}),
+	\cmdSync,
+	2,
+
+	bpCmd: (name: \cd, prepareBP: { |p|
+//		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.p5_(false);
+	}),
+	\cmdSync,
+	{ rrand(8.0, 12.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.seqKeys = #[t2, a2d1, a2d2];
+	}),
+	\cmdSync,
+	{ rrand(3.0, 6.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.chan.level = -7.dbamp;
+		p.seqKeys = #[a41, a42, t4, b4];
+	}),
+	\cmdSync,
+	{ rrand(1.0, 4.0) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.tempoPat = { 1.1 * (Env(#[1, 1, 0.56], #[6, 6], 3).asStream) };
+		p.seqKeys = #[a51, a52, t5, b5];
+	}),
+	\cmdSync,
+
+	{ rrand(6.0, 9.0) },
+	funcCmd: (func: { ~iterator.stop })
+]).play(argClock: SystemClock)
+)
+
+t.stop;
+
+BP(\cd).clock === TempoClock.default.tempo
