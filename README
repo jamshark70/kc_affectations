@@ -7,6 +7,6 @@ This code does not compile to a static executable! It includes a lot of loose ex
 
 Code is in SuperCollider. SC users are welcome to read the code to glean possibly useful tricks.
 
-I respectfully ask users not to commit anything into this repository. Unauthorized changes will be swiftly reverted.
+I respectfully ask users not to commit anything into this repository. Unauthorized changes will be swiftly reverted. The code is published here to facilitate collaboration with the other artists involved in the project.
 
 James Harkins
