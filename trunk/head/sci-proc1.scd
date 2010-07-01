@@ -692,6 +692,7 @@ BP(\fmt).delta = Pexprand(0.1, 0.9, inf);
 BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
 
 
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-chorus.aiff");
 
 // choral with drone
 (
@@ -733,7 +734,7 @@ t = TLSequenceIterator([
 	{ rrand(8.0, 12.0) },
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
-		p.seqKeys = #[t2, a2];
+		p.seqKeys = #[t2, a2b];
 	}),
 	\cmdSync,
 	2, //{ rrand(6.0, 9.0) },
@@ -785,3 +786,5 @@ t = TLSequenceIterator([
 t.stop;
 
 BP(\cd).clock === TempoClock.default.tempo
+
+~master.stopRecord;
