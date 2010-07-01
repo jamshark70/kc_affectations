@@ -748,6 +748,25 @@ MIDIRecBuf(\b5, [
 ].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
 
 
+SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000, lpfxAmp = 0.3|
+	Out.ar(outbus, LPF.ar(In.ar(inbus, 1), ffreq, lpfxAmp) ! 2);
+}).add;
+
+SynthDef(\formantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1, amp = 1, lpfreq = 2000|
+	var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
+		amps = NamedControl.kr(\amps, 1 ! 5),
+		qs = NamedControl.kr(\qs, 0.1 ! 5),
+		sig = In.ar(inbus, 1); //,
+//		noise = PinkNoise.ar(noiseAmp * Amplitude.kr(sig));
+	ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	sig = LPF.ar(sig, lpfreq);
+	sig = BBandPass.ar(sig /*+ noise*/, ffreqs, qs, amps).sum;
+	Out.ar(outbus, (sig * amp) ! 2);
+}).add;
+
+
 WrapInstr("analog.sawB", { |freq, gate = 1, detune = 1.003, ffreq = 2000, vsens = 0.5
 	att = 0.1, dec = 0.2, sus = 0.6, rel = 0.5, fLowRatio = 0.05|
 	var	amp = (Latch.kr(gate, gate) - 1) * vsens + 1,
