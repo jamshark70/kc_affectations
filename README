@@ -1,0 +1,12 @@
+KC_Affectations
+===============
+
+This project consists of development-grade code for the generative music written for an interactive multimedia dance piece to be performed in Washington DC in October 2010.
+
+This code does not compile to a static executable! It includes a lot of loose experimentation that is probably not useful to anyone except the author. The project will not be extensively documented.
+
+Code is in SuperCollider. SC users are welcome to read the code to glean possibly useful tricks.
+
+I respectfully ask users not to commit anything into this repository. Unauthorized changes will be swiftly reverted.
+
+James Harkins
