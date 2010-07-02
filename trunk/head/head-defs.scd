@@ -1,6 +1,14 @@
 
 var	temp, temp2;
 
+if(Mode.exists(\c).not) {
+	#[c, db, d, eb, e, f, gb, g, ab, a, bb, b].do { |key, i|
+		Mode(\default).v.copy.root_(i) => Mode(key);
+		Mode(key).v.transposeRoot(0) => Mode((key ++ "0").asSymbol);
+	};
+};
+
+
 SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, attack = 0.05, decay = 0.05|
 	var	src = In.ar(inbus, 1),
 		// note, ar because LPCVals.ar with .kr pos input is broken
