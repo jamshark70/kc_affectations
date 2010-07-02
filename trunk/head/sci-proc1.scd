@@ -707,7 +707,7 @@ t = TLSequenceIterator([
 		p.tempoPat = 1;
 		p.chan.level = -3.8.dbamp;
 		p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
-		p.p5_(false).sharp_(false).shortFirst_(false).oneNote_(true);
+		p.p5_(0).sharp_(false).shortFirst_(false).oneNote_(true);
 	}),
 	\cmdSync,
 	25, //{ rrand(10.0, 16.0) },
@@ -728,7 +728,7 @@ t = TLSequenceIterator([
 
 	bpCmd: (name: \cd, prepareBP: { |p|
 		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
-		p.p5_(true).shortFirst_(true);
+		p.p5_(1).shortFirst_(true);
 	}),
 	\cmdSync,
 	{ rrand(8.0, 12.0) },
@@ -740,7 +740,6 @@ t = TLSequenceIterator([
 	2, //{ rrand(6.0, 9.0) },
 
 	bpCmd: (name: \cd, prepareBP: { |p|
-//		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 		p.sharp_(true);
 	}),
 	\cmdSync,
@@ -753,8 +752,7 @@ t = TLSequenceIterator([
 	2,
 
 	bpCmd: (name: \cd, prepareBP: { |p|
-//		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
-		p.p5_(false);
+		p.p5_(2);
 	}),
 	\cmdSync,
 	{ rrand(8.0, 12.0) },
@@ -763,6 +761,33 @@ t = TLSequenceIterator([
 		p.seqKeys = #[t2, a2d1, a2d2];
 	}),
 	\cmdSync,
+	2,
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+//		p.seqKeys = #[t2, a2d1, a2d2];
+		p.seqKeys = #[t3, a31, a32];
+		p.tempoPat = 1;
+		p.useLpf = true;
+	}),
+	\cmdSync,
+
+	{ rrand(6.0, 9.0) },
+	funcCmd: (func: { ~iterator.stop })
+]).play(argClock: SystemClock)
+)
+
+t.stop;
+
+BP.all.stop
+BP.all.free
+
+
+BP(\cd).clock === TempoClock.default.tempo
+
+~master.stopRecord;
+
+
+/* scrap
 	{ rrand(3.0, 6.0) },
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
@@ -777,14 +802,18 @@ t = TLSequenceIterator([
 		p.seqKeys = #[a51, a52, t5, b5];
 	}),
 	\cmdSync,
+*/
 
-	{ rrand(6.0, 9.0) },
-	funcCmd: (func: { ~iterator.stop })
-]).play(argClock: SystemClock)
-)
 
-t.stop;
+t = TLSequenceIterator([
+	bpCmd: (name: \cd, prepareBP: { |p|
+		p.tempoPat = 1;
+		p.chan.level = -3.8.dbamp;
+		p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.p5_(false).sharp_(false).shortFirst_(false).oneNote_(true);
+	})
+]).play;
 
-BP(\cd).clock === TempoClock.default.tempo
+t.stop
 
-~master.stopRecord;
+BP(\cd).p5_(false).sharp_(false).shortFirst_(false).oneNote_(true);
