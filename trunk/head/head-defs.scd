@@ -1,4 +1,5 @@
 
+var	temp, temp2;
 
 SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, attack = 0.05, decay = 0.05|
 	var	src = In.ar(inbus, 1),
@@ -240,7 +241,7 @@ make: { |name|
 		~freeCleanup = {
 			~upd.remove;
 			~clock.stop;
-			[~tempoCtl, ~holdPctCtl, ~chan, ~egbuf].free;
+			[~tempoCtl, ~holdPctCtl, ~chan, ~chan2, ~egbuf].free;
 		}
 	} => BP(name);
 },
@@ -694,58 +695,35 @@ MIDIRecBuf(\a31, [
 MBM(0)[\a2c].copy.name_(\a32) => MBM(0);
 
 
+// more complex cadence formulas than PR(\cadences) can handle
 MIDIRecBuf(\a41, [
-	#[68, 70, 72, 73, 72, 70, 68],
-	#[1, 1, 1, 2, 1, 3, 0.1],
-	#[1, 1, 1, 2, 1, 3, 3],
-	0.5
-].asNotes, ~aprop) => MBM(0);
-
-MIDIRecBuf(\a42, [
-	#[63, 65.01, 66, 65.01, 67, 68, 67, 63],
-	#[1, 1, 1, 1, 1, 3, 1, 0.1],
-	#[1, 1, 1, 1, 1, 3, 1, 3],
-	0.5
+	#[63, 65.01, 67, 68],
+	(temp = #[1, 2, 2, 4] * ({ rrand(2.0, 4.2) } ! 3); temp2 = temp.copy.put(3, 0.1)),
+	temp, 0.5
 ].asNotes, ~aprop) => MBM(0);
 
 MIDIRecBuf(\t4, [
-	#[60, 58, 56, 58, 63, 63, 61, 60],
-	#[1, 1, 1, 1, 1, 2, 2, 0.1],
-	#[1, 1, 1, 1, 1, 2, 2, 3],
+	#[60, 58, 56],
+	[temp2[0], temp2[1] + temp2[2], temp2[3]],
+	[temp[0], temp[1] + temp[2], temp[3]],
 	0.5
 ].asNotes, ~tprop) => MBM(0);
 
-MIDIRecBuf(\b4, [
-	#[44, 49.01, 48, 46, 44, 51, 44],
-	#[1, 1, 1, 2, 1, 3, 0.1],
-	#[1, 1, 1, 2, 1, 3, 3],
-	0.5
-].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
-
-
-MBM(0)[\a41].copy.name_(\a51) => MBM(0);
-MBM(0)[\a51].notes.last.length_(8);
-
-MIDIRecBuf(\a52, [
-	#[r, 63, 65, 67, 68, 66, 65.01, 65, 63, 61, 60],
-	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 0.1],
-	#[2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 5],
+MIDIRecBuf(\a42, [
+	#[63, 61.01, [61.01, 63], [60, 63]],
+	[temp2[0], temp2[1], temp2[2], temp2[3]],
+	[temp[0], temp[1], temp[2], temp[3]],
 	0.5
 ].asNotes, ~aprop) => MBM(0);
 
-MIDIRecBuf(\t5, [
-	#[r, 63, 61, 60, 58, 61, 56, 63],
-	#[5, 1, 1, 1, 1, 1, 2, 0.1],
-	#[5, 1, 1, 1, 1, 1, 2, 5],
-	0.5
-].asNotes, ~tprop) => MBM(0);
-
-MIDIRecBuf(\b5, [
-	#[r, 44, 46, 48, 49.01, 49, 48, 46, 44],
-	#[5, 1, 1, 1, 1, 1, 1, 1, 0.1],
-	#[5, 1, 1, 1, 1, 1, 1, 1, 5],
+MIDIRecBuf(\b4, [
+	#[r, 51, 44],
+	[temp2[0] + temp2[1], temp2[2], temp2[3]],
+	[temp[0] + temp[1], temp[2], temp[3]],
 	0.5
 ].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
+
+
 
 
 SynthDef(\lpfxfer2, { |inbus, outbus, ffreq = 2000, lpfxAmp = 0.3|
@@ -813,7 +791,13 @@ PR(\abstractProcess).clone {
 	~fxProto = \monoSupport;
 	~vowel = Pclutch(Pxrand(['A', 'E', 'I', 'O', 'U'], inf), Pdiff(Ptime()) > 0);
 
-	~ratios = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4, 3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4];
+	~lpfEnv = {
+		var	up = rrand(0.3, 0.7);
+		Env([200, 14000, 200], [up, 1-up], \exp);
+	};
+
+	~ratios = [1, 4/3 * 4/5, 9/8, 6/5, 5/4, 4/3, 9/8 * 5/4,
+		3/2, 4/3 * 6/5, 4/3 * 5/4, 16/9, 3/2 * 5/4];
 	~tun = CompositeTuning([
 		TuningRatios(12, tunings: ~ratios),
 		TuningRatios(12, tunings: ~ratios.copy.putEach(#[5, 9, 10], [27/20, 27/16, 9/5]))
@@ -854,6 +838,31 @@ PR(\abstractProcess).clone {
 	};
 
 	~asPattern = {
+		var	self = currentEnvironment, resp, pat = ~moreHorribleIndirectionPattern.();
+		(if(~useLpf ? false) { 
+			Pfset({ ~lpfbus = Bus.control(s, 1) },
+				Ptpar([
+					0, pat,
+					0.01, Pfuncn { |ev|
+						(	type: \on, instrument: \ctlEnv, outbus: ev[\lpfbus],
+							time: self[\phraseDur] + self[\relStream].next(ev),
+							connect: 0, env: self.lpfEnv,
+							group: self.chan.synthgroup,
+							callback: { |event|
+								resp = OSCpathResponder(s.addr, ['/n_end', event[\id][0]], {
+									ev[\lpfbus].free; resp.remove;
+								}).add
+							},
+							delta: 0
+						).parent_(nil)  // force default parent event
+					},  // else nil
+				])
+			)
+		} { pat });
+	};
+
+	// I wish I had time to refactor this... but, it stays.
+	~moreHorribleIndirectionPattern = {
 		~fxStream ?? { ~makeStreamForKey.(\fx) };
 		~lpfxferFreqStream ?? { ~makeStreamForKey.(\lpfxferFreq) };
 		~lpfxferAmpStream ?? { ~makeStreamForKey.(\lpfxferAmp) };
@@ -894,7 +903,7 @@ PR(\abstractProcess).clone {
 								fxPat, lockref;
 							fxPat = ~fxPool[ev[\fxKey]].(ev);
 							Pseq([
-								Pn(~xferEvent.(ev, fspecs, lockref = `nil), 1),
+								Pn(~xferEvent.(ev, fspecs, lockref = `nil, key), 1),
 								if(fxPat.notNil) {
 									Pfindur(ev[\sustain],
 										fxPat <> Pbind(\protoEvent, \singleSynthPlayNotify,
@@ -908,7 +917,11 @@ PR(\abstractProcess).clone {
 		)
 	};
 
-	~notePattern = { |currentKey| MBM(0)[currentKey].asPattern };
+	~notePattern = { |currentKey|
+		var	mb = MBM(0)[currentKey];
+		~phraseDur = mb.lengths.sum;
+		mb.asPattern
+	};
 	~vocKey = { |currentKey|
 		var	prefix = MBM(0)[currentKey].properties[\voice];
 		~vowelStream.collect { |vowel| (prefix ++ vowel).asSymbol }
@@ -931,10 +944,10 @@ PR(\abstractProcess).clone {
 		ev
 	};
 
-	~xferEvent = { |ev, fspecs, lockref|
+	~xferEvent = { |ev, fspecs, lockref, key|
 		(
 			protoEvent: \singleSynthPlayNotify,
-			instrument: ~evalEnvir.(\xferKey),
+			instrument: ~xferKey.(key), //~evalEnvir.(\xferKey),
 			ffreq: ~lpfxferFreqStream.next(ev),
 			lpfxAmp: ~lpfxferAmpStream.next(ev),
 			ffreqs: fspecs[0],
@@ -946,7 +959,8 @@ PR(\abstractProcess).clone {
 			notifyDependents: {
 				lockref.value = ~lock;
 				~lock.killNodes = ~lock.killNodes.add(~node);
-			}
+			},
+			lpfreq: ev[\lpfbus] !? { ev[\lpfbus].asMap }
 		)
 	};
 } => PR(\counterpoint);
@@ -965,6 +979,7 @@ PR(\counterpoint).clone {
 	~freeCleanup = 0;
 
 	~fx = \vowelChange;
+	~useLpf = true;
 
 	~fxPool = (
 		vowelChange: { |ev|
@@ -999,52 +1014,26 @@ PR(\counterpoint).clone {
 		Pwhite(0.4, 1.0, inf)
 	);
 
-	~lpfEnv = {
-		var	up = rrand(0.3, 0.7);
-		Env([200, 14000, 200], [up, 1-up], \exp);
-	};
-
-	~superPattern = ~asPattern;
-	~asPattern = {
-		var	self = currentEnvironment, resp;
-		Pfset({ ~lpfbus = Bus.control(s, 1) },
-			Ptpar([
-				0, ~superPattern.(),
-				0.01, Pfuncn { |ev|
-					(	type: \on, instrument: \ctlEnv, outbus: ev[\lpfbus],
-						time: self[\phraseDur] + self[\relStream].next(ev),
-						connect: 0, env: self.lpfEnv,
-						group: self.chan.synthgroup,
-						callback: { |event|
-							resp = OSCpathResponder(s.addr, ['/n_end', event[\id][0]], {
-								ev[\lpfbus].free; resp.remove;
-							}).add
-						},
-						delta: 0
-					).parent_(nil)  // force default parent event
-				},
-			])//,
-//			{	(e { ~lpfbus.free }).defer(5.0) }
-		)
-	};
-
 	// important: must output SequenceNotes
 	~notePattern = { //|p5, sharp, shortFirst|
 		// 61.01 is needed for Bb/Db and Bb/Gb
 		// .01 has no effect on D-nat or G-nat (already tuned pure against Bb)
-		var	freqs = if(~oneNoteStream.next) { #[[56, 63]] } {
-				[
-					#[56, 58, 56],
+		var	freqs = if(~oneNoteStream.next) { #[[56], [63]] } {
+				[	#[56, 58, 56],
 					[63, 61.01 + ~sharpStream.next.binaryValue, 63]
-						+ (5 * ~p5Stream.next.not.binaryValue)
-				].flop
+				]
 			},
-			fsize = freqs.size,
+			fsize = freqs[0].size,
 			durs = { ~durStream.next(fsize) } ! fsize, notes;
+
+//		if(~p5Stream.next.not) { freqs = freqs.copy.put(1, freqs[1] + 5) };
+		switch(~p5Stream.next)
+			{ 0 } { freqs = freqs.copy.put(1, freqs[1] + 5) }
+			{ 2 } { freqs = freqs.add(freqs[1] + 5) };
 
 		if(~shortFirstStream.next) { durs[0] = ~shortDurStream.next(fsize) };
 		~phraseDur = durs.sum;	// BAD HACK
-		notes = freqs.collect { |f, i|
+		notes = freqs.flop.collect { |f, i|
 			SequenceNote(f, durs[i], durs[i] * ~legatoStream.next, ~gateStream.next(fsize))
 		};
 		notes.last.dur_(0.1);
@@ -1058,10 +1047,10 @@ PR(\counterpoint).clone {
 	};
 	~xferKey = \formantXfer2;
 
-	~superXferEvent = ~xferEvent;
-	~xferEvent = { |ev, fspecs, lockref|
-		~superXferEvent.(ev, fspecs, lockref).put(\lpfreq, ev[\lpfbus].asMap)
-	};
+// 	~superXferEvent = ~xferEvent;
+// 	~xferEvent = { |ev, fspecs, lockref|
+// 		~superXferEvent.(ev, fspecs, lockref).put(\lpfreq, ev[\lpfbus].asMap)
+// 	};
 } => PR(\cadences);
 
 
