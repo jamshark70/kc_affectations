@@ -710,6 +710,16 @@ MIDIRecBuf(\t4, [
 ].asNotes, ~tprop) => MBM(0);
 
 MIDIRecBuf(\a42, [
+// 	#[63, 61.01, [61.01, 63], [60, 63]],
+// 	[temp2[0], temp2[1], temp2[2], temp2[3]],
+// 	[temp[0], temp[1], temp[2], temp[3]],
+	#[63, 61.01, 60],
+	[temp2[0], temp2[1] + temp2[2], temp2[3]],
+	[temp[0], temp[1] + temp[2], temp[3]],
+	0.5
+].asNotes, ~aprop) => MBM(0);
+
+MIDIRecBuf(\a42b, [
 	#[63, 61.01, [61.01, 63], [60, 63]],
 	[temp2[0], temp2[1], temp2[2], temp2[3]],
 	[temp[0], temp[1], temp[2], temp[3]],
@@ -717,9 +727,10 @@ MIDIRecBuf(\a42, [
 ].asNotes, ~aprop) => MBM(0);
 
 MIDIRecBuf(\b4, [
-	#[r, 51, 44],
-	[temp2[0] + temp2[1], temp2[2], temp2[3]],
-	[temp[0] + temp[1], temp[2], temp[3]],
+	#[r, r, 51, 44],
+// 	[temp2[0] + temp2[1], temp2[2], temp2[3]],
+// 	[temp[0] + temp[1], temp[2], temp[3]],
+	temp2, temp,
 	0.5
 ].asNotes, (type: \c, voice: \bass, xfer: \lpfxfer2)) => MBM(0);
 
@@ -919,8 +930,11 @@ PR(\abstractProcess).clone {
 
 	~notePattern = { |currentKey|
 		var	mb = MBM(0)[currentKey];
-		~phraseDur = mb.lengths.sum;
-		mb.asPattern
+		mb = mb.asPattern;
+		if(~filterNotePat.notNil) { mb = ~filterNotePat.(mb) };
+		~phraseDur = 0;
+		mb.do { |note| ~phraseDur = ~phraseDur + note.length };
+		mb
 	};
 	~vocKey = { |currentKey|
 		var	prefix = MBM(0)[currentKey].properties[\voice];
@@ -974,7 +988,7 @@ PR(\counterpoint).clone {
 			Error("BP(%) must be created first".format(~parentBP.asCompileString)).throw;
 		};
 		~importKeys.do { |key| key.envirPut(BP(~parentBP)[key]) };
-		~parmKeys.do { |key| ~makeStreamForKey.(key) };
+		~reset.();
 	};
 	~freeCleanup = 0;
 
@@ -1029,7 +1043,7 @@ PR(\counterpoint).clone {
 //		if(~p5Stream.next.not) { freqs = freqs.copy.put(1, freqs[1] + 5) };
 		switch(~p5Stream.next)
 			{ 0 } { freqs = freqs.copy.put(1, freqs[1] + 5) }
-			{ 2 } { freqs = freqs.add(freqs[1] + 5) };
+			{ 2 } { freqs = freqs.copy.add(freqs[1] + 5) };
 
 		if(~shortFirstStream.next) { durs[0] = ~shortDurStream.next(fsize) };
 		~phraseDur = durs.sum;	// BAD HACK
@@ -1047,10 +1061,8 @@ PR(\counterpoint).clone {
 	};
 	~xferKey = \formantXfer2;
 
-// 	~superXferEvent = ~xferEvent;
-// 	~xferEvent = { |ev, fspecs, lockref|
-// 		~superXferEvent.(ev, fspecs, lockref).put(\lpfreq, ev[\lpfbus].asMap)
-// 	};
+	// behaves badly if parms are not reset too
+	~reset = { ~parmKeys.do { |key| ~makeStreamForKey.(key) } };
 } => PR(\cadences);
 
 
