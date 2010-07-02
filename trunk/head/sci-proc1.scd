@@ -694,6 +694,8 @@ BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
 
 ~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-chorus.aiff");
 
+BP.all.do { |bp| bp.printStopMsg = false };
+
 // choral with drone
 (
 t = TLSequenceIterator([
@@ -716,9 +718,10 @@ t = TLSequenceIterator([
 		p.oneNote_(false);
 	}),
 	\cmdSync,
-	10, //{ rrand(6.0, 14.0) },
+	7, //{ rrand(6.0, 14.0) },
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.useLpf = false;
 		p.seqKeys = #[t2];
 		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 		p.att_(0.7).rel_(0.9).dec_(1.2);
@@ -746,6 +749,7 @@ t = TLSequenceIterator([
 	{ rrand(8.0, 12.0) },
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 		p.seqKeys = #[t3, a31, a32];
 	}),
 	\cmdSync,
@@ -764,10 +768,30 @@ t = TLSequenceIterator([
 	2,
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
-//		p.seqKeys = #[t2, a2d1, a2d2];
-		p.seqKeys = #[t3, a31, a32];
+		p.filterNotePat = { |pat|
+			Pfin(pat.estimateLength - 1, pat)
+		};
+		p.seqKeys = #[t4, a41, a42];
 		p.tempoPat = 1;
 		p.useLpf = true;
+	}),
+	\cmdSync,
+	{ rrand(1.0, 2.5) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.tempoPat = 2.5;
+		p.filterNotePat = { |pat|
+			Pfin(pat.estimateLength - 1, pat).drop(1)
+		};
+	}),
+	\cmdSync,
+	{ rrand(1.0, 2.5) },
+
+	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.tempoPat = 1.2;
+		p.filterNotePat = { |pat|
+			pat.drop(pat.estimateLength - 1)
+		};
 	}),
 	\cmdSync,
 
@@ -816,4 +840,4 @@ t = TLSequenceIterator([
 
 t.stop
 
-BP(\cd).p5_(false).sharp_(false).shortFirst_(false).oneNote_(true);
+BP(\cd).p5_(2).sharp_(true).shortFirst_(true).oneNote_(false);
