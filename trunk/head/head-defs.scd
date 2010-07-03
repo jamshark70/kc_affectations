@@ -790,9 +790,10 @@ PR(\abstractProcess).clone {
 	~lpfxferAmp = 0.3;
 
 	~prep = {
-		~chan = MixerChannel(~collIndex, s, 2, 2, completionFunc: { |chan|
-			~chorus = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.036937527208376, 0.11364637357074, 0.0062137993811117, 0.69813170599922, 0.82540422302882]);
-		});
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master ?? { topEnvironment[\master] },
+			completionFunc: { |chan|
+				~chorus = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.036937527208376, 0.11364637357074, 0.0062137993811117, 0.69813170599922, 0.82540422302882]);
+			});
 
 		~def = WrapPatch("analog.sawB", [nil, nil, nil, `18000, 0.8])
 			.asSynthDef.add;
