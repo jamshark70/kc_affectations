@@ -582,7 +582,7 @@ PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
 Fact(\formantfx1) => BP(\fmt);
 
 BP(\cpt).free;
-PR(\counterpoint) => BP(\cpt);
+PR(\counterpoint).chuck(BP(\cpt), nil, (master: ~master));
 0 => BP(\cpt);
 
 BP(\cd).free;
@@ -696,6 +696,11 @@ BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
 
 BP.all.do { |bp| bp.printStopMsg = false };
 
+~clock60 = TempoClock(tempo: 1, queueSize: 1024);
+~clock60 => BP(\int);
+
+p = BP(\cpt);
+
 // choral with drone
 (
 t = TLSequenceIterator([
@@ -721,6 +726,7 @@ t = TLSequenceIterator([
 	7, //{ rrand(6.0, 14.0) },
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
+		p.filterNotePat = nil;
 		p.useLpf = false;
 		p.seqKeys = #[t2];
 		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
@@ -760,6 +766,37 @@ t = TLSequenceIterator([
 	}),
 	\cmdSync,
 	{ rrand(8.0, 12.0) },
+
+	[	{ rrand(4.0, 8.0) },
+		loopCmd: (
+			repeats: 3,
+			setDoneSignal: {  // init
+				~count = 0;
+				~doneSignal = \ifIDontPutSomethingInHereItWillStopImmediately;
+			},
+			cmds: [
+				{ rrand(3.0, 9.0) },
+				{	~bpDur = rrand(7.0, 11.0);
+					PR(\bpCmd).copy.putAll((name: \int, dur: ~bpDur))
+				},
+				{	var	up = rrand(0.1, 0.3);
+					PR(\mixerAutoSynthCmd).copy.putAll((
+						mixer: BP(\int).chan, name: \ctlEnv, outName: \outbus,
+						connect: 0, time: ~bpDur, env: Env(#[0.1, 0.7, 0.1], [up, 1-up], \exp)
+					))
+				},
+				{	(if((~count = ~count + 1) < ~repeats) { ~bpDur }
+					{ ~doneSignal = nil })
+				}
+			]
+		),
+		\cmdSync,
+		bpCmd: (name: \int),
+		mixerAutoSynthCmd: (
+			mixer: BP(\int).chan, name: \ctlPoint, outName: \outbus,
+			value: 0.75, time: 1.0, curve: 2.1
+		)
+	],
 
 	bpCmd: (name: \cpt, prepareBP: { |p|
 		p.seqKeys = #[t2, a2d1, a2d2];
@@ -841,3 +878,6 @@ t = TLSequenceIterator([
 t.stop
 
 BP(\cd).p5_(2).sharp_(true).shortFirst_(true).oneNote_(false);
+
+BP(\int).clock.gui;
+
