@@ -181,6 +181,7 @@ NotificationCenter.registerOneShot(\t1, \ready, \ctor, {
 	Fact(\copyBufPerc).chuck(BP(\t2), nil, (
 		parms: (
 			baseIndices: #[2, 6],
+			baseAmp: 1,
 			rates: #[1.25]
 // 			bases: [
 // 				zero.copy,
@@ -270,6 +271,7 @@ BP(\f1).bar = 15;
 
 
 (
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
 	Quant(3, -0.5),
 	bpCmd: (name: \t1, quant: `nil, prepareBP: { |bp|
@@ -285,7 +287,7 @@ t = TLSequenceIterator([
 		bp.bar = Prand(#[8, 2], inf);
 	}),
 	mixerAutoSynthCmd: (mixer: BP(\f1).chan, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[0, 1], #[18], 2.4)),
+		connect: 0, env: Env(#[0, 0.75], #[18], 2.4)),
 
 	{	BP(\t1).bar = Pseq([3, Prand(BP(\t1).indices[1], 1)], inf);
 		12
@@ -316,7 +318,9 @@ t = TLSequenceIterator([
 		48
 	},
 
-	funcCmd: (func: { ~iterator.stop })
+// 	funcCmd: (func: { ~iterator.stop })
+	{ BP.all.stop; 3 },
+	{ ~master.stopRecord; 0 }
 ]).play;
 )
 
@@ -355,3 +359,4 @@ BP(\f1).bases.do { |row|
 s.queryAllNodes;
 
 [bufnum: BP(\t1).buffers[0], frames: BP(\t1).buffers[0].numFrames].asOSCArgArray
+BP.all.free
