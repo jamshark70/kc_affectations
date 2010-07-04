@@ -51,11 +51,6 @@ MixingBoard.at(0).refresh;
 
 
 
-TempoClock.default.gui;
-TempoClock.tempo = 108/60;
-
-TempoClock.schedAbs(TempoClock.nextBar, { TempoClock.beatsPerBar = 3 });
-
 PR(\bufPerc).v[\beatsPerBar].postcs
 
 (
@@ -127,6 +122,13 @@ make: { |name|
 }, type: \bp) => Fact(\copyBufPerc);
 )
 
+
+
+TempoClock.default.gui;
+TempoClock.tempo = 108/60;
+
+TempoClock.schedAbs(TempoClock.nextBar, { TempoClock.beatsPerBar = 3 });
+
 (
 //var	zero = 0 ! 12;
 BP(\t1).free;
@@ -138,6 +140,7 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 // 		zero.copy.put(8, 1)
 // 	],
 	baseIndices: #[0, 8],
+	baseAmp: 1,
 	postMCCreation: {
 		var	zero = 0 ! 12, temp;
 		~pbindPreAction = Routine(~calcBar);
@@ -145,7 +148,7 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 			temp = zero.copy;
 			~baseIndices.size.do { |j|
 				if((i bitAnd: (1 << j)) > 0) {
-					temp.put(~baseIndices[j], 1)
+					temp.put(~baseIndices[j], ~baseAmp)
 				};
 			};
 			temp
@@ -163,7 +166,7 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 	calcBar: {
 		var	bar = BPStream(\bar, resetSource: true).asStream,
 			count = Pseries(0, 1, inf).asStream;
-		"reset".debug(~collIndex);
+// 		"reset".debug(~collIndex);
 		loop {
 			~amps = ~bases[bar.next];
 			~barHook.(count.next);
@@ -193,7 +196,8 @@ NotificationCenter.registerOneShot(\t1, \ready, \ctor, {
 		barHook: {
 			~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
 		},
-		baseIndices: #[1, 4, 7, 10]
+		baseIndices: #[1, 4, 7, 10],
+		baseAmp: 3.7
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(\t1)[key]) };
 	
@@ -224,6 +228,9 @@ NotificationCenter.registerOneShot(\t1, \ready, \ctor, {
 	BP.keys.asArray.sort.do { |key, i|
 		BP(key).chuck(MT(1), 73 - ~num + i);
 	};
+
+	BP.all.do(_.alwaysReset = true);
+	BP.all.do({ |bp| bp[\reset] = { /*"reset func".debug(~collIndex);*/ ~pbindPreAction.reset } });
 });
 )
 
@@ -245,21 +252,6 @@ BP(#[t1, t2]).do { |bp| bp.bar = Pseq(#[0, 2], inf) };
 BP(\t1).bar = 0; BP(\t2).bar = 2;
 
 
-(
-var	zero = 0 ! 12,
-parms = (
-	bufPaths: "~/sounds/drums/Udu/*FING*".pathMatch,
-	amps: 0,
-	barHook: {
-		~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
-	},
-	baseIndices: #[1, 4, 7, 10]
-);
-#[postMCCreation, calcBar].do { |key| parms.put(key, BP(\t1)[key]) };
-
-BP(\f1).free;
-PR(\bufPerc).chuck(BP(\f1), nil, parms);
-)
 
 BP(\f1).bar = Prand(#[8, 2], inf);
 BP(\f1).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
@@ -275,3 +267,91 @@ BP(\t1).bar = Pseq([3, Prand(BP(\t1).indices[1], 1)], inf);
 BP(\t1).bar = 3;
 BP(\t2).bar = 3;
 BP(\f1).bar = 15;
+
+
+(
+t = TLSequenceIterator([
+	Quant(3, -0.5),
+	bpCmd: (name: \t1, quant: `nil, prepareBP: { |bp|
+		bp.bar = Pseq(#[3, 0], inf);
+	}),
+	12,
+	bpCmd: (name: \t2, quant: `nil, prepareBP: { |bp|
+		bp.bar = Pseq(#[0, 2], inf);
+	}),
+	12,
+
+	bpCmd: (name: \f1, quant: `nil, prepareBP: { |bp|
+		bp.bar = Prand(#[8, 2], inf);
+	}),
+	mixerAutoSynthCmd: (mixer: BP(\f1).chan, name: \ctlEnv, outName: \outbus,
+		connect: 0, env: Env(#[0, 1], #[18], 2.4)),
+
+	{	BP(\t1).bar = Pseq([3, Prand(BP(\t1).indices[1], 1)], inf);
+		12
+	},
+	{	BP(\t2).bar = Prand(BP(\t2).indices[1], inf);
+		12
+	},
+
+	{	BP(\t2).bar = Prand(#[1, 2, 3], inf);
+		12
+	},
+
+	{	BP(\f1).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
+		BP(\t2).bar = 3;
+		12
+	},
+
+	{	BP(\f1).bar = Prand(BP(\f1).indices[2], inf);
+		12
+	},
+
+	{	BP(\f1).bar = Prand(BP(\f1).indices[[2, 3]].flat, inf);
+		BP(\t1).bar = 3;
+		24
+	},
+
+	{	BP(\f1).bar = 15;
+		48
+	},
+
+	funcCmd: (func: { ~iterator.stop })
+]).play;
+)
+
+t.stop;
+
+u = Updater(BP(\t1), { |... args| args.debug("t1 update"); });
+u.remove;
+
+
+	SynthDef(\returnPeak, { |bufnum, start, frames|
+		var	term = Line.ar(0, 1, frames / BufSampleRate.ir(bufnum)),
+			sig = PlayBuf.ar(1, bufnum, rate: BufRateScale.ir(bufnum), startPos: start),
+			peak = Peak.ar(sig),
+			done = Done.kr(term) + Done.kr(sig);
+		SendTrig.kr(done, 0, peak);
+		FreeSelf.kr(done);
+	}).add;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/tr', { |t, r, m| m.postln }).add;
+
+Synth(\returnPeak, [bufnum: BP(\t1).buffers[0], frames: BP(\t1).buffers[0].numFrames]);
+
+fork {
+	BP(\f1).buffers.do { |buf|
+		Synth(\returnPeak, [bufnum: buf, frames: buf.numFrames]);
+		0.1.wait;
+	};
+};
+
+BP(\f1).bases.do { |row|
+	row.do { |item, i| if(item > 0) { row[i] = 3.7 } };
+};
+
+
+s.queryAllNodes;
+
+[bufnum: BP(\t1).buffers[0], frames: BP(\t1).buffers[0].numFrames].asOSCArgArray
