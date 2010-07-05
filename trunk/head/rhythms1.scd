@@ -1,5 +1,8 @@
 // head rhythms
 
+Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
+
+
 SynthDescLib.global.browse;
 Object.browse;
 s.queryAllNodes;
@@ -9,9 +12,6 @@ MIDIPort.autoFreeSockets = false;
 
 MT(1).free;
 MT(1).gui;
-
-Library.put(\chucklib, \midiSearches, #["remote"]);
-BP.loadGui;
 
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
@@ -271,7 +271,7 @@ BP(\f1).bar = 15;
 
 
 (
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
+//~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
 	Quant(3, -0.5),
 	bpCmd: (name: \t1, quant: `nil, prepareBP: { |bp|
@@ -318,9 +318,9 @@ t = TLSequenceIterator([
 		48
 	},
 
-// 	funcCmd: (func: { ~iterator.stop })
-	{ BP.all.stop; 3 },
-	{ ~master.stopRecord; 0 }
+ 	funcCmd: (func: { ~iterator.stop })
+//	{ BP.all.stop; 8 },
+//	{ ~master.stopRecord; 0 }
 ]).play;
 )
 
@@ -360,3 +360,76 @@ s.queryAllNodes;
 
 [bufnum: BP(\t1).buffers[0], frames: BP(\t1).buffers[0].numFrames].asOSCArgArray
 BP.all.free
+
+
+// if using "clay pot" folder samples:
+MultiEQ.new(2, \hipass, 120.682, 0.dbamp, 1)
+
+BP(\t1).buffers[0]
+BP(\f1).buffers[0]
+
+m.scope
+
+(
+var	x;
+n.play((
+	instrument: \bufGrainPan, bufnum: BP(\t1).buffers[0], time: BP(\t1).buffers[0].duration, amp: 1,
+	collIndex: \dummy,
+	lpcEv: (
+		instrument: \formantXfer2, lpfreq: 18000,
+		ffreqs: (x = FormantTable.rand)[0], amps: x[1], qs: x[2],
+		amp: 5
+	)
+).parent_(ProtoEvent(\polySynthBusLock).v.parent));
+)
+
+TempoClock.tempo = 1;
+
+SynthDef(\timedFormantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1, amp = 1, lpfreq = 2000,
+	time = 1|
+	var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
+		amps = NamedControl.kr(\amps, 1 ! 5),
+		qs = NamedControl.kr(\qs, 0.1 ! 5),
+		sig = In.ar(inbus, 1); //,
+//		noise = PinkNoise.ar(noiseAmp * Amplitude.kr(sig));
+	ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
+	sig = LPF.ar(sig, lpfreq);
+	sig = BBandPass.ar(sig /*+ noise*/, ffreqs, qs, amps).sum;
+	Out.ar(outbus, (sig * amp) ! 2);
+	Line.kr(0, 1, time, doneAction: 2);
+}).add;
+
+Pdefn(\ftk, Prand(FormantTable.keys.asArray, inf));
+
+(
+p = n.play(Pbind(*[
+	instrument: \bufGrainPan,
+	bufnum: BP(\t1).buffers[0],
+	time: BP(\t1).buffers[0].duration,
+	amp: 1,
+	collIndex: \dummy,
+	delta: Pwhite(1, 4, inf) * 0.125,
+	lpcEv: Pbind(*[
+		instrument: \timedFormantXfer2, lpfreq: 18000,
+		#[ffreqs, amps, qs], Pnsym(Pdefn(\ftk), FormantTable),
+		amp: 5
+	]) <> Pfunc { |ev| (time: ev[\time] + 0.1) }
+]), (protoEvent: ProtoEvent(/*\singleSynthPlayer*/ \polySynthBusLock).copy));
+)
+
+p.stop;
+
+Pdefn(\ftk, Prand(FormantTable.keys.asArray.select { |key| key.asString.contains("bass") }, inf));
+Pdefn(\ftk, Prand(FormantTable.keys.asArray.select { |key| key.asString.contains("tenor") }, inf));
+Pdefn(\ftk, Prand(FormantTable.keys.asArray.select { |key| key.asString.contains("alto") }, inf));
+Pdefn(\ftk, Prand(FormantTable.keys.asArray.select { |key| key.asString.contains("soprano") }, inf));
+
+
+(x = FormantTable.rand)[0], 
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+n.free
