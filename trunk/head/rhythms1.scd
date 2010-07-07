@@ -1,5 +1,8 @@
 // head rhythms
 
+// fade wet control down
+// make random pitch range part of the variation
+
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
 
@@ -130,15 +133,9 @@ TempoClock.tempo = 108/60;
 TempoClock.schedAbs(TempoClock.nextBar, { TempoClock.beatsPerBar = 3 });
 
 (
-//var	zero = 0 ! 12;
 BP(\t1).free;
 PR(\bufPerc).chuck(BP(\t1), nil, (
 	bufPaths: ["~/sounds/drums/Udu/uduSLAP1.wav".standardizePath],
-// 	bases: [
-// 		zero.copy.putEach(#[0, 8], #[1, 1]),
-// 		zero.copy,
-// 		zero.copy.put(8, 1)
-// 	],
 	baseIndices: #[0, 8],
 	baseAmp: 1,
 	postMCCreation: {
@@ -158,9 +155,23 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 		} ! (~baseIndices.size + 1)		
 	},
 	postBufferLoad: {
+		~chan.newPostSend(~rvbmc, 0.391);
+		~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]);
+		~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]);
+		~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]);
+		~wetCtl = GenericGlobalControl(\wet, nil, 1);
+
+		~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
+		~argPairs = [
+			ffreq: BPStream(\ffreq),
+			fdec: ~fdecCtl, 
+			wet: ~wetCtl.asMap
+		];
 		// sibling processes may not init until I'm done
 		NotificationCenter.notify(\t1, \ready);
 	},
+	useGui: { |vpi| #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl].do { |key| key.envirGet => VP(vpi) } },
+	free: { [~fdecCtl, ~ffLowCtl, ~ffRangeCtl, ~wetCtl].free },
 	amps: 0,
 	bar: Pseq(#[0, 1], inf),
 	calcBar: {
@@ -172,22 +183,33 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 			~barHook.(count.next);
 			0.yield;
 		}
-	}
+	},
+	barHook: {
+		~rates = #[0.5, 0.6];
+		if (~amps[0] == 0) { ~rates.rotate(-1) }
+		{ ~rates };
+	},
+
+	def: \bufGrainPanFmlet
 ));
 
 NotificationCenter.registerOneShot(\t1, \ready, \ctor, {
 	var	parms;
 
 	Fact(\copyBufPerc).chuck(BP(\t2), nil, (
+		copyKeys: Fact(\copyBufPerc).copyKeys ++ #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, def],
 		parms: (
 			baseIndices: #[2, 6],
 			baseAmp: 1,
-			rates: #[1.25]
-// 			bases: [
-// 				zero.copy,
-// 				zero.copy.put(6, 1),
-// 				zero.copy.putEach(#[2, 6], 1)
-// 			]
+			rates: #[1.25],
+			postBufferLoad: {
+				~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
+				~argPairs = [
+					ffreq: BPStream(\ffreq),
+					fdec: ~fdecCtl,
+					wet: ~wetCtl.asMap
+				];
+			}	
 		)
 	));
 
@@ -204,26 +226,6 @@ NotificationCenter.registerOneShot(\t1, \ready, \ctor, {
 	
 	BP(\f1).free;
 	PR(\bufPerc).chuck(BP(\f1), nil, parms);
-
-/*
-	Fact(\copyBufPerc).chuck(BP(\t2), nil, (
-		parms: (
-			bases: [
-				zero.copy,
-				zero.copy.put(6, 1)
-			]
-		)
-	));
-
-	Fact(\copyBufPerc).chuck(BP(\t2), nil, (
-		parms: (
-			bases: [
-				zero.copy,
-				zero.copy.put(6, 1)
-			]
-		)
-	));
-*/
 
 	~num = BP.keys.size;
 	BP.keys.asArray.sort.do { |key, i|
@@ -276,8 +278,14 @@ t = TLSequenceIterator([
 	Quant(3, -0.5),
 	bpCmd: (name: \t1, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[3, 0], inf);
+		bp.wetCtl.value = 0.98;
+		bp.fdecCtl.value = 0.25;
+		bp.ffLowCtl.value = 2;
+		bp.ffRangeCtl.value = 0;
 	}),
 	12,
+	gcAutoSynthCmd: (gc: BP(\t1).fdecCtl, name: \ctlPoint, outName: \outbus, 
+		value: 0.012, time: 30, curve: 2),
 	bpCmd: (name: \t2, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[0, 2], inf);
 	}),
@@ -385,7 +393,7 @@ n.play((
 
 TempoClock.tempo = 1;
 
-SynthDef(\timedFormantXfer2, { |inbus, outbus, t_trig = 0, slideTime = 1, amp = 1, lpfreq = 2000,
+SynthDef(\timedFormantXfer2, { |inbus, outbus, t_trig = 0\bufGrainPanFmlet, slideTime = 1, amp = 1, lpfreq = 2000,
 	time = 1|
 	var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
 		amps = NamedControl.kr(\amps, 1 ! 5),
@@ -433,3 +441,62 @@ o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
 
 n.free
+
+BP(\t1).rates = [0.5, 0.6];
+
+Instr.at(\busfx).keys
+MultiEQ.new(2, \hipass, 91, 0.dbamp, 1).edit(BP(\t1).chan)
+
+Instr("busfx.formlet", { |bus, numCh, ffreq = 2000, atk = 0.1, dec = 0.2|
+	var sig = In.ar(bus, numCh);
+	sig = Formlet.ar(sig, ffreq, atk, dec);
+	Limiter.ar(sig);
+}, [\mybus, StaticSpec(1, 8), \freq, #[0.01, 1.0, exp], #[0.01, 1.0, exp]]);
+
+a = BP(\t1).chan.playfx(Instr("busfx.formlet"), [0, 1]);
+a.gui
+
+FxPatch(
+	[ 'busfx', 'formlet' ], [ 24, 1, 104.0, 0.01, 0.26101569768623 ]
+)
+
+
+32.midicps
+
+SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus,
+		ffreq = 2000, fatk = 0.01, fdec = 0.1, wet = 1|
+	var sig, sig2, eg;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
+	eg = EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	sig2 = Limiter.ar(Formlet.ar(sig, ffreq, fatk, fdec));
+	sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * eg));
+}).perform(Library.at(\ddwGlobal, \storeMethod), \ddwSynths);
+
+BP(\t1).def = \bufGrainPanFmlet;
+BP(\t2).def = \bufGrainPanFmlet;
+
+BP(\t1).argPairs = [ffreq: 52 * Pwhite(2, 32), fdec: 0.5];
+
+BP(\t1).use {
+	~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]);
+	~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]);
+	~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[1, 32, \lin, 1]);
+	~useGui = { |vpi| #[fdecCtl, ffLowCtl, ffRangeCtl].do { |key| key.envirGet => VP(vpi) } };
+	~free = { [~fdecCtl, ~ffLowCtl, ~ffRangeCtl].free };
+};
+
+BP(\t1).use {
+	~argPairs = [
+		ffreq: 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc, 
+		fdec: ~fdecCtl
+	];
+};
+
+BP(\t1).barHook = {
+	~rates = #[0.5, 0.6];
+	if (~amps[0] == 0) { ~rates.rotate(-1) }
+	{ ~rates };
+};
+
