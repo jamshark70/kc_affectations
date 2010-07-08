@@ -1222,8 +1222,8 @@ makeBP: { |name|
 			}	
 		)
 	));
-	BP(name).dump;
-	BP(name).v.tryPerform(\listVars);
+// 	BP(name).dump;
+// 	BP(name).v.tryPerform(\listVars);
 	~clock108 => BP(name);
 }, type: \bp) => Fact(\drum2);
 
