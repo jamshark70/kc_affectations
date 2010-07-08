@@ -1,6 +1,11 @@
 
 var	temp, temp2;
 
+~clock108 ?? {
+	~clock108 = TempoClock(108/60).permanent_(true);
+	~clock108.schedAbs(~clock108.nextBar, { ~clock108.beatsPerBar = 3 });
+};
+
 if(Mode.exists(\c).not) {
 	#[c, db, d, eb, e, f, gb, g, ab, a, bb, b].do { |key, i|
 		Mode(\default).v.copy.root_(i) => Mode(key);
@@ -1075,3 +1080,173 @@ PR(\counterpoint).clone {
 } => PR(\cadences);
 
 
+SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
+		attack = 0.001, decay = 0.02, outbus,
+		ffreq = 2000, fatk = 0.01, fdec = 0.1, wet = 1|
+	var sig, sig2, eg;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
+	eg = EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	sig2 = Limiter.ar(Formlet.ar(sig, ffreq, fatk, fdec));
+	sig = LPF.ar(sig, wet.linexp(0, 1, 18000, ffreq));
+	sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * eg));
+}).add;
+
+
+(keys: #[master, rvbmc],
+copyKeys: #[buffers, chan, postMCCreation, calcBar, bar, amps],  // you can override this
+sourceFreesMe: true,
+bp: \t1,
+make: { |name|
+	var	parms = ~parms ?? { () }, upd;
+	BP(name).free;
+	~keys.do { |key| parms[key] ?? { parms.put(key, key.envirGet) } };
+	~copyKeys.do { |key| parms[key] ?? { parms.put(key, BP(~bp)[key]) } };
+	PR(\bufPerc).chuck(BP(name), nil, parms);
+	// copies have to go away because they depend on the source's buffers, mixer etc.
+	if(~sourceFreesMe ? true) {
+		upd = Updater(BP(~bp), { |obj, what|
+			if(what == \free) {
+				upd.remove;
+				BP(name).free;
+			}
+		});
+	};
+	BP(name)
+}, type: \bp) => Fact(\copyBufPerc);
+
+
+(
+keys: #[master, rvbmc, clock108],
+make: { |name|
+	BP(name).free;
+	PR(\bufPerc).chuck(BP(name), nil, (
+		master: ~master, rvbmc: ~rvbmc,
+		alwaysReset: true,
+		reset: { ~pbindPreAction.reset },
+		bufPaths: ["~/sounds/drums/Udu/uduSLAP1.wav".standardizePath],
+		baseIndices: #[0, 8],
+		baseAmp: 1,
+		postMCCreation: {
+			var	zero = 0 ! 12, temp;
+			~pbindPreAction = Routine(~calcBar);
+			~bases = { |i|
+				temp = zero.copy;
+				~baseIndices.size.do { |j|
+					if((i bitAnd: (1 << j)) > 0) {
+						temp.put(~baseIndices[j], ~baseAmp)
+					};
+				};
+				temp
+			} ! (1 << ~baseIndices.size);
+			~indices = { |num|
+				~bases.collectIndices({ |array| array.count(_ > 0) == num });
+			} ! (~baseIndices.size + 1)		
+		},
+		postBufferLoad: {
+			~chan.newPostSend(~rvbmc, 0.391);
+			~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]);
+			~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]);
+			~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]);
+			~wetCtl = GenericGlobalControl(\wet, nil, 1);
+
+			~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
+			~argPairs = [
+				ffreq: BPStream(\ffreq),
+				fdec: ~fdecCtl, 
+				wet: ~wetCtl.asMap
+			];
+			// sibling processes may not init until I'm done
+			NotificationCenter.notify(name, \ready);
+		},
+		useGui: { |vpi| #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl].do { |key| key.envirGet => VP(vpi) } },
+		free: { [~fdecCtl, ~ffLowCtl, ~ffRangeCtl, ~wetCtl].free },
+		amps: 0,
+		bar: Pseq(#[0, 1], inf),
+		calcBar: {
+			var	bar = BPStream(\bar, resetSource: true).asStream,
+			count = Pseries(0, 1, inf).asStream;
+			// 		"reset".debug(~collIndex);
+			loop {
+				~amps = ~bases[bar.next];
+				~barHook.(count.next);
+				0.yield;
+			}
+		},
+		barHook: {
+			~rates = #[0.5, 0.6];
+			if (~amps[0] == 0) { ~rates.rotate(-1) }
+			{ ~rates };
+		},
+
+		def: \bufGrainPanFmlet
+	));
+	~clock108 => BP(name);
+}, type: \bp) => Fact(\drum1);
+
+(
+keys: #[master, rvbmc, clock108],
+source: \t1,
+make: { |name|
+	BP(name).free;
+	if (BP.exists(~source)) {
+		if (BP(~source)[\argPairs].notNil) {
+			~makeBP.(name);
+		} {
+			NotificationCenter.registerOneShot(~source, \ready, name, e {
+				~makeBP.(name);
+			});
+			BP(name)
+		}
+	} {
+		"% not loaded, cannot load %".format(~source, name).warn;
+	}
+},
+makeBP: { |name|
+	Fact(\copyBufPerc).chuck(BP(name), nil, (
+		copyKeys: Fact(\copyBufPerc).copyKeys ++ #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, def],
+		bp: ~source,
+		parms: (
+			alwaysReset: true,
+			reset: { ~pbindPreAction.reset },
+			baseIndices: #[2, 6],
+			baseAmp: 1,
+			rates: #[1.25],
+			postBufferLoad: {
+				~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
+				~argPairs = [
+					ffreq: BPStream(\ffreq),
+					fdec: ~fdecCtl,
+					wet: ~wetCtl.asMap
+				];
+			}	
+		)
+	));
+	BP(name).dump;
+	BP(name).v.tryPerform(\listVars);
+	~clock108 => BP(name);
+}, type: \bp) => Fact(\drum2);
+
+(
+keys: #[master, rvbmc, clock108],
+source: \t1,
+make: Fact(\drum2).v[\make],
+makeBP: { |name|
+	var parms;
+	BP(name).free;
+	parms = (
+		alwaysReset: true,
+		reset: { ~pbindPreAction.reset },
+		bufPaths: "~/sounds/drums/Udu/*FING*".pathMatch,
+		amps: 0,
+		barHook: {
+			~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
+		},
+		baseIndices: #[1, 4, 7, 10],
+		baseAmp: 3.7
+	);
+	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
+	
+	PR(\bufPerc).chuck(BP(name), nil, parms);
+	~clock108 => BP(name);
+}, type: \bp) => Fact(\drum3);
