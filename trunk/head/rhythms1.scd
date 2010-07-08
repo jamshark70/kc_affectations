@@ -1,7 +1,7 @@
 // head rhythms
 
-// fade wet control down
 // make random pitch range part of the variation
+// drum3: bufGrainRLPF
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
@@ -284,8 +284,8 @@ t = TLSequenceIterator([
 		bp.ffRangeCtl.value = 0;
 	}),
 	12,
-	gcAutoSynthCmd: (gc: BP(\drum1).fdecCtl, name: \ctlPoint, outName: \outbus, 
-		value: 0.012, time: 30, curve: 2),
+	gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
+		value: 0, time: 30, curve: 0),
 	bpCmd: (name: \drum2, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[0, 2], inf);
 	}),
