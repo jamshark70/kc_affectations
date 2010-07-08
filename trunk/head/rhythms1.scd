@@ -276,7 +276,7 @@ BP(\f1).bar = 15;
 //~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
 	Quant(3, -0.5),
-	bpCmd: (name: \t1, quant: `nil, prepareBP: { |bp|
+	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[3, 0], inf);
 		bp.wetCtl.value = 0.98;
 		bp.fdecCtl.value = 0.25;
@@ -284,52 +284,52 @@ t = TLSequenceIterator([
 		bp.ffRangeCtl.value = 0;
 	}),
 	12,
-	gcAutoSynthCmd: (gc: BP(\t1).fdecCtl, name: \ctlPoint, outName: \outbus, 
+	gcAutoSynthCmd: (gc: BP(\drum1).fdecCtl, name: \ctlPoint, outName: \outbus, 
 		value: 0.012, time: 30, curve: 2),
-	bpCmd: (name: \t2, quant: `nil, prepareBP: { |bp|
+	bpCmd: (name: \drum2, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[0, 2], inf);
 	}),
 	12,
 
-	bpCmd: (name: \f1, quant: `nil, prepareBP: { |bp|
+	bpCmd: (name: \drum3, quant: `nil, prepareBP: { |bp|
 		bp.bar = Prand(#[8, 2], inf);
 	}),
-	mixerAutoSynthCmd: (mixer: BP(\f1).chan, name: \ctlEnv, outName: \outbus,
+	mixerAutoSynthCmd: (mixer: BP(\drum3).chan, name: \ctlEnv, outName: \outbus,
 		connect: 0, env: Env(#[0, 0.75], #[18], 2.4)),
 
-	{	BP(\t1).bar = Pseq([3, Prand(BP(\t1).indices[1], 1)], inf);
+	{	BP(\drum1).bar = Pseq([3, Prand(BP(\drum1).indices[1], 1)], inf);
 		12
 	},
-	{	BP(\t2).bar = Prand(BP(\t2).indices[1], inf);
-		12
-	},
-
-	{	BP(\t2).bar = Prand(#[1, 2, 3], inf);
+	{	BP(\drum2).bar = Prand(BP(\drum2).indices[1], inf);
 		12
 	},
 
-	{	BP(\f1).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
-		BP(\t2).bar = 3;
+	{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
 		12
 	},
 
-	{	BP(\f1).bar = Prand(BP(\f1).indices[2], inf);
+	{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
+		BP(\drum2).bar = 3;
 		12
 	},
 
-	{	BP(\f1).bar = Prand(BP(\f1).indices[[2, 3]].flat, inf);
-		BP(\t1).bar = 3;
+	{	BP(\drum3).bar = Prand(BP(\drum3).indices[2], inf);
+		12
+	},
+
+	{	BP(\drum3).bar = Prand(BP(\drum3).indices[[2, 3]].flat, inf);
+		BP(\drum1).bar = 3;
 		24
 	},
 
-	{	BP(\f1).bar = 15;
+	{	BP(\drum3).bar = 15;
 		48
 	},
 
  	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
 //	{ ~master.stopRecord; 0 }
-]).play;
+]).play(argClock: ~clock108 ? TempoClock.default);
 )
 
 t.stop;
@@ -470,6 +470,7 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
 	eg = EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
 	sig2 = Limiter.ar(Formlet.ar(sig, ffreq, fatk, fdec));
+	sig = LPF.ar(sig, wet.linexp(0, 1, 18000, ffreq));
 	sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
 	Out.ar(outbus, Pan2.ar(sig, pan, amp * eg));
 }).perform(Library.at(\ddwGlobal, \storeMethod), \ddwSynths);
@@ -500,3 +501,5 @@ BP(\t1).barHook = {
 	{ ~rates };
 };
 
+(1..3).do { |i| Fact(("drum" ++ i).asSymbol).chuck(BP(("drum" ++ i).asSymbol), nil, (source: \drum1)) };
+Fact(\drum2).chuck(BP(\drum2), nil, (source: \drum1));
