@@ -143,7 +143,7 @@ PR(\bufPerc).chuck(BP(\t1), nil, (
 		~pbindPreAction = Routine(~calcBar);
 		~bases = { |i|
 			temp = zero.copy;
-			~baseIndices.size.do { |j|
+r			~baseIndices.size.do { |j|
 				if((i bitAnd: (1 << j)) > 0) {
 					temp.put(~baseIndices[j], ~baseAmp)
 				};
@@ -275,13 +275,61 @@ BP(\f1).bar = 15;
 (
 //~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
-	Quant(3, -0.5),
-	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
-		bp.bar = Pseq(#[3, 0], inf);
+	{	var	bp = BP(\drum1);
+		bp.bar = 3;
 		bp.wetCtl.value = 0.98;
 		bp.fdecCtl.value = 0.25;
 		bp.ffLowCtl.value = 2;
 		bp.ffRangeCtl.value = 0;
+		0
+	},
+	loopCmd: (
+		setDoneSignal: {
+			~doneSignal = true;
+			defer(e {
+				~window = ResizeFlowWindow("trigger",
+					Rect(Window.screenBounds.width - 200, 50, 200, 100));
+				Button(~window, 90@20)
+					.states_([["go"]])
+					.action_(e {
+						if(BP(\drum1).isPlaying.not) { ~cmd.stop };
+					});
+				Button(~window, 90@20)
+					.states_([["move on"]])
+					.action_(e {
+						currentEnvironment.stop;
+					});
+				~window.recursiveResize.front;
+			})
+		},
+		clearDoneSignal: { defer(e { ~window.close }) },
+		cmds: [
+			{	PR(\funcCmd).copy.putAll((
+					looper: currentEnvironment,
+					func: { ~looper.cmd = currentEnvironment },
+					doneSignal: true
+				))
+			},
+			\cmdSync,
+			{	if (~doneSignal == true) {
+					PR(\bpCmd).copy.putAll((
+						name: \drum1,
+						quant: 1,
+						dur: 2.9
+					))
+				}
+			},
+			\cmdSync
+		]
+	),
+	\sync,
+	Quant(3, -0.5),
+	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
+		bp.bar = Pseq(#[3, 0], inf);
+// 		bp.wetCtl.value = 0.98;
+// 		bp.fdecCtl.value = 0.25;
+// 		bp.ffLowCtl.value = 2;
+// 		bp.ffRangeCtl.value = 0;
 	}),
 	12,
 	gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
