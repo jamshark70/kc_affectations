@@ -1229,7 +1229,7 @@ makeBP: { |name|
 
 (
 keys: #[master, rvbmc, clock108],
-source: \t1,
+source: \drum1,
 make: Fact(\drum2).v[\make],
 makeBP: { |name|
 	var parms;
@@ -1237,13 +1237,19 @@ makeBP: { |name|
 	parms = (
 		alwaysReset: true,
 		reset: { ~pbindPreAction.reset },
+		postBufferLoad: {
+			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
+			~argPairs = [ffreq: ~ffreqCtl.asMap];
+		},
+		free: { ~ffreqCtl.free },
 		bufPaths: "~/sounds/drums/Udu/*FING*".pathMatch,
 		amps: 0,
 		barHook: {
 			~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
 		},
 		baseIndices: #[1, 4, 7, 10],
-		baseAmp: 3.7
+		baseAmp: 3.7,
+		def: \bufGrainPanRLPF
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
 	
