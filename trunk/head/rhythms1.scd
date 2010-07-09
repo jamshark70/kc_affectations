@@ -557,3 +557,46 @@ Fact(\drum2).chuck(BP(\drum2), nil, (source: \drum1));
 
 BP(\drum3).bar = 15;
 BP(\drum3).def = \bufGrainRLPFPan;
+
+(
+(keys: #[master, rvbmc, clock108],
+source: #[drum1, drum3],
+make: { |name|
+	BP(name).free;
+	if(~source.asArray.every { |src| BP.exists(src) }) {
+		if (BP(~source.last)[\argPairs].notNil) {
+			~makeBP.(name);
+		} {
+			NotificationCenter.registerOneShot(~source.last, \ready, name, e {
+				~makeBP.(name);
+			});
+			BP(name)
+		}
+	} {
+		"% not loaded, cannot load %".format(~source, name).warn;
+	}
+},
+makeBP: { |name|
+	BP(name).free;
+	PR(\basicBufferPlayer).chuck(BP(name), nil, (
+		bufPaths: nil,
+		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
+		def: \bufGrainRLPFPan,
+		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
+		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
+		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
+		timeConversion: { |time| time * thisThread.clock.tempo },
+		amp: Pseq(#[1, 3.7], inf),
+		rate: Pseq(#[0.5, 1, 0.6, 1], inf)
+	))
+}, type: \bp) => Fact(\drum4);
+)
+
+Fact(\drum4) => BP(\drum4);
+Fact(\drum4) => BP(\drum5);
+
+BP(#[drum4, drum5]).do { |bp| ~clock108 => bp };
+BP(#[drum4, drum5]).do { |bp| bp.start = 0; };
+
+BP(\drum4).play(-1);
+BP(\drum5).play(#[-1, 1]);
