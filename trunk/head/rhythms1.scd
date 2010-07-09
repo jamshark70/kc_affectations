@@ -285,7 +285,7 @@ t = TLSequenceIterator([
 	}),
 	12,
 	gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
-		value: 0, time: 30, curve: 0),
+		value: 0.078, time: 30, curve: 0),
 	bpCmd: (name: \drum2, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[0, 2], inf);
 	}),
@@ -293,9 +293,12 @@ t = TLSequenceIterator([
 
 	bpCmd: (name: \drum3, quant: `nil, prepareBP: { |bp|
 		bp.bar = Prand(#[8, 2], inf);
+		bp.ffreqCtl.value = 60;
 	}),
 	mixerAutoSynthCmd: (mixer: BP(\drum3).chan, name: \ctlEnv, outName: \outbus,
 		connect: 0, env: Env(#[0, 0.75], #[18], 2.4)),
+	gcAutoSynthCmd: (gc: BP(\drum3).ffreqCtl, name: \ctlPoint, outName: \outbus, 
+		value: 18000, time: 30, curve: 5),
 
 	{	BP(\drum1).bar = Pseq([3, Prand(BP(\drum1).indices[1], 1)], inf);
 		12
@@ -503,3 +506,6 @@ BP(\t1).barHook = {
 
 (1..3).do { |i| Fact(("drum" ++ i).asSymbol).chuck(BP(("drum" ++ i).asSymbol), nil, (source: \drum1)) };
 Fact(\drum2).chuck(BP(\drum2), nil, (source: \drum1));
+
+BP(\drum3).bar = 15;
+BP(\drum3).def = \bufGrainRLPFPan;
