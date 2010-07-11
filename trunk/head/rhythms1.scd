@@ -582,21 +582,39 @@ makeBP: { |name|
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
 		def: \bufGrainRLPFPan,
+		inChannels: 2,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
 		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
 		timeConversion: { |time| time * thisThread.clock.tempo },
 		amp: Pseq(#[1, 3.7], inf),
-		rate: Pseq(#[0.5, 1, 0.6, 1], inf)
-	))
+		rate: Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
+		start: 0,
+		pan: ~pan ? 0,
+		argPairs: [pan: BPStream(\pan)],
+		reset: {
+			var	str;
+			currentEnvironment.keys.do { |key|
+				if((str = key.asString).contains("Stream")) {
+					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+				}
+			}
+		}
+	));
+	~clock108 => BP(name);
 }, type: \bp) => Fact(\drum4);
 )
 
-Fact(\drum4) => BP(\drum4);
-Fact(\drum4) => BP(\drum5);
+BP(#[drum4, drum5]).free;
+Fact(\drum4).chuck(BP(\drum4), nil, (pan: -1));
+Fact(\drum4).chuck(BP(\drum5), nil, (pan: 1));
 
 BP(#[drum4, drum5]).do { |bp| ~clock108 => bp };
 BP(#[drum4, drum5]).do { |bp| bp.start = 0; };
+BP(#[drum4, drum5]).do { |bp| bp.rate = Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf); };
 
 BP(\drum4).play(-1);
-BP(\drum5).play(#[-1, 1]);
+BP(\drum5).play(#[-1, 1.5]);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
