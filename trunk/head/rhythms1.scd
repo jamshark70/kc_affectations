@@ -608,13 +608,175 @@ makeBP: { |name|
 BP(#[drum4, drum5]).free;
 Fact(\drum4).chuck(BP(\drum4), nil, (pan: -1));
 Fact(\drum4).chuck(BP(\drum5), nil, (pan: 1));
+Fact(\drum4).chuck(BP(\drum6), nil, (pan: 1));
 
 BP(#[drum4, drum5]).do { |bp| ~clock108 => bp };
 BP(#[drum4, drum5]).do { |bp| bp.start = 0; };
 BP(#[drum4, drum5]).do { |bp| bp.rate = Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf); };
+BP(#[drum4, drum5]).do { |bp| bp.alwaysReset = true };
 
 BP(\drum4).play(-1);
-BP(\drum5).play(#[-1, 1.5]);
+BP(\drum5).play(#[-1, 0.75]);
 
-o.remove;
-o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+();
+~swap = { |quant|
+	var playing = if (BP(\drum5).isPlaying) { \drum5 } { \drum6 },
+	resting = if (playing == \drum5) { \drum6 } { \drum5 };
+	BP(playing).stop(quant);
+	BP(resting).play(quant);
+};
+
+~swap.(#[-1, 1.75]);
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPan);
+	~source = #[drum1, drum3];
+	~alwaysReset = true;
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~event[\chan] = ~chan;
+		~buffers = ~source.collect { |key| BP(key).buffers }.flat;
+		~pan = 0;
+		~lpfreq = 15000;
+	};
+	~freeCleanup = { ~chan.free };
+	~gest = Pstutter(Pwhite(1, 5, inf), Pseq(#[ost, nhigh], inf));
+	~n = Pwhite(2, 8, inf);
+	~factor = Pif(Pkey(\n) <= 5, Prand(#[1, 2], inf), Prand(#[2, 4], inf));
+	~gestures = (
+		ost: Pbind(
+			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
+			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
+			\amp, Pseq(#[1, 3.7], inf),
+			\rate, Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
+			\start, 0,
+			\pan, BPStream(\pan),
+			\ffreq, BPStream(\lpfreq)
+		),
+		ost1: Pbind(
+			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 1),
+			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
+			\amp, Pseq(#[1, 3.7], inf),
+			\rate, Place(#[[0.5, 0.6], 1], inf),
+			\start, 0,
+			\pan, BPStream(\pan),
+			\ffreq, BPStream(\lpfreq)
+		),
+		nhigh: Plazy { |ev| Ppar(~nhighList.(ev)) },
+		ngap: Plazy { |ev|
+			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+			Ppar(pats.collect { |pat|
+				Pbindf(pat,
+				\instrument, Pseq([\bufGrainPanFmlet,
+					Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+				]))
+			})
+		}
+	);
+
+	~nhighList = { |ev|
+		var n = ~nStream.next(ev),
+			factor = ~factorStream.next(ev.put(\n, n)),
+			rotate = 2.rand,
+			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
+			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
+		{ |i|
+			Pbind(
+				\instrument, \bufGrainPanFmlet,
+				\delta, Pn(factor / n, n),
+				\bufIndex, Pxrand((1..4), inf),
+				\amp, 1,
+				\rate, 1,
+				\start, 0,
+				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+				\ffreq, ffreq[i],
+				\fdec, fdec[i]
+			)
+		} ! 2
+	};
+
+	~asPattern = {
+		~makeStreamForKey.(\gest);
+		~makeStreamForKey.(\n);
+		~makeStreamForKey.(\factor);
+		// w/o Pif, Event.silent results from Ppar cause this to die
+		Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
+			Pbind(
+				\bufnum, Pindex(~buffers, Pkey(\bufIndex), inf),
+				\time, Pfunc { |ev| ~buffers[ev[\bufIndex]].asArray.collect(_.duration) }
+			)
+		)
+		<>
+		PnNilSafe(
+			Plazy { ~gestures[~gestStream.next] },
+			inf
+		);
+	}
+} => PR(\drumSubdiv);
+)
+
+BP(\drum7).free;
+PR(\drumSubdiv) => BP(\drum7);
+~clock108 => BP(\drum7);
+
+BP(\drum7).gest = \ost;
+
+BP(\drum7).event = (eventKey: \singleSynthPlayer, instrument: \bufGrainRLPFPan);
+
+BP(\drum7).n = Pxrand((3..8), inf);
+BP(\drum7).factor = Prand(#[1, 2], inf);
+
+BP(\drum7).gest = \ngap;
+BP(\drum7).gest = Pn(\nhigh, inf).trace(prefix: "gest: ");
+
+BP(\drum7).gest = Prand(#[ost, ngap, nhigh], inf);
+
+BP(\drum7).nhighList = { |ev|
+			var n = ~nStream.next(ev).debug("n"),
+				factor = ~factorStream.next(ev.put(\n, n)),
+				rotate = 2.rand;
+			{ |i|
+				Pbind(
+					\instrument, \bufGrainPanFmlet,
+					\delta, Pn(factor / n, n),
+					\bufIndex, Pxrand((1..4), inf),
+					\amp, 1,
+					\rate, 1,
+					\start, 0,
+					\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+					\ffreq, 52 * [n, Pgeom.fromEndpoints(n, factor, n)][i],
+					\fdec, 0.15 / [1, Pseries.fromEndpoints(1, n, n)][i]
+				)
+			} ! 2
+		};
+
+BP(\drum7).gestures.nhigh = Plazy { |ev|
+	Ppar(~nhighList.(ev))
+		};
+
+BP(\drum7).gestures.ngap = Plazy { |ev|
+	var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+	Ppar(pats.collect { |pat|
+		Pbindf(pat,
+		\instrument, Pseq([\bufGrainPanFmlet,
+			Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+		]))
+	})
+};
+
+BP(\drum7).asPattern = {
+		~makeStreamForKey.(\gest);
+		~makeStreamForKey.(\n);
+		~makeStreamForKey.(\factor);
+	Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
+		Pbind(
+			\bufnum, Pindex(~buffers, Pkey(\bufIndex), inf),
+			\time, Pfunc { |ev| ~buffers[ev[\bufIndex]].asArray.collect(_.duration) }
+))
+		<>
+		Pn(
+			Plazy { ~gestures[~gestStream.next] },
+			inf
+		);
+	}
