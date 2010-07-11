@@ -1241,6 +1241,7 @@ makeBP: { |name|
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
 			~argPairs = [ffreq: ~ffreqCtl.asMap];
 		},
+		useGui: { |vpi| ~ffreqCtl => VP(vpi) },
 		free: { ~ffreqCtl.free },
 		bufPaths: "~/sounds/drums/Udu/*FING*".pathMatch,
 		amps: 0,
