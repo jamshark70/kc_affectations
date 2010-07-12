@@ -5,6 +5,9 @@
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
+(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
+topEnvironment[\dir] = Document.current.path.dirname.dirname +/+ "samples/feet";
+
 
 SynthDescLib.global.browse;
 Object.browse;
@@ -18,9 +21,6 @@ MT(1).gui;
 
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
-
-(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
-topEnvironment[\dir] = Document.current.path.dirname.dirname +/+ "samples/feet";
 
 m = MixerChannel(\test1, s, 1, 2);
 n = MixerChannel(\test2, s, 2, 2);
@@ -186,7 +186,7 @@ r			~baseIndices.size.do { |j|
 	},
 	barHook: {
 		~rates = #[0.5, 0.6];
-		if (~amps[0] == 0) { ~rates.rotate(-1) }
+		if(~amps[0] == 0) { ~rates.rotate(-1) }
 		{ ~rates };
 	},
 
@@ -311,7 +311,7 @@ t = TLSequenceIterator([
 				))
 			},
 			\cmdSync,
-			{	if (~doneSignal == true) {
+			{	if(~doneSignal == true) {
 					PR(\bpCmd).copy.putAll((
 						name: \drum1,
 						quant: 1,
@@ -548,7 +548,7 @@ BP(\t1).use {
 
 BP(\t1).barHook = {
 	~rates = #[0.5, 0.6];
-	if (~amps[0] == 0) { ~rates.rotate(-1) }
+	if(~amps[0] == 0) { ~rates.rotate(-1) }
 	{ ~rates };
 };
 
@@ -564,7 +564,7 @@ source: #[drum1, drum3],
 make: { |name|
 	BP(name).free;
 	if(~source.asArray.every { |src| BP.exists(src) }) {
-		if (BP(~source.last)[\argPairs].notNil) {
+		if(BP(~source.last)[\argPairs].notNil) {
 			~makeBP.(name);
 		} {
 			NotificationCenter.registerOneShot(~source.last, \ready, name, e {
@@ -620,8 +620,8 @@ BP(\drum5).play(#[-1, 0.75]);
 
 ();
 ~swap = { |quant|
-	var playing = if (BP(\drum5).isPlaying) { \drum5 } { \drum6 },
-	resting = if (playing == \drum5) { \drum6 } { \drum5 };
+	var playing = if(BP(\drum5).isPlaying) { \drum5 } { \drum6 },
+	resting = if(playing == \drum5) { \drum6 } { \drum5 };
 	BP(playing).stop(quant);
 	BP(resting).play(quant);
 };
@@ -731,52 +731,50 @@ BP(\drum7).gest = \ngap;
 BP(\drum7).gest = Pn(\nhigh, inf).trace(prefix: "gest: ");
 
 BP(\drum7).gest = Prand(#[ost, ngap, nhigh], inf);
+BP(\drum7).gest = Prand(#[ngap, nhigh, ngapAcc, nhighAcc], inf);
+BP(\drum7).gest = \ngapAcc;
 
-BP(\drum7).nhighList = { |ev|
-			var n = ~nStream.next(ev).debug("n"),
-				factor = ~factorStream.next(ev.put(\n, n)),
-				rotate = 2.rand;
-			{ |i|
-				Pbind(
-					\instrument, \bufGrainPanFmlet,
-					\delta, Pn(factor / n, n),
-					\bufIndex, Pxrand((1..4), inf),
-					\amp, 1,
-					\rate, 1,
-					\start, 0,
-					\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
-					\ffreq, 52 * [n, Pgeom.fromEndpoints(n, factor, n)][i],
-					\fdec, 0.15 / [1, Pseries.fromEndpoints(1, n, n)][i]
-				)
-			} ! 2
-		};
+~clock108.gui
 
-BP(\drum7).gestures.nhigh = Plazy { |ev|
-	Ppar(~nhighList.(ev))
-		};
-
-BP(\drum7).gestures.ngap = Plazy { |ev|
-	var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
-	Ppar(pats.collect { |pat|
-		Pbindf(pat,
-		\instrument, Pseq([\bufGrainPanFmlet,
-			Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
-		]))
-	})
+BP(\drum7).gestures.nhighAcc = Plazy { |ev|
+	Ppar(~nhighList.(ev) ++ ~accEvent.(ev))
 };
 
-BP(\drum7).asPattern = {
-		~makeStreamForKey.(\gest);
-		~makeStreamForKey.(\n);
-		~makeStreamForKey.(\factor);
-	Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
-		Pbind(
-			\bufnum, Pindex(~buffers, Pkey(\bufIndex), inf),
-			\time, Pfunc { |ev| ~buffers[ev[\bufIndex]].asArray.collect(_.duration) }
-))
-		<>
-		Pn(
-			Plazy { ~gestures[~gestStream.next] },
-			inf
-		);
-	}
+BP(\drum7).gestures.ngapAcc = Plazy { |ev|
+			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+			Ppar((pats.collect { |pat|
+				Pbindf(pat,
+				\instrument, Pseq([\bufGrainPanFmlet,
+					Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+				]))
+			}) ++ ~accEvent.(ev))
+		};
+
+BP(\drum7).accEvent = { |ev, delta(Pn(0.1, 1))|
+//	var fq1;
+	Pbind(
+		\instrument, \bufGrainPanFmlet,
+		\bufIndex, 0,
+		\amp, 1,
+		\rate, #[0.5, 0.6].choose,
+		\start, 0,
+		\pan, BPStream(\pan),
+		\ffreq, 52 * Pwhite(2, 5, inf), \ffreq2, (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 260),
+		\fdec, 0.25, \fcurve, Pwhite(3.0, 7.0, inf), \wet, 0.8, \delta, delta
+	)
+};
+
+BP(\drum7).gestures.five = Plazy { |ev|
+	Pbind(
+		\instrument, \bufGrainPanFmlet,
+		\delta, 0.25,
+		\num, Psmartstutter(Pinval(), Pseq(#[3, 2], inf)),
+		\bufIndex, Pxrand((1..4), inf),
+		\amp, 1,
+		\rate, 1,
+		\start, 0,
+		\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+		\ffreq, ffreq[i],
+		\fdec, fdec[i]
+	)
+}
