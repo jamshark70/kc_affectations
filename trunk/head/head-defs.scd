@@ -1082,10 +1082,12 @@ PR(\counterpoint).clone {
 
 SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		attack = 0.001, decay = 0.02, outbus,
-		ffreq = 2000, fatk = 0.01, fdec = 0.1, wet = 1|
+		ffreq = 2000, ffreq2 = -1, fcurve = 2.1, fatk = 0.01, fdec = 0.1, wet = 1|
 	var sig, sig2, eg;
 	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
 	eg = EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	ffreq2 = Select.kr(ffreq2 < 0, [ffreq2, ffreq]);
+	ffreq = EnvGen.kr(Env([ffreq, ffreq2], [time], fcurve * sign(ffreq2 - ffreq)));
 	sig2 = Limiter.ar(Formlet.ar(sig, ffreq, fatk, fdec));
 	sig = LPF.ar(sig, wet.linexp(0, 1, 18000, ffreq));
 	sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
