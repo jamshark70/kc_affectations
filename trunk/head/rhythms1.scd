@@ -633,17 +633,23 @@ PR(\abstractProcess).clone {
 	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPan);
 	~source = #[drum1, drum3];
 	~alwaysReset = true;
+
 	~prep = {
 		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
 		~event[\chan] = ~chan;
 		~buffers = ~source.collect { |key| BP(key).buffers }.flat;
 		~pan = 0;
 		~lpfreq = 15000;
+
+		~accWetCtl = GenericGlobalControl(\accWet, nil, 0.75);
 	};
-	~freeCleanup = { ~chan.free };
+
+	~freeCleanup = { [~chan, ~accWetCtl].free };
+
 	~gest = Pstutter(Pwhite(1, 5, inf), Pseq(#[ost, nhigh], inf));
 	~n = Pwhite(2, 8, inf);
 	~factor = Pif(Pkey(\n) <= 5, Prand(#[1, 2], inf), Prand(#[2, 4], inf));
+
 	~gestures = (
 		ost: Pbind(
 			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
@@ -668,10 +674,22 @@ PR(\abstractProcess).clone {
 			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
 			Ppar(pats.collect { |pat|
 				Pbindf(pat,
-				\instrument, Pseq([\bufGrainPanFmlet,
-					Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+					\instrument, Pseq([\bufGrainPanFmlet,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
 				]))
 			})
+		},
+		nhighAcc: Plazy { |ev|
+			Ppar(~nhighList.(ev) ++ ~accEvent.(ev))
+		},
+		ngapAcc: Plazy { |ev|
+			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+			Ppar((pats.collect { |pat|
+				Pbindf(pat,
+					\instrument, Pseq([\bufGrainPanFmlet,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+				]))
+			}) ++ ~accEvent.(ev))
 		}
 	);
 
@@ -679,8 +697,16 @@ PR(\abstractProcess).clone {
 		var n = ~nStream.next(ev),
 			factor = ~factorStream.next(ev.put(\n, n)),
 			rotate = 2.rand,
-			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
-			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
+			temp,
+			fenv = (if(0.5.coin) {
+				Env([n, factor], [factor], \exp)
+			} {
+				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
+			}).postcs.asStream,
+			ffreq = 52 * [n, fenv.trace],
+			fdec = 0.15 / [1, fenv.explin(n, factor, 1, n)];
+// 			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
+// 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
 		{ |i|
 			Pbind(
 				\instrument, \bufGrainPanFmlet,
@@ -694,6 +720,30 @@ PR(\abstractProcess).clone {
 				\fdec, fdec[i]
 			)
 		} ! 2
+	};
+
+	~accRate = Prand(#[0.5, 0.6], inf);
+	~accFreq = 52 * Pwhite(2, 5, inf);
+	~accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 260);
+	~accDec = 0.25;
+	~accCurve = Pwhite(3.0, 7.0, inf);
+//	~accWet = 0.75;
+
+	~accEvent = { |ev, delta(Pn(0.1, 1))|
+		Pbind(
+			\instrument, \bufGrainPanFmlet,
+			\delta, delta,
+			\bufIndex, 0,
+			\amp, 1,
+			\rate, BPStream(\accRate),
+			\start, 0,
+			\pan, BPStream(\pan),
+			\ffreq, BPStream(\accFreq),
+			\ffreq2, BPStream(\accFreq2),
+			\fdec, BPStream(\accDec),
+			\fcurve, BPStream(\accCurve),
+			\wet, ~accWetCtl // BPStream(\accWet)
+		)
 	};
 
 	~asPattern = {
@@ -751,30 +801,76 @@ BP(\drum7).gestures.ngapAcc = Plazy { |ev|
 		};
 
 BP(\drum7).accEvent = { |ev, delta(Pn(0.1, 1))|
-//	var fq1;
 	Pbind(
 		\instrument, \bufGrainPanFmlet,
+		\delta, delta,
 		\bufIndex, 0,
 		\amp, 1,
 		\rate, #[0.5, 0.6].choose,
 		\start, 0,
 		\pan, BPStream(\pan),
 		\ffreq, 52 * Pwhite(2, 5, inf), \ffreq2, (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 260),
-		\fdec, 0.25, \fcurve, Pwhite(3.0, 7.0, inf), \wet, 0.8, \delta, delta
+		\fdec, 0.25, \fcurve, Pwhite(3.0, 7.0, inf), \wet, 0.8
 	)
 };
 
 BP(\drum7).gestures.five = Plazy { |ev|
+	Pfunc { |ev|
+		if(ev[\double]) {
+			ev[\delta] = ev.delta * 0.5;
+			ev.yield;
+		};
+		ev
+	}
+	<>
 	Pbind(
-		\instrument, \bufGrainPanFmlet,
+// 		\instrument, \bufGrainPanFmlet,
 		\delta, 0.25,
-		\num, Psmartstutter(Pinval(), Pseq(#[3, 2], inf)),
-		\bufIndex, Pxrand((1..4), inf),
-		\amp, 1,
-		\rate, 1,
+		\flag, 0,
+		\num, Psmartstutter(Pfunc(_.value),
+			Pseq(#[2, 1, 2], { rrand(2, 4) }).collect { |num, ev| ev[\flag] = if(num == 1) { 1 } { 2 }; num }),
+		\prevFlag, Pdelay(Pkey(\flag)),
+		\busyFlag, Pfunc { |ev| ev[\flag] > 0 or: { ev[\prevFlag] > 0 } },
+		\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
+		\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
+		\rate, Pswitch1([0.75, 0.9, Pseq(#[1.25, 1], inf)], Pkey(\flag)),
+// 		\bufIndex, Pstutter(Pseq(#[1, 2, 1, 1], inf), Pxrand((1..4), inf)),
+// 		\amp, Pseq(#[1, 0.4, 0.4, 1, 0.4], inf) * 3.7,
+// 		\rate, Pseq(#[1.25, 0.75, 0.75, 1, 0.75], inf),
 		\start, 0,
-		\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
-		\ffreq, ffreq[i],
-		\fdec, fdec[i]
+		\pan, BPStream(\pan),
+		\ffreq, ~lpfreq,
+		\double, Pwhite(0.0, 1.0, inf) < 0.05
+// 		\fdec, fdec[i]
 	)
-}
+};
+
+BP(\drum7).gest = \five;
+
+	BP(\drum7).nhighList = { |ev|
+		var n = ~nStream.next(ev),
+			factor = ~factorStream.next(ev.put(\n, n)),
+			rotate = 2.rand,
+			temp,
+			fenv = (if(0.5.coin) {
+				Env([n, factor], [factor], \exp)
+			} {
+				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
+			}).postcs.asStream,
+			ffreq = 52 * [n, fenv.trace],
+			fdec = 0.15 / [1, fenv.explin(n, factor, 1, n)];
+		{ |i|
+			Pbind(
+				\instrument, \bufGrainPanFmlet,
+				\delta, Pn(factor / n, n),
+				\bufIndex, Pxrand((1..4), inf),
+				\amp, 1,
+				\rate, 1,
+				\start, 0,
+				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+				\ffreq, ffreq[i],
+				\fdec, fdec[i]
+			)
+		} ! 2
+	};
+
