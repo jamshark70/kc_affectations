@@ -690,6 +690,65 @@ PR(\abstractProcess).clone {
 						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
 				]))
 			}) ++ ~accEvent.(ev))
+		},
+
+		fiveTemplate: {
+			|	delta(Pseq(#[3, 2], { rrand(2, 4) })),
+				rate(Pswitch1([0.75, 0.9, Pseq(#[1.25, 1], inf)], Pkey(\flag))),
+				double(Pwhite(0.0, 1.0, inf) < 0.02)
+			|
+			Plazy { |ev|
+				Pfunc { |ev|
+					if(ev[\double]) {
+						ev[\delta] = ev.delta * 0.5;
+						ev.copy.yield;
+					};
+					ev
+				}
+				<>
+				Pbind(
+			// 		\instrument, \bufGrainPanFmlet,
+					\delta, 0.25,
+					\flag, 0,
+					\num, Psmartstutter(Pfunc(_.value),
+						delta.collect { |num, ev|
+							if(ev[\flag] == 0) {
+								ev[\flag] = if(num == 1) { 1 } { 2 };
+							};
+							num
+						}
+					),
+					\prevFlag, Pdelay(Pkey(\flag)),
+					\busyFlag, Pfunc { |ev| ev[\flag] + ev[\prevFlag] > 0 },
+					\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
+					\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
+					\rate, rate,
+					\start, 0,
+					\pan, BPStream(\pan),
+					\ffreq, ~lpfreq,
+					\double, double
+			// 		\fdec, fdec[i]
+				)
+			};
+ 		},
+		five: Plazy { |ev|
+			~gestures[\fiveTemplate].(
+				Prand([
+					Pseq([Pfuncn { |ev| ev[\flag] = 3; 3 }, 2], 1), 
+					Pseq([Pfuncn { |ev| ev[\flag] = 3; 2 }, 1, 2], 1)
+				], { rrand(2, 4) }),
+				Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+			)
+		},
+		
+		seven: Plazy { |ev|
+			~gestures[\fiveTemplate].(
+				Prand([
+					Pseq([Pfuncn { |ev| ev[\flag] = 3; 3 }, 2, 2], 1), 
+					Pseq([Pfuncn { |ev| ev[\flag] = 3; 2 }, 1, 2, 2], 1)
+				], { rrand(2, 4) }),
+				Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+			)
 		}
 	);
 
@@ -814,38 +873,68 @@ BP(\drum7).accEvent = { |ev, delta(Pn(0.1, 1))|
 	)
 };
 
+BP(\drum7).gestures.fiveTemplate = {
+	|	delta(Pseq(#[3, 2], { rrand(2, 4) })),
+		rate(Pswitch1([0.75, 0.9, Pseq(#[1.25, 1], inf)], Pkey(\flag))),
+		double(Pwhite(0.0, 1.0, inf) < 0.02)
+	|
+	Plazy { |ev|
+		Pfunc { |ev|
+			if(ev[\double]) {
+				ev[\delta] = ev.delta * 0.5;
+				ev.copy.yield;
+			};
+			ev
+		}
+		<>
+		Pbind(
+	// 		\instrument, \bufGrainPanFmlet,
+			\delta, 0.25,
+			\flag, 0,
+			\num, Psmartstutter(Pfunc(_.value),
+				delta.collect { |num, ev|
+					if(ev[\flag] == 0) {
+						ev[\flag] = if(num == 1) { 1 } { 2 };
+					};
+					num
+				}
+			),
+			\prevFlag, Pdelay(Pkey(\flag)),
+			\busyFlag, Pfunc { |ev| ev[\flag] + ev[\prevFlag] > 0 },
+			\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
+			\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
+			\rate, rate,
+			\start, 0,
+			\pan, BPStream(\pan),
+			\ffreq, ~lpfreq,
+			\double, double
+	// 		\fdec, fdec[i]
+		)
+	};
+};
+
+();
 BP(\drum7).gestures.five = Plazy { |ev|
-	Pfunc { |ev|
-		if(ev[\double]) {
-			ev[\delta] = ev.delta * 0.5;
-			ev.yield;
-		};
-		ev
-	}
-	<>
-	Pbind(
-// 		\instrument, \bufGrainPanFmlet,
-		\delta, 0.25,
-		\flag, 0,
-		\num, Psmartstutter(Pfunc(_.value),
-			Pseq(#[2, 1, 2], { rrand(2, 4) }).collect { |num, ev| ev[\flag] = if(num == 1) { 1 } { 2 }; num }),
-		\prevFlag, Pdelay(Pkey(\flag)),
-		\busyFlag, Pfunc { |ev| ev[\flag] > 0 or: { ev[\prevFlag] > 0 } },
-		\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
-		\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
-		\rate, Pswitch1([0.75, 0.9, Pseq(#[1.25, 1], inf)], Pkey(\flag)),
-// 		\bufIndex, Pstutter(Pseq(#[1, 2, 1, 1], inf), Pxrand((1..4), inf)),
-// 		\amp, Pseq(#[1, 0.4, 0.4, 1, 0.4], inf) * 3.7,
-// 		\rate, Pseq(#[1.25, 0.75, 0.75, 1, 0.75], inf),
-		\start, 0,
-		\pan, BPStream(\pan),
-		\ffreq, ~lpfreq,
-		\double, Pwhite(0.0, 1.0, inf) < 0.05
-// 		\fdec, fdec[i]
+	~gestures[\fiveTemplate].(
+		Prand([
+			Pseq([Pfuncn { |ev| ev[\flag] = 3; 3 }, 2], 1), 
+			Pseq([Pfuncn { |ev| ev[\flag] = 3; 2 }, 1, 2], 1)
+		], { rrand(2, 4) }),
+		Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
 	)
 };
 
-BP(\drum7).gest = \five;
+BP(\drum7).gestures.seven = Plazy { |ev|
+	~gestures[\fiveTemplate].(
+		Prand([
+			Pseq([Pfuncn { |ev| ev[\flag] = 3; 3 }, 2, 2], 1), 
+			Pseq([Pfuncn { |ev| ev[\flag] = 3; 2 }, 1, 2, 2], 1)
+		], { rrand(2, 4) }),
+		Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+	)
+};
+
+BP(\drum7).gest = Prand(#[five, seven], inf).trace;
 
 	BP(\drum7).nhighList = { |ev|
 		var n = ~nStream.next(ev),
