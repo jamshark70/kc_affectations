@@ -658,6 +658,7 @@ PR(\abstractProcess).clone {
 	~n = Pwhite(2, 8, inf);
 	~factor = Pif(Pkey(\n) <= 5, Prand(#[1, 2], inf), Prand(#[2, 4], inf));
 	~numBars = Pwhite(2, 4, inf);
+	~restBeats = Pwhite(3, 8, inf) * 0.5;
 
 	~gestures = (
 		ost: Pbind(
@@ -734,6 +735,9 @@ PR(\abstractProcess).clone {
 						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
 				]))
 			}) ++ ~accEvent.(ev))
+		},
+		oneAcc: Plazy { |ev|
+			~accEvent.(ev, Pn(~restBeatsStream.next(ev), 1))
 		},
 
 		fiveTemplate: {
@@ -897,6 +901,18 @@ PR(\abstractProcess).clone {
 		threeAccRest: Plazy { |ev|
 			~gestures[\restify].(~gestures[\threeAcc])
 		},
+		fiveRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\five])
+		},
+		fiveAccRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\fiveAcc])
+		},
+		sevenRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\seven])
+		},
+		sevenAccRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\sevenAcc])
+		},
 		threesync: Plazy { |ev|
 			~gestures[\barsync].(Psym(Prand(#[three, threeAcc, threeRest], inf), ~gestures))
 		},
@@ -963,6 +979,7 @@ PR(\abstractProcess).clone {
 		~makeStreamForKey.(\n);
 		~makeStreamForKey.(\factor);
 		~makeStreamForKey.(\numBars);
+		~makeStreamForKey.(\restBeats);
 		// w/o Pif, Event.silent results from Ppar cause this to die
 		Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
 			Pbind(
@@ -1108,8 +1125,12 @@ BP(\drum7).gest = Pseq([Pn(\ost, 1), \ostFiltIn, \threePl1, Prand(#[three, three
 // cool!
 BP(\drum7).gest = Pfsm([
 	#[4, 5],
-	Pn(\five, { rrand(2, 4) }), #[0, 1, 2, 3],
-	Pn(\seven, { rrand(2, 4) }), #[0, 1, 2, 3],
+// 	Pn(\five, { rrand(2, 4) }), #[0, 1, 2, 3],
+// 	Pn(\seven, { rrand(2, 4) }), #[0, 1, 2, 3],
+// 	Pstutter(Pwhite(2, 4, 1), Prand(#[five, fiveRest], 1)), #[0, 1, 2, 3],
+// 	Pstutter(Pwhite(2, 4, 1), Prand(#[seven, sevenRest], 1)), #[0, 1, 2, 3],
+	Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+	Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
 	\fiveAcc, #[2, 4, 5],
 	\sevenAcc, #[3, 4, 5],
 	\five1Acc, #[0, 2],
@@ -1120,18 +1141,28 @@ n = rrand(2, 4);
 BP(\drum7).override(\gest, Pseq([\randsync, Pn(\ostFilt, n)]));
 BP(\drum8).override(\gest, Pseq([\randsync, Pn(\ostFilt, n)]));
 
+n = rrand(2, 4);
+BP(\drum7).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n)]));
+BP(\drum8).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n)]));
+
+n = rrand(2, 4);
+BP(\drum7).override(\gest, Pseq([\randsync, \sevenAccRest, Prand(#[sevenAcc, sevenAccRest], n)]).trace);
+BP(\drum8).override(\gest, Pseq([\randsync, \sevenAccRest, Prand(#[sevenAcc, sevenAccRest], n)]));
+
 BP(\drum8).gest = Pfsm([
 	#[4, 5],
-	Pn(\five, { rrand(2, 4) }), #[0, 1, 2, 3],
-	Pn(\seven, { rrand(2, 4) }), #[0, 1, 2, 3],
+	Pwrand(#[five, fiveRest], #[0.7, 0.3], { rrand(2, 4) }), #[0, 1, 2, 3],
+	Pwrand(#[seven, sevenRest], #[0.7, 0.3], { rrand(2, 4) }), #[0, 1, 2, 3],
 	\fiveAcc, #[2, 4, 5],
 	\sevenAcc, #[3, 4, 5],
 	\five1Acc, #[0, 2],
 	\seven1Acc, #[1, 3],
 ], inf);
 
+BP(#[drum7, drum8]).play;
+BP(#[drum7, drum8]).stop;
 
-
+BP(\drum7).override(\gest, Pn(\nhigh, 4));
 
 BP(\drum7).gest = Pseq([\ost, \ost, Pn(\five, 12), \randsync], 3).trace;
 
