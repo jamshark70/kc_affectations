@@ -1091,8 +1091,9 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	sig2 = Limiter.ar(Formlet.ar(sig, ffreq, fatk, fdec));
 	sig = LPF.ar(sig, wet.linexp(0, 1, 18000, ffreq));
 	sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
-	DetectSilence.ar(sig, 0.001, doneAction: 2);
+//	DetectSilence.ar(sig, 0.001, doneAction: 2);
 	Out.ar(outbus, Pan2.ar(sig, pan, amp * eg));
+	Line.kr(0, 1, time + fdec, doneAction: 2);
 }).add;
 
 
