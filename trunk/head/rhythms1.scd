@@ -582,6 +582,7 @@ makeBP: { |name|
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
 		def: \bufGrainRLPFPan,
+		chan: ~chan,
 		inChannels: 2,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
