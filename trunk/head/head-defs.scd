@@ -1261,3 +1261,495 @@ makeBP: { |name|
 	PR(\bufPerc).chuck(BP(name), nil, parms);
 	~clock108 => BP(name);
 }, type: \bp) => Fact(\drum3);
+
+
+// drum4-6
+(keys: #[master, rvbmc, clock108],
+source: #[drum1, drum3],
+make: { |name|
+	BP(name).free;
+	if(~source.asArray.every { |src| BP.exists(src) }) {
+		if(BP(~source.last)[\argPairs].notNil) {
+			~makeBP.(name);
+		} {
+			NotificationCenter.registerOneShot(~source.last, \ready, name, e {
+				~makeBP.(name);
+			});
+			BP(name)
+		}
+	} {
+		"% not loaded, cannot load %".format(~source, name).warn;
+	}
+},
+makeBP: { |name|
+	BP(name).free;
+	PR(\basicBufferPlayer).chuck(BP(name), nil, (
+		bufPaths: nil,
+		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
+		def: \bufGrainRLPFPan,
+		inChannels: 2,
+		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
+		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
+		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
+		timeConversion: { |time| time * thisThread.clock.tempo },
+		amp: Pseq(#[1, 3.7], inf),
+		rate: Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
+		start: 0,
+		pan: ~pan ? 0,
+		argPairs: [pan: BPStream(\pan)],
+		reset: {
+			var	str;
+			currentEnvironment.keys.do { |key|
+				if((str = key.asString).contains("Stream")) {
+					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+				}
+			}
+		}
+	));
+	~clock108 => BP(name);
+}, type: \bp) => Fact(\drum4);
+
+
+
+// drum7+8
+
+(keys: #[master, rvbmc, clock108],
+quant: -1,
+make: { |name|
+	BP(name).free;
+	PR(\drumSubdiv).chuck(BP(name), nil, (
+		master: ~master,
+		rvbmc: ~rvbmc,
+		gest: \ostFilt2
+		ctlSource: ~ctlSource	// use same controls as ctlSource
+	));
+	~quant => BP(name);
+	~clock108 => BP(name);
+}, type: \bp) => Fact(\drum7);
+
+// Fact(\drum7) => BP(\drum7);
+// Fact(\drum7).chuck(BP(\drum8), nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPan);
+	~source = #[drum1, drum3];
+	~alwaysReset = true;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~event[\chan] = ~chan;
+		~buffers = ~source.collect { |key| BP(key).buffers }.flat;
+		~pan = 0;
+		~lpfreq = 15000;
+		~gest_.(~gest);
+
+		if(~ctlSource.isNil) {
+			~accWetCtl = GenericGlobalControl(\accWet, nil, 0.75);
+			~fmltWetCtl = GenericGlobalControl(\fmltWet, nil, 0.1);
+			~fmltDcyCtl = GenericGlobalControl(\fmltDcy, nil, 0.1, #[0.01, 1, \exp]);
+			~ostFiltCtl = GenericGlobalControl(\ostFiltProb, nil, 0.1);
+			~ost2AmpCtl = GenericGlobalControl(\ost2Amp, nil, 0, \amp);
+		} {
+			#[accWetCtl, fmltWetCtl, fmltDcyCtl, ostFiltCtl, ost2AmpCtl].do { |k|
+				k.envirPut(BP(~ctlSource)[k]);
+			}
+		};
+	};
+
+	~freeCleanup = {
+		~chan.free;
+		if(~ctlSource.isNil) {
+			[~accWetCtl, ~fmltWetCtl, ~fmltDcyCtl, ~ostFiltCtl, ~ost2AmpCtl].free;
+		};
+	};
+	~useGui = { |vpi|
+		if(~ctlSource.isNil) {
+			[/*~accWetCtl,*/ ~fmltWetCtl, ~fmltDcyCtl, ~ostFiltCtl, ~ost2AmpCtl].do { |gc|
+				gc => VP(vpi)
+			}
+		};
+	};
+
+	~gest_ = { |gpat|
+		\gest.envirPut(gpat.asPattern.collect { |g| ~lastGest = g; g });
+		currentEnvironment
+	};
+	~gest = Pstutter(Pwhite(1, 5, inf), Pseq(#[ost, nhigh], inf));
+	~n = Pwhite(2, 8, inf);
+	~factor = Pif(Pkey(\n) <= 5, Prand(#[1, 2], inf), Prand(#[2, 4], inf));
+	~numBars = Pwhite(2, 4, inf);
+	~numAcc = Pwhite(2, 4, inf);
+	~restBeats = Pwhite(3, 8, inf) * 0.5;
+	~ostFiltFreq = Pswitch1([
+		Plazy { BPStream(\accFreq) },
+		Plazy { BPStream(\accFreq) * 2.5 * ~fmltWetCtl }
+	], Pdict(Dictionary[0.5 -> 0, 0.6 -> 0, 1.0 -> 1], Pkey(\rate), inf, 1));
+
+	~gestures = (
+		ost: Pbind(
+			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
+			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
+			\amp, Pseq(#[1, 3.7], inf),
+			\rate, Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
+			\start, 0,
+			\pan, Plazy { BPStream(\pan) },
+			\ffreq, Plazy { BPStream(\lpfreq) }
+		),
+		ost1: Pbind(
+			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 1),
+			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
+			\amp, Pseq(#[1, 3.7], inf),
+			\rate, Place(#[[0.5, 0.6], 1], inf),
+			\start, 0,
+			\pan, Plazy { BPStream(\pan) },
+			\ffreq, Plazy { BPStream(\lpfreq) }
+		),
+		ostFilt: Plazy { |ev|
+			Pbindf(~gestures[\ost],
+				\instrument, \bufGrainPanFmlet,
+				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\ffreq, BPStream(\ostFiltFreq),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		ostFilt2: Plazy {
+			Pbind(
+				\instrument, \bufGrainPanFmlet,
+				\delta, Pn(0.25, 12), //Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
+				\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
+					Pseq(#[0, 1, 0, 0, 1, 1], inf)
+				),
+				\amp, Pif(Pkey(\bufIndex) > 0, 3.7, 1)
+					* Pswitch1([1, ~ost2AmpCtl], Pseq(#[0, 0, 0, 1, 0, 1], inf)),
+				\rate, Pif(Pkey(\bufIndex) > 0, 1, Pseq(#[0.5, 0.5, 0.6, 0.6, 0.6, 0.5])),
+				\start, 0,
+				\pan, BPStream(\pan),
+				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\ffreq, BPStream(\ostFiltFreq),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		ostFilt2Sync: Plazy { |ev|
+			~gestures[\barsync].(Pn(~gestures[\ostFilt2], inf))
+		},
+		ostFilt2Quant: Plazy { |ev|
+			~gestures[\quantsync].(Pn(~gestures[\ostFilt2], inf))
+		},
+		ostFiltIn: Plazy { |ev|
+			var	numBars = ~numBarsStream.next(ev);
+			Pbindf(Pn(~gestures[\ost], numBars),
+				\instrument, \bufGrainPanFmlet,
+				\wet, Env([0, ~fmltWetCtl.value], [numBars * 3]),
+				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		ostFiltOut: Plazy { |ev|
+			var	numBars = ~numBarsStream.next(ev);
+			Pbindf(Pn(~gestures[\ost], numBars),
+				\instrument, \bufGrainPanFmlet,
+				\wet, Env([~fmltWetCtl.value, 0], [numBars * 3]),
+				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		ostFiltSwell: Plazy { |ev|
+			var	numBars = ~numBarsStream.next(ev);
+			Pbindf(Pn(~gestures[\ost], numBars),
+				\instrument, \bufGrainPanFmlet,
+				\wet, Env([0, ~fmltWetCtl.value, 0], (numBars * 1.5) ! 2),
+				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		nhigh: Plazy { |ev| Ppar(~nhighList.(ev)) },
+		ngap: Plazy { |ev|
+			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+			Ppar(pats.collect { |pat|
+				Pbindf(pat,
+					\instrument, Pseq([\bufGrainPanFmlet,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+				]))
+			})
+		},
+		nhighAcc: Plazy { |ev|
+			Ppar(~nhighList.(ev) ++ ~accEvent.(ev))
+		},
+		ngapAcc: Plazy { |ev|
+			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
+			Ppar((pats.collect { |pat|
+				Pbindf(pat,
+					\instrument, Pseq([\bufGrainPanFmlet,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+				]))
+			}) ++ ~accEvent.(ev))
+		},
+		oneAcc: Plazy { |ev|
+			~accEvent.(ev, Pn(~restBeatsStream.next(ev), 1))
+		},
+
+		fiveTemplate: {
+			|	delta(Pseq(#[3, 2], { rrand(2, 4) })),
+				rate(Pswitch1([0.75, 0.9, Pseq(#[1.25, 1], inf)], Pkey(\flag))),
+				double(Pwhite(0.0, 1.0, inf) < 0.02),
+				ffreq(52 * Pwhite(4, 8, inf) *.x Pgeom(1, Pwhite(0.7, 0.9), Pkey(\num).asStream))
+			|
+			var	lg;
+			Plazy { |ev|
+				Pfunc { |ev|
+					if(ev[\double]) {
+						ev[\delta] = ev.delta * 0.5;
+						ev.copy.yield;
+					};
+					ev
+				}
+				<>
+				Pbind(
+					\instrument, \bufGrainPanFmlet,
+					\delta, 0.25,
+					\flag, 0,
+					\num, Psmartstutter(Pfunc(_.value),
+						delta.collect { |num, ev|
+							if(ev[\flag] == 0) {
+								ev[\flag] = if(num == 1) { 1 } { 2 };
+							};
+							num
+						}
+					),
+					\prevFlag, Pdelay(Pkey(\flag)),
+					\busyFlag, Pfunc { |ev| ev[\flag] + ev[\prevFlag] > 0 },
+					\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
+					\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
+					\rate, rate,
+					\start, 0,
+					\pan, BPStream(\pan),
+					\ffreq, ffreq,
+					\double, double,
+			 		\wet, case
+						{ (lg = ~lastGest.asString).contains("1Acc") }
+							{	Pseries.fromEndpoints(0, ~fmltWetCtl.value,
+									delta.asStream.nextN(100, ev).select(_.notNil).sum)
+							}
+						{ lg.contains("Acc") } { 0 }
+						{ ~fmltWetCtl }
+				)
+			};
+ 		},
+		five: Plazy { |ev|
+			~gestures[\fiveTemplate].(
+				Prand([
+					Pseq([Psetpre(\flag, 3, Pn(3, 1)), 2], 1), 
+					Pseq([Psetpre(\flag, 3, Pn(2, 1)), 1, 2], 1)
+				], 1 /* { rrand(2, 4) } */),
+				Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+			)
+		},		
+		seven: Plazy { |ev|
+			~gestures[\fiveTemplate].(
+				Prand([
+					Pseq([Psetpre(\flag, 3, Pn(3, 1)), 2, 2], 1), 
+					Pseq([Psetpre(\flag, 3, Pn(2, 1)), 1, 2, 2], 1)
+				], 1 /* { rrand(2, 4) } */),
+				Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+			)
+		},
+		fiveAcc: Plazy { |inEv|
+			var	accStream = ~accEvent.(inEv, 0).asStream;
+			~gestures[\five].collect { |ev|
+				if(ev[\flag] > 1) {
+					inEv = accStream.next(inEv).yield;
+				};
+				ev
+			};
+		},
+		sevenAcc: Plazy { |inEv|
+			var	accStream = ~accEvent.(inEv, 0).asStream;
+			~gestures[\seven].collect { |ev|
+				if(ev[\flag] > 1) {
+					inEv = accStream.next(inEv).yield;
+				};
+				ev
+			};
+		},
+		five1Acc: Plazy { |inEv|
+			var	accStream = ~accEvent.(inEv, Pn(0, 1)).asStream, accEv;
+			~gestures[\five].collect { |ev|
+				if(ev[\flag] > 1 and: { (accEv = accStream.next(inEv)).notNil }) {
+					inEv = accEv.yield;
+				};
+				ev
+			};
+		},
+		seven1Acc: Plazy { |inEv|
+			var	accStream = ~accEvent.(inEv, Pn(0, 1)).asStream, accEv;
+			~gestures[\seven].collect { |ev|
+				if(ev[\flag] > 1 and: { (accEv = accStream.next(inEv)).notNil }) {
+					inEv = accEv.yield;
+				};
+				ev
+			};
+		},
+		three: Plazy {
+			~gestures[\fiveTemplate].(
+				Pwrand([
+					Psetpre(\flag, 3, Pn(3, 1)), 
+					Pseq([Psetpre(\flag, 3, Pn(2, 1)), 1], 1)
+				], #[0.8, 0.2], 1),
+				Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+			)
+		},
+		threeAcc: Plazy { |inEv|
+			var	accStream = ~accEvent.(inEv, 0).asStream;
+			~gestures[\three].collect { |ev|
+				if(ev[\flag] > 1) {
+					inEv = accStream.next(inEv).yield;
+				};
+				ev
+			};
+		},
+		threePl1: Plazy { |ev|
+			Pseq([
+				~accEvent.(ev, Pn(0, 1)),
+				~gestures[\fiveTemplate].(
+					Pseq([
+						1,
+						Pwrand([
+							Psetpre(\flag, 3, Pn(3, 1)),
+							Pseq([Psetpre(\flag, 3, Pn(2, 1)), 1], 1)
+						], #[0.8, 0.2], 1),
+					]),
+					Pswitch1([0.75, 0.9, 1, 1.25], Pkey(\flag))
+				)
+			])
+		},
+		restify: { |pat|
+			Pbindf(pat, \instrument, Pif(
+				Pfunc { |ev| ev[\flag].isNil or: { ev[\flag] >= 2 } },
+				Pkey(\instrument), \rest
+			))
+		},
+		barsync: { |pat|
+			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime;
+		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
+			Psync(pat, q, q);
+		},
+		quantsync: { |pat|
+			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime
+					+ (BP(~collIndex).quant.phase ? 0);
+		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
+			Psync(pat, q, q);
+		},
+		threePl1Rest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\threePl1])
+		},
+		threePl1Sync: Plazy { |ev|
+			var	psync = ~gestures[\barsync].(Psym(Pseq([\threePl1, Pn(\threeRest, inf)], inf), ~gestures));
+			Pbindf(psync,
+				\wet, Env([0, ~fmltWetCtl.value], [psync.quant]),
+				\ffreq, Env([52 * rrand(10, 21), 208], [psync.quant], \exp)
+			)
+		},
+		threeRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\three])
+		},
+		threeAccRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\threeAcc])
+		},
+		fiveRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\five])
+		},
+		fiveAccRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\fiveAcc])
+		},
+		sevenRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\seven])
+		},
+		sevenAccRest: Plazy { |ev|
+			~gestures[\restify].(~gestures[\sevenAcc])
+		},
+		threesync: Plazy { |ev|
+			~gestures[\barsync].(Psym(Prand(#[three, threeAcc, threeRest], inf), ~gestures))
+		},
+		randsync: Plazy { |ev|
+			~gestures[\barsync].(Psym(Prand(#[three, threeAcc, threeRest, five, fiveAcc, seven, sevenAcc], inf), ~gestures));
+		},
+		randquant: Plazy { |ev|
+			~gestures[\quantsync].(Psym(Prand(#[three, threeAcc, threeRest, five, fiveAcc, seven, sevenAcc], inf), ~gestures));
+		}
+	);
+
+	~nhighList = { |ev|
+		var n = ~nStream.next(ev),
+			factor = ~factorStream.next(ev.put(\n, n)),
+			rotate = 2.rand,
+			temp,
+			fenv = (if(0.5.coin) {
+				Env([n, factor], [factor], \exp)
+			} {
+				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
+			}).postcs.asStream,
+			ffreq = 52 * [n, fenv.trace],
+			fdec = 0.15 / [1, fenv.explin(n, factor, 1, n)];
+// 			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
+// 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
+		{ |i|
+			Pbind(
+				\instrument, \bufGrainPanFmlet,
+				\delta, Pn(factor / n, n),
+				\bufIndex, Pxrand((1..4), inf),
+				\amp, 1,
+				\rate, 1,
+				\start, 0,
+				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+				\ffreq, ffreq[i],
+				\fdec, fdec[i]
+			)
+		} ! 2
+	};
+
+	~accRate = Prand(#[0.5, 0.6], inf);
+	~accFreq = 52 * Pwhite(2, 5, inf);
+	~accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 260);
+	~accDec = 0.25;
+	~accCurve = Pwhite(3.0, 7.0, inf);
+//	~accWet = 0.75;
+
+	~accEvent = { |ev, delta(Pn(0.1, 1))|
+		Pbind(
+			\instrument, \bufGrainPanFmlet,
+			\delta, delta,
+			\bufIndex, 0,
+			\amp, 1,
+			\rate, BPStream(\accRate),
+			\start, 0,
+			\pan, BPStream(\pan),
+			\ffreq, BPStream(\accFreq),
+			\ffreq2, BPStream(\accFreq2),
+			\fdec, BPStream(\accDec),
+			\fcurve, BPStream(\accCurve),
+			\wet, ~accWetCtl // BPStream(\accWet)
+		)
+	};
+
+	~asPattern = {
+		~makeStreamForKey.(\gest);
+		~makeStreamForKey.(\n);
+		~makeStreamForKey.(\factor);
+		~makeStreamForKey.(\numBars);
+		~makeStreamForKey.(\restBeats);
+		~numAccStream ?? { ~makeStreamForKey.(\numAcc) };
+		// w/o Pif, Event.silent results from Ppar cause this to die
+		Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
+			Pbind(
+				\bufnum, Pindex(~buffers, Pkey(\bufIndex), inf),
+				\time, Pfunc { |ev| ~buffers[ev[\bufIndex]].asArray.collect(_.duration) }
+			)
+		)
+		<>
+		PnNilSafe(
+			Plazy { ~gestures[~gestStream.next] },
+			inf
+		);
+	}
+} => PR(\drumSubdiv);
