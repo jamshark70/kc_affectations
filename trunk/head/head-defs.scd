@@ -1244,6 +1244,7 @@ makeBP: { |name|
 		postBufferLoad: {
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
 			~argPairs = [ffreq: ~ffreqCtl.asMap];
+			NotificationCenter.notify(name, \ready);
 		},
 		useGui: { |vpi| ~ffreqCtl => VP(vpi) },
 		free: { ~ffreqCtl.free },
@@ -1287,6 +1288,7 @@ makeBP: { |name|
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
 		def: \bufGrainRLPFPan,
+		chan: ~chan,
 		inChannels: 2,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
@@ -1313,19 +1315,20 @@ makeBP: { |name|
 
 // drum7+8
 
-(keys: #[master, rvbmc, clock108],
+Fact(\drum4).v.copy.putAll((
 quant: -1,
-make: { |name|
+makeBP: { |name|
 	BP(name).free;
 	PR(\drumSubdiv).chuck(BP(name), nil, (
 		master: ~master,
 		rvbmc: ~rvbmc,
-		gest: \ostFilt2
+		gest: \ostFilt2,
+		source: ~source,
 		ctlSource: ~ctlSource	// use same controls as ctlSource
 	));
 	~quant => BP(name);
 	~clock108 => BP(name);
-}, type: \bp) => Fact(\drum7);
+})) => Fact(\drum7);
 
 // Fact(\drum7) => BP(\drum7);
 // Fact(\drum7).chuck(BP(\drum8), nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
