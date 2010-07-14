@@ -1,6 +1,31 @@
 // rhythm evolution
 // to do: create processes first!
 
+Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
+
+(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
+
+BP.all.free;
+
+(
+var	clock108 = ~clock108;
+(1..3).do { |i| Fact(("drum" ++ i).asSymbol).chuck(BP(("drum" ++ i).asSymbol), nil, (source: \drum1)) };
+
+NotificationCenter.registerOneShot(\drum3, \ready, \bploader, {
+	~clock108 = clock108;	// CRAPPY WORKAROUND
+	Fact(\drum4).chuck(BP(\drum4), nil, (pan: -1));
+	// 5 and 6 are basically copies - switch between them to change phase vs. drum4
+	Fact(\drum4).chuck(BP(\drum5), nil, (pan: 1, chan: BP(\drum4).chan));
+	Fact(\drum4).chuck(BP(\drum6), nil, (pan: 1, chan: BP(\drum4).chan));
+
+	Fact(\drum7) => BP(\drum7);
+	Fact(\drum7).chuck(BP(\drum8), nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
+});
+)
+
+// NotificationCenter.registrationsFor(\drum3, \ready)
+// NotificationCenter.unregister(\drum3, \ready, \bploader);
+
 (
 //~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
