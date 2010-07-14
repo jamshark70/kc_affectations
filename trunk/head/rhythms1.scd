@@ -645,10 +645,14 @@ PR(\abstractProcess).clone {
 		~accWetCtl = GenericGlobalControl(\accWet, nil, 0.75);
 		~fmltWetCtl = GenericGlobalControl(\fmltWet, nil, 0.1);
 		~fmltDcyCtl = GenericGlobalControl(\fmltDcy, nil, 0.1, #[0.01, 1, \exp]);
+		~ostFiltCtl = GenericGlobalControl(\ostFiltProb, nil, 0.1);
+		~ost2AmpCtl = GenericGlobalControl(\ost2Amp, nil, 0, \amp);
 	};
 
-	~freeCleanup = { [~chan, ~accWetCtl, ~fmltWetCtl, ~fmltDcyCtl].free };
-	~useGui = { |vpi| [~accWetCtl, ~fmltWetCtl, ~fmltDcyCtl].do { |gc| gc => VP(vpi) } };
+	~freeCleanup = { [~chan, ~accWetCtl, ~fmltWetCtl, ~fmltDcyCtl, ~ostFiltCtl, ~ost2AmpCtl].free };
+	~useGui = { |vpi|
+		[/*~accWetCtl,*/ ~fmltWetCtl, ~fmltDcyCtl, ~ostFiltCtl, ~ost2AmpCtl].do { |gc| gc => VP(vpi) }
+	};
 
 	~gest_ = { |gpat|
 		\gest.envirPut(gpat.asPattern.collect { |g| ~lastGest = g; g });
@@ -658,7 +662,12 @@ PR(\abstractProcess).clone {
 	~n = Pwhite(2, 8, inf);
 	~factor = Pif(Pkey(\n) <= 5, Prand(#[1, 2], inf), Prand(#[2, 4], inf));
 	~numBars = Pwhite(2, 4, inf);
+	~numAcc = Pwhite(2, 4, inf);
 	~restBeats = Pwhite(3, 8, inf) * 0.5;
+	~ostFiltFreq = Pswitch1([
+		Plazy { BPStream(\accFreq) },
+		Plazy { BPStream(\accFreq) * 2.5 * ~fmltWetCtl }
+	], Pdict(Dictionary[0.5 -> 0, 0.6 -> 0, 1.0 -> 1], Pkey(\rate), inf, 1));
 
 	~gestures = (
 		ost: Pbind(
@@ -668,7 +677,7 @@ PR(\abstractProcess).clone {
 			\rate, Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
 			\start, 0,
 			\pan, Plazy { BPStream(\pan) },
-			\ffreq, BPStream(\lpfreq)
+			\ffreq, Plazy { BPStream(\lpfreq) }
 		),
 		ost1: Pbind(
 			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 1),
@@ -677,15 +686,38 @@ PR(\abstractProcess).clone {
 			\rate, Place(#[[0.5, 0.6], 1], inf),
 			\start, 0,
 			\pan, Plazy { BPStream(\pan) },
-			\ffreq, BPStream(\lpfreq)
+			\ffreq, Plazy { BPStream(\lpfreq) }
 		),
 		ostFilt: Plazy { |ev|
 			Pbindf(~gestures[\ost],
 				\instrument, \bufGrainPanFmlet,
-				\wet, ~fmltWetCtl.value,
-				\ffreq, BPStream(\accFreq),
+				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\ffreq, BPStream(\ostFiltFreq),
 				\fdec, ~fmltDcyCtl
 			)
+		},
+		ostFilt2: Plazy {
+			Pbind(
+				\instrument, \bufGrainPanFmlet,
+				\delta, Pn(0.25, 12), //Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
+				\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
+					Pseq(#[0, 1, 0, 0, 1, 1], inf)
+				),
+				\amp, Pif(Pkey(\bufIndex) > 0, 3.7, 1)
+					* Pswitch1([1, ~ost2AmpCtl], Pseq(#[0, 0, 0, 1, 0, 1], inf)),
+				\rate, Pif(Pkey(\bufIndex) > 0, 1, Pseq(#[0.5, 0.5, 0.6, 0.6, 0.6, 0.5])),
+				\start, 0,
+				\pan, BPStream(\pan),
+				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\ffreq, BPStream(\ostFiltFreq),
+				\fdec, ~fmltDcyCtl
+			)
+		},
+		ostFilt2Sync: Plazy { |ev|
+			~gestures[\barsync].(Pn(~gestures[\ostFilt2], inf))
+		},
+		ostFilt2Quant: Plazy { |ev|
+			~gestures[\quantsync].(Pn(~gestures[\ostFilt2], inf))
 		},
 		ostFiltIn: Plazy { |ev|
 			var	numBars = ~numBarsStream.next(ev);
@@ -885,6 +917,12 @@ PR(\abstractProcess).clone {
 		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
 			Psync(pat, q, q);
 		},
+		quantsync: { |pat|
+			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime
+					+ (BP(~collIndex).quant.phase ? 0);
+		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
+			Psync(pat, q, q);
+		},
 		threePl1Rest: Plazy { |ev|
 			~gestures[\restify].(~gestures[\threePl1])
 		},
@@ -918,6 +956,9 @@ PR(\abstractProcess).clone {
 		},
 		randsync: Plazy { |ev|
 			~gestures[\barsync].(Psym(Prand(#[three, threeAcc, threeRest, five, fiveAcc, seven, sevenAcc], inf), ~gestures));
+		},
+		randquant: Plazy { |ev|
+			~gestures[\quantsync].(Psym(Prand(#[three, threeAcc, threeRest, five, fiveAcc, seven, sevenAcc], inf), ~gestures));
 		}
 	);
 
@@ -980,6 +1021,7 @@ PR(\abstractProcess).clone {
 		~makeStreamForKey.(\factor);
 		~makeStreamForKey.(\numBars);
 		~makeStreamForKey.(\restBeats);
+		~numAccStream ?? { ~makeStreamForKey.(\numAcc) };
 		// w/o Pif, Event.silent results from Ppar cause this to die
 		Pif(Pfunc { |ev| ev[\type] == \rest }, Pfunc { |ev| ev },
 			Pbind(
@@ -1002,7 +1044,20 @@ PR(\drumSubdiv) => BP(\drum7);
 PR(\drumSubdiv) => BP(\drum8);
 ~clock108 => BP(\drum8);
 
-BP(\drum7).gest = \ost;
+BP(\drum8).quant = #[-1, 1.25];
+BP(\drum7).pan = -1;
+BP(\drum8).pan = 1;
+
+BP(\drum7).gest = \ostFilt2;
+BP(\drum8).gest = \ostFilt2;
+
+BP(\drum7).gest = Pstutter(4, Pseq(#[ost, ostFilt], inf));
+
+BP(\drum7).gest.postcs
+BP(\drum7).gestures.keys.asArray.sort
+
+BP(\drum7).override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
+BP(\drum8).override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
 
 BP(\drum7).event = (eventKey: \singleSynthPlayer, instrument: \bufGrainRLPFPan);
 
@@ -1122,6 +1177,9 @@ BP(\drum7).numBars = Pwhite(2, 4, inf);
 BP(\drum7).gest = Pseq([Pn(\ost, 3), Prand(#[ostFiltIn, ostFiltSwell], 1)], inf);
 BP(\drum7).gest = Pseq([Pn(\ost, 1), \ostFiltIn, \threePl1, Prand(#[three, threeAcc, threeRest], { rrand(6, 14) }), \threesync, \ostFiltOut], inf);
 
+BP(\drum7).override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
+BP(\drum8).override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
+
 // cool!
 BP(\drum7).gest = Pfsm([
 	#[4, 5],
@@ -1136,14 +1194,15 @@ BP(\drum7).gest = Pfsm([
 	\five1Acc, #[0, 2],
 	\seven1Acc, #[1, 3],
 ], inf);
+BP(\drum8).gest = BP(\drum7).gest.pattern;
 
 n = rrand(2, 4);
 BP(\drum7).override(\gest, Pseq([\randsync, Pn(\ostFilt, n)]));
 BP(\drum8).override(\gest, Pseq([\randsync, Pn(\ostFilt, n)]));
 
-n = rrand(2, 4);
-BP(\drum7).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n)]));
-BP(\drum8).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n)]));
+n = 4; // rrand(2, 4);
+BP(\drum7).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n), \randquant]));
+BP(\drum8).override(\gest, Pseq([\randsync, Pn(\sevenAccRest, n), \randquant]));
 
 n = rrand(2, 4);
 BP(\drum7).override(\gest, Pseq([\randsync, \sevenAccRest, Prand(#[sevenAcc, sevenAccRest], n)]).trace);
@@ -1285,8 +1344,70 @@ BP(\drum7).gest = \threePl1Rest.asPattern;
 BP(\drum7).gestures.ostFilt = Plazy { |ev|
 			Pbindf(~gestures[\ost],
 				\instrument, \bufGrainPanFmlet,
-				\wet, ~fmltWetCtl.value,
-				\ffreq, 52 * Pwhite(5, 15, inf),
+				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\ffreq, BPStream(\ostFiltFreq),
 				\fdec, ~fmltDcyCtl
 			)
 		};
+
+BP(\drum7).gest = \ostFilt;
+BP(\drum7).ostFiltCtl = GenericGlobalControl(\ostFiltProb, nil, 0.1);
+BP(\drum7).freeCleanup = BP(\drum7).freeCleanup <> { ~ostFiltCtl.free };
+
+BP(\drum7).ostFiltFreq = Pswitch1([
+		Plazy { BPStream(\accFreq) },
+		Plazy { BPStream(\accFreq) * 2.5 * ~fmltWetCtl }
+	], Pdict(Dictionary[0.5 -> 0, 0.6 -> 0, 1.0 -> 1], Pkey(\rate), inf, 1));
+
+Pswitch1([
+	Plazy { BPStream(\accFreq) },
+	Plazy { BPStream(\accFreq) },
+	Plazy { BPStream(\accFreq) * 2 }
+], Pdict(Dictionary[0.5 -> 0, 0.6 -> 1, 1.0 -> 2], Pkey(\rate), inf, 1));
+
+(fmltWetCtl: 0.8, ostFiltCtl: 1).keysValuesDo { |key, val|
+	var	n;
+	n = BP(\drum7).v[key].watch.automate({ Line.kr(0, val, 45, doneAction: 2) });
+	OSCpathResponder(s.addr, ['/n_end', n.nodeID], { |t, r, m|
+		r.remove; m.postln;
+		BP(\drum7).v[key].stopWatching;
+	}).add;
+};
+
+KrBusWatcher.browse
+KrBusWatcher.newFrom(s).nodes
+
+#[fmltWetCtl, ostFiltCtl].do { |k| BP(\drum7)[k].stopWatching };
+
+BP(\drum7).gestures.ostFilt2 = Plazy {
+	Pbind(
+		\instrument, \bufGrainPanFmlet,
+		\delta, Pn(0.25, 12), //Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
+		\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
+			Pseq(#[0, 1, 0, 0, 1, 1], inf)
+		),
+		\amp, Pif(Pkey(\bufIndex) > 0, 3.7, 1)
+			* Pswitch1([1, ~ost2AmpCtl], Pseq(#[0, 0, 0, 1, 0, 1], inf)),
+		\rate, Pif(Pkey(\bufIndex) > 0, 1, Pseq(#[0.5, 0.5, 0.6, 0.6, 0.6, 0.5])),
+		\start, 0,
+		\pan, BPStream(\pan),
+		\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+		\ffreq, BPStream(\ostFiltFreq),
+		\fdec, ~fmltDcyCtl
+	)
+};
+
+BP(\drum7).gest = \ostFilt2;
+
+BP(\drum7).gestures.quantsync = { |pat|
+			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime
+					+ (BP(~collIndex).quant.phase ? 0);
+		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
+			Psync(pat, q, q);
+		}
+
+BP(\drum7).gestures.randquant = Plazy({ |ev|
+			~gestures[\quantsync].(Psym(Prand(#[three, threeAcc, threeRest, five, fiveAcc, seven, sevenAcc], inf), ~gestures));
+		})
+
+#[quantsync, randquant].do { |k| BP(\drum8).gestures[k] = BP(\drum7).gestures[k] };
