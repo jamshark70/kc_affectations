@@ -1240,6 +1240,8 @@ makeBP: { |name|
 	BP(name).free;
 	parms = (
 		alwaysReset: true,
+		master: ~master,
+		rvbmc: ~rvbmc,
 		reset: { ~pbindPreAction.reset },
 		postBufferLoad: {
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
@@ -1255,7 +1257,7 @@ makeBP: { |name|
 		},
 		baseIndices: #[1, 4, 7, 10],
 		baseAmp: 3.7,
-		def: \bufGrainPanRLPF
+		def: \bufGrainRLPFPan
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
 	
@@ -1290,6 +1292,8 @@ makeBP: { |name|
 		def: \bufGrainRLPFPan,
 		chan: ~chan,
 		inChannels: 2,
+		master: ~master,
+		rvbmc: ~rvbmc,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
 		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
@@ -1298,10 +1302,11 @@ makeBP: { |name|
 		rate: Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
 		start: 0,
 		pan: ~pan ? 0,
-		argPairs: [pan: BPStream(\pan)],
+		ffreq: 18000,
+		argPairs: [pan: BPStream(\pan), ffreq: BPStream(\ffreq)],
 		reset: {
 			var	str;
-			currentEnvironment.keys.do { |key|
+			currentEnvironment.env.keys.do { |key|
 				if((str = key.asString).contains("Stream")) {
 					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
 				}
