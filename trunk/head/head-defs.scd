@@ -1100,7 +1100,7 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 (keys: #[master, rvbmc],
 copyKeys: #[buffers, chan, postMCCreation, calcBar, bar, amps],  // you can override this
 sourceFreesMe: true,
-bp: \t1,
+bp: \drum1,
 make: { |name|
 	var	parms = ~parms ?? { () }, upd;
 	BP(name).free;
@@ -1148,17 +1148,19 @@ make: { |name|
 			} ! (~baseIndices.size + 1)		
 		},
 		postBufferLoad: {
-			~chan.newPostSend(~rvbmc, 0.391);
-			~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]);
-			~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]);
-			~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]);
-			~wetCtl = GenericGlobalControl(\wet, nil, 1);
+			if(~iMadeMixer ? false) {
+				~chan.newPostSend(~rvbmc, 0.391);
+			};
+			~fdecCtl ?? { ~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]) };
+			~ffLowCtl ?? { ~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]) };
+			~ffRangeCtl ?? { ~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]) };
+			~wetCtl ?? { ~wetCtl = GenericGlobalControl(\wet, nil, 1) };
 
 			~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
-			~argPairs = [
-				ffreq: BPStream(\ffreq),
+			~argPairs = ~argPairs ++ [
+				ffreq: Pif(Pkey(\bufIndex) > 0, 18000, BPStream(\ffreq)),
 				fdec: ~fdecCtl, 
-				wet: ~wetCtl.asMap
+				wet: Pif(Pkey(\bufIndex) > 0, 0, ~wetCtl.asMap)
 			];
 			// sibling processes may not init until I'm done
 			NotificationCenter.notify(name, \ready);
@@ -1190,7 +1192,7 @@ make: { |name|
 
 (
 keys: #[master, rvbmc, clock108],
-source: \t1,
+source: \drum1,
 make: { |name|
 	BP(name).free;
 	if (BP.exists(~source)) {
@@ -1289,9 +1291,16 @@ makeBP: { |name|
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
-		def: \bufGrainRLPFPan,
+		def: \bufGrainPanFmlet, //\bufGrainRLPFPan,
 		chan: ~chan,
 		inChannels: 2,
+		copyCtls: #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl],
+		ctlSource: \drum1,
+		postMCCreation: {
+			~copyCtls.do { |ckey| ckey.envirPut(BP(~ctlSource)[ckey]) };
+		},
+		postBufferLoad: BP(\drum1).v[\postBufferLoad],
+// 		free: {},
 		master: ~master,
 		rvbmc: ~rvbmc,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
@@ -1303,7 +1312,7 @@ makeBP: { |name|
 		start: 0,
 		pan: ~pan ? 0,
 		ffreq: 18000,
-		argPairs: [pan: BPStream(\pan), ffreq: BPStream(\ffreq)],
+		argPairs: [pan: Plazy { BPStream(\pan) }],
 		reset: {
 			var	str;
 			currentEnvironment.env.keys.do { |key|
