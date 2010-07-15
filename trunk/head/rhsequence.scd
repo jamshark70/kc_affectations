@@ -1,9 +1,9 @@
 // rhythm evolution
-// to do: create processes first!
+// to do: drum7 ostFilt2 needs to not filter high drums
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
-(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
+s.waitForBoot(e { (Document.current.path.dirname +/+ "head-defs.scd").debug("loading").loadPath });
 
 ~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
 
@@ -52,7 +52,28 @@ PR(\bpCmd).clone {
 
 
 (
+// I think this will be useful later
+Proto {
+	~newC = { |name|
+		name.envirPut(Condition.new);
+	};
+	~setTest = { |name, test|
+		name.envirGet !? { name.envirGet.test_(test).signal };
+	};
+	~freeCleanup = {
+		if(~unhangAll ? false) {
+			currentEnvironment.env.keysValuesDo { |k, v|
+				if(v.isKindOf(Condition)) { v.unhang };
+			}
+		}
+	};
+} => BP(\cLib);
+)
+
+
+(
 //~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
+if(t.tryPerform(\isRunning) ? false) { t.stop; Error("wait for t to stop first").throw };
 t = TLSequenceIterator([
 	{	var	bp = BP(\drum1);
 		bp.bar = 3;
@@ -104,14 +125,12 @@ t = TLSequenceIterator([
 	),
 	\sync,
 */
+
 	Quant(3, -0.5),
+
 /*
 	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[3, 0], inf);
-// 		bp.wetCtl.value = 0.98;
-// 		bp.fdecCtl.value = 0.25;
-// 		bp.ffLowCtl.value = 2;
-// 		bp.ffRangeCtl.value = 0;
 	}),
 	12,
 	gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
@@ -140,6 +159,8 @@ t = TLSequenceIterator([
 	{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
 		12
 	},
+	gcAutoSynthCmd: (gc: BP(\drum1).ffRangeCtl, name: \ctlEnv, outName: \outbus, 
+		env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
 
 	{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
 		BP(\drum2).bar = 3;
@@ -156,11 +177,11 @@ t = TLSequenceIterator([
 	},
 
 	{	BP(\drum3).bar = 15;
-		24
+		6
 	},
 
 	{ BP(#[drum1, drum2, drum3]).stop; 0 },
-*/
+
 	bpCmd: (name: #[drum4, drum5], quant: `nil, prepareBP: { |bp|
 		var	panEnd = -1;
 		bp.reset;
@@ -170,15 +191,56 @@ t = TLSequenceIterator([
 			bp.amp = Pseq(#[1, 3.7], inf) * Env(#[0, 1], #[12], 2.4)
 		};
 		bp.pan = Env([0, panEnd], #[30]);
+		bp.wetCtl.value = 0.078;
 	}),
 
-	24,
+	18,
 	swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 3.7], inf) }),
+	gcAutoSynthCmd: (gc: BP(\drum4).ffRangeCtl, name: \ctlPoint, outName: \outbus, 
+		value: 18, time: 36),
+
 	24,
-	swap56cmd: (quant: #[-1, 0.75], extraPrep: { |bp| bp.amp = Pseq(#[1, 3.7], inf) }),
+	swap56cmd: (quant: #[-1, 1.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 3.7], inf) }),
 	24,
-	swap56cmd: (quant: #[-1, 1.25]),
+	swap56cmd: (quant: #[-1, 0.75]),
 	24,
+*/
+	{	BP(#[drum4, drum5, drum6]).stop;
+		BP(\drum7).pan = -1;
+		BP(\drum8).pan = 1;
+		BP(\drum7).quant = -1;
+		BP(\drum8).quant = #[-1, 1.25];
+		0
+	},
+
+	bpCmd: (name: #[drum7, drum8], quant: -1, num3: rrand(2, 7), prepareBP: { |bp|
+		~num3 = ~num3 + 5;
+		bp.gest = Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant, Pn(\ostFilt2, inf)]);
+		bp.ostFiltCtl.value = 1;
+		bp.fmltDcyCtl.value = 0.25;
+		bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
+		bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
+	}),
+	36,
+	{	BP(#[drum7, drum8]).do { |bp|
+			bp.override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
+		};
+		24
+	},
+	{	BP(\drum8).gest = Pfsm([
+			#[4, 5],
+			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+			Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+			\fiveAcc, #[2, 4, 5],
+			\sevenAcc, #[3, 4, 5],
+			\five1Acc, #[0, 2],
+			\seven1Acc, #[1, 3],
+		], inf);
+		12
+	},
+	{	BP(\drum7).gest = BP(\drum8).gest;
+		48
+	},
 
  	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
@@ -189,6 +251,11 @@ t = TLSequenceIterator([
 t.stop;
 
 t.activeCmds
+t.activeCmds.do(_.listVars)
+
+t.array[21]
+
+t.isRunning
 
 0.1 / ~clock108.tempo
 
@@ -205,3 +272,9 @@ BP(\drum5).play([-1, 0.75]);
 
 
 BP(#[drum4, drum5, drum6]).do(_.stopNow);
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]); r.remove }).add;
+
+t.array.do(_.postln); ""
