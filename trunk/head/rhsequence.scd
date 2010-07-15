@@ -5,14 +5,18 @@ Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
 (Document.current.path.dirname +/+ "head-defs.scd").loadPath;
 
-BP.all.free;
+~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
+
+//~rvbmc => MCG(6);
+~master => MCG(7);
+MixingBoard.at(0).refresh;
+
+BP.all.do { |bp| bp.free };
 
 (
-var	clock108 = ~clock108;
 (1..3).do { |i| Fact(("drum" ++ i).asSymbol).chuck(BP(("drum" ++ i).asSymbol), nil, (source: \drum1)) };
 
-NotificationCenter.registerOneShot(\drum3, \ready, \bploader, {
-	~clock108 = clock108;	// CRAPPY WORKAROUND
+NotificationCenter.registerOneShot(\drum3, \ready, \bploader, e {
 	Fact(\drum4).chuck(BP(\drum4), nil, (pan: -1));
 	// 5 and 6 are basically copies - switch between them to change phase vs. drum4
 	Fact(\drum4).chuck(BP(\drum5), nil, (pan: 1, chan: BP(\drum4).chan));
@@ -26,6 +30,27 @@ NotificationCenter.registerOneShot(\drum3, \ready, \bploader, {
 // NotificationCenter.registrationsFor(\drum3, \ready)
 // NotificationCenter.unregister(\drum3, \ready, \bploader);
 
+BP.keys.asArray.sort.do { |key|
+	var mc = BP(key).chan;
+	BP(key) => MT(1);
+	if(mc.notNil and: { mc.mcgui.isNil }) {
+		mc => MCG.collection.detect { |mcg| mcg.v.mixer.isNil };
+	}
+};
+
+
+(
+PR(\bpCmd).clone {
+	~setDoneSignal = {
+		~playing = if(BP(\drum5).isPlaying) { \drum5 } { \drum6 };
+		~name = if(~playing == \drum5) { \drum6 } { \drum5 };
+		BP(~playing).stop(~quant);
+	};
+	~prepareBP = { |bp| ~extraPrep.(bp); bp.reset };
+} => PR(\swap56cmd);
+)
+
+
 (
 //~master.startRecord(thisProcess.platform.recordingsDir +/+ "rhythm1.aiff");
 t = TLSequenceIterator([
@@ -37,6 +62,7 @@ t = TLSequenceIterator([
 		bp.ffRangeCtl.value = 0;
 		0
 	},
+/*
 	loopCmd: (
 		setDoneSignal: {
 			~doneSignal = true;
@@ -77,7 +103,9 @@ t = TLSequenceIterator([
 		]
 	),
 	\sync,
+*/
 	Quant(3, -0.5),
+/*
 	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
 		bp.bar = Pseq(#[3, 0], inf);
 // 		bp.wetCtl.value = 0.98;
@@ -128,8 +156,29 @@ t = TLSequenceIterator([
 	},
 
 	{	BP(\drum3).bar = 15;
-		48
+		24
 	},
+
+	{ BP(#[drum1, drum2, drum3]).stop; 0 },
+*/
+	bpCmd: (name: #[drum4, drum5], quant: `nil, prepareBP: { |bp|
+		var	panEnd = -1;
+		bp.reset;
+		if(bp.collIndex == \drum5) {
+			bp.quant = #[-1, 0.02];
+			panEnd = 1;
+			bp.amp = Pseq(#[1, 3.7], inf) * Env(#[0, 1], #[12], 2.4)
+		};
+		bp.pan = Env([0, panEnd], #[30]);
+	}),
+
+	24,
+	swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 3.7], inf) }),
+	24,
+	swap56cmd: (quant: #[-1, 0.75], extraPrep: { |bp| bp.amp = Pseq(#[1, 3.7], inf) }),
+	24,
+	swap56cmd: (quant: #[-1, 1.25]),
+	24,
 
  	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
@@ -138,3 +187,21 @@ t = TLSequenceIterator([
 )
 
 t.stop;
+
+t.activeCmds
+
+0.1 / ~clock108.tempo
+
+u.do(_.remove);
+u = #[drum5, drum6].collect { |k|
+	Updater(BP(k), { |... args| [thisThread.beats, args].debug })
+};
+
+~clock108.clear
+
+BP(#[drum4, drum5, drum6]).do(_.reset);
+BP(\drum4).play(-1);
+BP(\drum5).play([-1, 0.75]);
+
+
+BP(#[drum4, drum5, drum6]).do(_.stopNow);
