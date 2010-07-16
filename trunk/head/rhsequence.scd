@@ -275,25 +275,61 @@ t = TLSequenceIterator([
 	),
 	\cmdSync,
 
-	{
-		BP(\drum7).gest = Pseq([
+	{	BP(\drum7).gest = Pseq([
 			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(5, 9) }).trace(prefix: "7 "),
-			Pfin({ rrand(4, 8) }, BP(\drum7).gest)
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }).trace(prefix: "7 "),
+			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "7-num57: ").asStream, BP(\drum7).gest)
 		], inf);
 		12
 	},
 
-	{
-		BP(\drum8).gest = Pseq([
+	{	BP(\drum8).gest = Pseq([
 			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(5, 9) }).trace(prefix: "8 "),
-			Pfin({ rrand(4, 8) }, BP(\drum8).gest)
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }).trace(prefix: "8 "),
+			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "8-num57: ").asStream, BP(\drum8).gest)
 		], inf);
-		12
-	}//,
+		36
+	},
+
+	loopCmd: (repeats: 4,
+//		setDoneSignal: { BP(\cLib).newC(\dsync) },
+		cmds: [
+			funcCmd: (
+				doneSignal: true,
+				func: {
+					var	seed = Date.seed, num = rrand(7, 15),
+					thisCmd = currentEnvironment,
+					n = ({ rrand(2, 8) } ! num).debug("n"),
+					factor = { rrand(1, 2) } ! num;
+					BP(#[drum7, drum8]).do { |bp|
+						var	once = true, saven, saveFactor;
+						bp.override(\gest, Pseq([
+							\randsync,
+							CleanupStream(
+								Pseed(Pn(seed, 1),
+									Pwrand(#[nhigh, nhighAcc], #[0.4, 0.6], num)
+								).collect { |gest|
+									if(once) {
+										bp.override(\n, Pseq(n, 1));
+										bp.override(\factor, Pseq(factor, 1));
+										once = false;
+									};
+									gest
+								}.asStream,
+								{ "cleanup".debug; thisCmd.stop }
+							);
+						], 1));
+					};
+				}
+			),
+			\sync,
+			{ rrand(12, 18) }
+		]
+	),
+	\sync,
+
 // 	36,
-//  	funcCmd: (func: { ~iterator.stop })
+	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
 //	{ ~master.stopRecord; 0 }
 ]).play(argClock: ~clock108 ? TempoClock.default);
