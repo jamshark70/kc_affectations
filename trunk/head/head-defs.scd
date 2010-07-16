@@ -1363,6 +1363,7 @@ PR(\abstractProcess).clone {
 
 		~other = if(~collIndex == \drum7) { \drum8 } { \drum7 };
 		~n = ~n.select { |n|
+//[n, BP(~other)[\lastSubdiv], ~lastSubdivTime, BP(~other)[\lastSubdivTime]].debug("test" + ~collIndex);
 			n != BP(~other)[\lastSubdiv] or: { ~lastSubdivTime == BP(~other)[\lastSubdivTime] }
 		};
 
@@ -1720,7 +1721,7 @@ PR(\abstractProcess).clone {
 // 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
 		// I don't want the same subdivision in both parts unless they start at the same time
 		// So, save the subdivision and time so the other can check
-		~lastSubdiv = n;
+		~lastSubdiv = /*factor / */ n;
 		~lastSubdivTime = thisThread.beats;
 		{ |i|
 			Pbind(
@@ -1781,7 +1782,13 @@ PR(\abstractProcess).clone {
 		PnNilSafe(
 			Plazy {
 				~keepGoing = true;
-				Pwhile1({ if(~keepGoing) { true } { "~keepGoing = false".debug; false } }, ~gestures[~gestStream.next])
+				Pwhile1({ |proto, ev|
+					~keepGoing or: { ev.delta == 0 }
+// 					if(~keepGoing) { true }
+// 						{ ev.delta.debug("~keepGoing = false; delta"); ev.debug; ev.delta == 0 }
+				},
+					~gestures[~gestStream.next]
+				)
 			},
 			inf
 		);
