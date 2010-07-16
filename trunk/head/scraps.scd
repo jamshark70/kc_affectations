@@ -193,3 +193,24 @@ BP(\cd).xferEvent = { |ev, fspecs, lockref, key|
 	}
 
 BP.all.do(_.reset);
+
+
+
+{ |gest|
+								if(once) {
+									saven = bp.n;
+									saveFactor = bp.factor;
+[bp.collIndex, thisThread.beats].debug("made cleanupstream for");
+									bp.n = CleanupStream(
+										Pseed(Pn(seed, 1), Pfin(num, saven)).postcs.asStream,
+										e { "cleanup func".debug;
+											bp.n = saven;
+											bp.factor = saveFactor;
+											~stop.()
+										}
+									);
+									bp.factor = Pseed(seed, saveFactor);
+									once = false;
+								};
+								gest
+							}
