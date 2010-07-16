@@ -5,11 +5,12 @@ Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 
 s.waitForBoot(e { (Document.current.path.dirname +/+ "head-defs.scd").debug("loading").loadPath });
 
+(
 ~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
-
 //~rvbmc => MCG(6);
 ~master => MCG(7);
 MixingBoard.at(0).refresh;
+)
 
 BP.all.do { |bp| bp.free };
 
@@ -209,7 +210,7 @@ t = TLSequenceIterator([
 		BP(\drum7).pan = -1;
 		BP(\drum8).pan = 1;
 		BP(\drum7).quant = -1;
-		BP(\drum8).quant = #[-1, 1.25];
+		BP(\drum8).quant = #[-1, 0.75];
 		0
 	},
 
@@ -222,11 +223,21 @@ t = TLSequenceIterator([
 		bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
 	}),
 	36,
-	{	BP(#[drum7, drum8]).do { |bp|
-			bp.override(\gest, Pseq([\threePl1Sync, Pn(\threeAcc, 3), \ostFilt2Quant], 1));
-		};
-		24
-	},
+	loopCmd: (repeats: 2,
+		qphase: Pseq(#[1.25, 0.75], inf).asStream,
+		acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
+		cmds: [
+			{	var	numAcc = rrand(3, 6), acc = ~acc.next,
+					pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
+				BP(#[drum7, drum8]).do { |bp|
+					bp.override(\gest, pat);
+				};
+				BP(\drum8).quant = [-1, ~qphase.next];
+				24
+			}
+		]
+	),
+	\cmdSync,
 	{	BP(\drum8).gest = Pfsm([
 			#[4, 5],
 			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
@@ -239,8 +250,23 @@ t = TLSequenceIterator([
 		12
 	},
 	{	BP(\drum7).gest = BP(\drum8).gest;
-		48
+		24
 	},
+	loopCmd: (repeats: 2,
+		qphase: Pseq(#[1.25, 0.75], inf).asStream,
+		acc: Pstutter(2, Prand(#[threeAcc, fiveAcc, sevenAcc], inf)).asStream,
+		cmds: [
+			{	var	numAcc = rrand(3, 6),// acc = ~acc.next,
+					pat = Pseq([\randsync, Pfin(numAcc, ~acc), \randquant], 1);
+				BP(#[drum7, drum8]).do { |bp|
+					bp.override(\gest, pat);
+				};
+				BP(\drum8).quant = [-1, ~qphase.next];
+				24
+			}
+		]
+	),
+	\cmdSync,
 
  	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
