@@ -1361,6 +1361,11 @@ PR(\abstractProcess).clone {
 		~lpfreq = 15000;
 		~gest_.(~gest);
 
+		~other = if(~collIndex == \drum7) { \drum8 } { \drum7 };
+		~n = ~n.select { |n|
+			n != BP(~other)[\lastSubdiv] or: { ~lastSubdivTime == BP(~other)[\lastSubdivTime] }
+		};
+
 		if(~ctlSource.isNil) {
 			~accWetCtl = GenericGlobalControl(\accWet, nil, 0.75);
 			~fmltWetCtl = GenericGlobalControl(\fmltWet, nil, 0.1);
@@ -1425,7 +1430,8 @@ PR(\abstractProcess).clone {
 		ostFilt: Plazy { |ev|
 			Pbindf(~gestures[\ost],
 				\instrument, \bufGrainPanFmlet,
-				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\wet, Pif(Pbinop('and', ~ostFiltCtl.asPattern.coin, Pkey(\bufIndex) <= 0),
+					~fmltWetCtl, 0),
 				\ffreq, BPStream(\ostFiltFreq),
 				\fdec, ~fmltDcyCtl
 			)
@@ -1442,7 +1448,8 @@ PR(\abstractProcess).clone {
 				\rate, Pif(Pkey(\bufIndex) > 0, 1, Pseq(#[0.5, 0.5, 0.6, 0.6, 0.6, 0.5])),
 				\start, 0,
 				\pan, BPStream(\pan),
-				\wet, Pif(~ostFiltCtl.asPattern.coin, ~fmltWetCtl, 0),
+				\wet, Pif(Pbinop('and', ~ostFiltCtl.asPattern.coin, Pkey(\bufIndex) <= 0),
+					~fmltWetCtl, 0),
 				\ffreq, BPStream(\ostFiltFreq),
 				\fdec, ~fmltDcyCtl
 			)
@@ -1705,22 +1712,29 @@ PR(\abstractProcess).clone {
 				Env([n, factor], [factor], \exp)
 			} {
 				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
-			}).postcs.asStream,
-			ffreq = 52 * [n, fenv.trace],
+			}).asStream,
+			amul = Pgeom.fromEndpoints(1, 0.5, n),
+			ffreq = 52 * [n, fenv],
 			fdec = 0.15 / [1, fenv.explin(n, factor, 1, n)];
 // 			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
 // 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
+		// I don't want the same subdivision in both parts unless they start at the same time
+		// So, save the subdivision and time so the other can check
+		~lastSubdiv = n;
+		~lastSubdivTime = thisThread.beats;
 		{ |i|
 			Pbind(
 				\instrument, \bufGrainPanFmlet,
 				\delta, Pn(factor / n, n),
 				\bufIndex, Pxrand((1..4), inf),
-				\amp, 1,
+				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 3.7, 1.5, \none) * amul,
 				\rate, 1,
 				\start, 0,
-				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+// 				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
+				\pan, BPStream(\pan),
 				\ffreq, ffreq[i],
-				\fdec, fdec[i]
+				\fdec, fdec[i],
+				\wet, ~fmltWetCtl
 			)
 		} ! 2
 	};
@@ -1765,7 +1779,10 @@ PR(\abstractProcess).clone {
 		)
 		<>
 		PnNilSafe(
-			Plazy { ~gestures[~gestStream.next] },
+			Plazy {
+				~keepGoing = true;
+				Pwhile1({ if(~keepGoing) { true } { "~keepGoing = false".debug; false } }, ~gestures[~gestStream.next])
+			},
 			inf
 		);
 	}
