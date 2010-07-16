@@ -2,7 +2,6 @@
 // to do: drum7 ostFilt2 needs to not filter high drums
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
-
 s.waitForBoot(e { (Document.current.path.dirname +/+ "head-defs.scd").debug("loading").loadPath });
 
 (
@@ -222,6 +221,7 @@ t = TLSequenceIterator([
 		bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
 		bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
 	}),
+/*
 	36,
 	loopCmd: (repeats: 2,
 		qphase: Pseq(#[1.25, 0.75], inf).asStream,
@@ -238,6 +238,8 @@ t = TLSequenceIterator([
 		]
 	),
 	\cmdSync,
+*/
+12,
 	{	BP(\drum8).gest = Pfsm([
 			#[4, 5],
 			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
@@ -247,28 +249,51 @@ t = TLSequenceIterator([
 			\five1Acc, #[0, 2],
 			\seven1Acc, #[1, 3],
 		], inf);
-		12
+		6
 	},
 	{	BP(\drum7).gest = BP(\drum8).gest;
 		24
 	},
-	loopCmd: (repeats: 2,
-		qphase: Pseq(#[1.25, 0.75], inf).asStream,
-		acc: Pstutter(2, Prand(#[threeAcc, fiveAcc, sevenAcc], inf)).asStream,
+	loopCmd: (repeats: 1,
+//		qphase: Pseq(#[1.25, 0.75], inf).asStream,
+		acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
 		cmds: [
-			{	var	numAcc = rrand(3, 6),// acc = ~acc.next,
-					pat = Pseq([\randsync, Pfin(numAcc, ~acc), \randquant], 1);
+			{	var	//numAcc = rrand(3, 6),// acc = ~acc.next,
+					// both 7+8 use the same random seed
+					pat = Pseed(Pn(Date.seed, 1), Pseq([
+						Pif(Ptime() < rrand(8, 15), Pseq([\randsync, ~acc], 1)),
+						\randquant
+					], 1));
 				BP(#[drum7, drum8]).do { |bp|
-					bp.override(\gest, pat);
+					bp.keepGoing = false;
+					bp.override(\gest, pat/*.trace(prefix: bp.collIndex ++ ": ")*/);
 				};
-				BP(\drum8).quant = [-1, ~qphase.next];
-				24
+				BP(\drum8).quant = -1; //[-1, ~qphase.next].debug("bp8 quant");
+				rrand(3, 6) * 6
 			}
 		]
 	),
 	\cmdSync,
 
- 	funcCmd: (func: { ~iterator.stop })
+	{
+		BP(\drum7).gest = Pseq([
+			\randsync,
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(5, 9) }).trace(prefix: "7 "),
+			Pfin({ rrand(4, 8) }, BP(\drum7).gest)
+		], inf);
+		12
+	},
+
+	{
+		BP(\drum8).gest = Pseq([
+			\randsync,
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(5, 9) }).trace(prefix: "8 "),
+			Pfin({ rrand(4, 8) }, BP(\drum8).gest)
+		], inf);
+		12
+	}//,
+// 	36,
+//  	funcCmd: (func: { ~iterator.stop })
 //	{ BP.all.stop; 8 },
 //	{ ~master.stopRecord; 0 }
 ]).play(argClock: ~clock108 ? TempoClock.default);
