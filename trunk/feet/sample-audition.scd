@@ -25,9 +25,9 @@ Dialog.getPaths { |paths|
 	~volBus = Bus.control(s, 1).set(1);
 
 	~window = ResizeFlowWindow("sample audition", Window.screenBounds);
-	StaticText(~window, Rect(0, 0, 300, 20))
+	~playstop = StaticText(~window, Rect(0, 0, 300, 20))
 		.align_(\center)
-		.string_("spc to play/stop");
+		.string_("spc to play");
 	~vol = EZSlider(~window, Rect(0, 0, 400, 20), "volume", \amp, { |view| ~volBus.set(view.value) }, 1);
 	Button(~window, Rect(0, 0, 120, 20))
 		.states_([["sfview off"], ["sfview ON"]])
@@ -93,12 +93,15 @@ Dialog.getPaths { |paths|
 				file.playNode = Synth("sampPlay" ++ file.numChan, [
 					bufnum: file.buf, amp: file.peak.reciprocal, vol: ~volBus.asMap
 				]);
+				{ ~playstop.string_("spc to stop") }.defer;
 				OSCpathResponder(s.addr, ['/n_end', file.playNode.nodeID], { |time, resp, msg|
+					{ ~playstop.string_("spc to play") }.defer;
 					~nowPlaying = nil;
 					resp.remove;
 				}).add;
 			}.play(AppClock);
 		} {
+			{ ~playstop.string_("spc to play") }.defer;
 			~nowPlaying.playNode.release;
 			~nowPlaying = nil;
 		};
