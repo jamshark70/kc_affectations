@@ -1658,7 +1658,6 @@ PR(\abstractProcess).clone {
 		},
 		barsync: { |pat|
 			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime;
-[q, thisThread.clock.nextBar, thisThread.beats, ~leadTime].debug("barsync" + ~collIndex);
 		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
 			Psync(pat, q, q);
 		},
@@ -1712,32 +1711,30 @@ PR(\abstractProcess).clone {
 			factor = ~factorStream.next(ev.put(\n, n)),
 			rotate = 2.rand,
 			temp,
-			fenv = (if(0.5.coin) {
-				Env([n, factor], [factor], \exp)
+			femul = rrand(1, 4),
+			fenv = ((if(0.8.coin) {
+				Env([n, 2], [factor], \exp)
 			} {
-				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
-			}).asStream,
-			amul = Pgeom.fromEndpoints(1, 0.5, n),
-			ffreq = 52 * [n, fenv],
-			fdec = 0.15 / [1, fenv.explin(n, factor, 1, n)];
-// 			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
-// 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
+				Env(temp = [n, 2].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
+			}).asStream * femul),
+			amul = Pgeom.fromEndpoints(1, 2/n, n),
+			ffreq = 52 * [n, fenv];
 		// I don't want the same subdivision in both parts unless they start at the same time
 		// So, save the subdivision and time so the other can check
-		~lastSubdiv = /*factor / */ n;
+		~lastSubdiv = n;
 		~lastSubdivTime = thisThread.beats;
 		{ |i|
 			Pbind(
 				\instrument, \bufGrainPanFmlet,
 				\delta, Pn(factor / n, n),
 				\bufIndex, Pxrand((1..4), inf),
-				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 1 /* finger-amp */, 1.5, \none) * amul,
+				\hpFreq, Pif(Pbinop('==', Pkey(\bufIndex), 3), -1, 276),
+				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 1, 0.4, \none) * amul,
 				\rate, 1,
 				\start, 0,
-// 				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
-				\pan, BPStream(\pan),
+				\pan, (#[-0.5, 0.5].wrapAt(i + rotate) + BPStream(\pan)).clip(-1, 1),
 				\ffreq, ffreq[i],
-				\fdec, fdec[i],
+				\fdec, 0.15 / Pkey(\ffreq).explin(104, 1700, 3, 0.75, \none),
 				\wet, ~fmltWetCtl
 			)
 		} ! 2
