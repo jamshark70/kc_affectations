@@ -214,3 +214,40 @@ BP.all.do(_.reset);
 								};
 								gest
 							}
+
+BP(\eq).free;
+PR(\basicBufferPlayer).chuck(BP(\eq), nil, (
+	buffers: BP(\drum3).buffers,
+	inChannels: 1,
+	postMCCreation: { |chan|
+		defer(e { ~eq = MultiEQ(1).edit(chan) });
+		~ampCtl = GenericGlobalControl(\amp, nil, 1, [1/25, 25, \exp, 0]);
+	},
+	free: { ~ampCtl.free },
+	useGui: { |vpi| ~ampCtl => VP(vpi) },
+	def: \bufGrain,
+	time: 0.8,
+	rate: 1,
+	start: 0,
+	amp: Plazy { Pn(~ampCtl.asMap, inf) },
+	delta: 1,
+	bufIndex: Pseq((0..3), inf)
+));
+
+// destructive eq on udu-finger samples
+MultiEQ.new(1, \hipass, 231.636, 0.dbamp, 1, \eq, 767.739, -9.291.dbamp, 0.104, \eq, 703.961, -3.937.dbamp, 0.057, \eq, 1134.832, -8.031.dbamp, 0.057, \eq, 1852.963, -4.567.dbamp, 0.057)
+
+BP(\eq).buffers[0].path.dirname
+BP(\eq).buffers.collect(_.path)
+
+t = TLSequenceIterator([
+	bpCmd: (name: \eq, quant: DelayTimeSpec(1), prepareBP: { |bp|
+		bp.bufIndex = Pseries(0, 1, 4);
+		bp.chan.startRecord(BP(\eq).buffers[0].path.dirname +/+ "udu-eq.aiff");
+	}),
+	\sync,
+	1,
+	{ BP(\eq).chan.stopRecord; 0 }
+]).play;
+
+
