@@ -1,6 +1,4 @@
 // rhythm evolution
-// to do: drum7 ostFilt2 needs to not filter high drums
-// nhighList is really badly hacked now - fix!!
 // drum sounds get monotonous after 5+7 take over - bring back low drums
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
@@ -85,7 +83,7 @@ t = TLSequenceIterator([
 		bp.ffRangeCtl.value = 0;
 		0
 	},
-/*
+
 	loopCmd: (
 		setDoneSignal: {
 			~doneSignal = true;
@@ -126,7 +124,7 @@ t = TLSequenceIterator([
 		]
 	),
 	\sync,
-*/
+
 
 	Quant(3, -0.5),
 
@@ -215,14 +213,31 @@ t = TLSequenceIterator([
 		0
 	},
 
-	bpCmd: (name: #[drum7, drum8], quant: -1, num3: rrand(2, 7), prepareBP: { |bp|
-		~num3 = ~num3 + 5;
-		bp.gest = Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant, Pn(\ostFilt2, inf)]);
+	bpCmd: (name: #[drum7, drum8], quant: -1, prepareBP: { |bp|
 		bp.ostFiltCtl.value = 1;
 		bp.fmltDcyCtl.value = 0.25;
-		bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
-		bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
+		bp.fmltWetCtl.value = 0.1;
 	}),
+	funcCmd: (doneSignal: true,
+		num3: rrand(2, 7),
+		func: {
+			var	thisCmd = currentEnvironment;
+			BP(#[drum7, drum8]).do { |bp|
+				~num3 = ~num3 + 5;
+				bp.gest = Pseq([
+					CleanupStream(
+						Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant]).asStream,
+						{ thisCmd.stop }
+					),
+					Pn(\ostFilt2, inf)
+				]);
+				bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
+				bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
+			};
+		}
+	),
+	\cmdSync,
+	{ "synced".debug; 6 },
 
 	36,
 	loopCmd: (repeats: 2,
@@ -253,42 +268,40 @@ t = TLSequenceIterator([
 		6
 	},
 	{	BP(\drum7).gest = BP(\drum8).gest;
-		24
+		6 //24
 	},
 
 	loopCmd: (repeats: 3,
-//		qphase: Pseq(#[1.25, 0.75], inf).asStream,
 		acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
 		cmds: [
-			{	var	//numAcc = rrand(3, 6),// acc = ~acc.next,
-					// both 7+8 use the same random seed
+			{	var	// both 7+8 use the same random seed
 					pat = Pseed(Pn(Date.seed, 1), Pseq([
 						Pif(Ptime() < rrand(8, 15), Pseq([\randsync, ~acc], 1)),
 						\randquant
 					], 1));
 				BP(#[drum7, drum8]).do { |bp|
 					bp.keepGoing = false;
-					bp.override(\gest, pat/*.trace(prefix: bp.collIndex ++ ": ")*/);
+					bp.override(\gest, pat);
 				};
-				BP(\drum8).quant = -1; //[-1, ~qphase.next].debug("bp8 quant");
+				BP(\drum8).quant = -1;
 				rrand(3, 6) * 6
 			}
 		]
 	),
 	\cmdSync,
 
+	gcAutoSynthCmd: (gc: BP(\drum7).fmltWetCtl, name: \ctlPoint, outName: \outbus,
+		value: 0.736, time: 20, curve: 2),
 	loopCmd: (repeats: 4,
-//		setDoneSignal: { BP(\cLib).newC(\dsync) },
 		cmds: [
 			funcCmd: (
 				doneSignal: true,
 				func: {
 					var	seed = Date.seed, num = rrand(7, 15),
 						thisCmd = currentEnvironment,
-// 						n = ({ rrand(2, 8) } ! num).debug("n"),
 						n = Pxrand((2..8), num).asStream.all.debug("n"),
 						factor = { rrand(1, 2) } ! num,
-						rest = #[1, 2].choose;
+						rest = #[1, 2].wchoose(#[0.8, 0.2]);
 					BP(#[drum7, drum8]).do { |bp|
 						var	once = true, saven, saveFactor;
 						bp.keepGoing = false;
@@ -319,7 +332,7 @@ t = TLSequenceIterator([
 
 	{	BP(\drum7).gest = Pseq([
 			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }), //.trace(prefix: "7 "),
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),,
 			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "7-num57: ").asStream, BP(\drum7).gest)
 		], inf);
 		12
@@ -327,7 +340,7 @@ t = TLSequenceIterator([
 
 	{	BP(\drum8).gest = Pseq([
 			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }), //.trace(prefix: "8 "),
+			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
 			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "8-num57: ").asStream, BP(\drum8).gest)
 		], inf);
 		36
@@ -385,18 +398,12 @@ BP(#[drum7, drum8]).do { |bp|
 			temp,
 			femul = rrand(1, 4),
 			fenv = ((if(0.8.coin) {
-// 				Env([n, factor], [factor], \exp)
 				Env([n, 2], [factor], \exp)
 			} {
-// 				Env(temp = [n, factor].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
 				Env(temp = [n, 2].rotate(2.rand); temp ++ temp[0], (factor * 0.5) ! 2, \exp)
 			}).asStream * femul),
-//			amul = [1 /*exprand(0.4, 0.8)*/, 1].collect { |a| a * Pgeom.fromEndpoints(1, 2/n, n) },
 			amul = Pgeom.fromEndpoints(1, 2/n, n),
 			ffreq = 52 * [n, fenv];
-//			fdec = 0.15 / [1, fenv.explin(n * femul, femul, 1, n)];
-// 			ffreq = 52 * [n, Pgeom.fromEndpoints(n, factor, n)],
-// 			fdec = 0.15 / [1, Pseries.fromEndpoints(1, n, n)];
 		// I don't want the same subdivision in both parts unless they start at the same time
 		// So, save the subdivision and time so the other can check
 		~lastSubdiv = /*factor / */ n;
@@ -407,19 +414,14 @@ BP(#[drum7, drum8]).do { |bp|
 				\delta, Pn(factor / n, n),
 				\bufIndex, Pxrand((1..4), inf),
 				\hpFreq, Pif(Pbinop('==', Pkey(\bufIndex), 3), -1, 276),
-// 				\notchRq, 0.05,
-// 				\notchDb, -12,
 				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 3.7, 1.5, \none) * amul / 3.7,
 				\rate, 1,
 				\start, 0,
 				\pan, (#[-0.5, 0.5].wrapAt(i + rotate) + BPStream(\pan)).clip(-1, 1),
-// 				\pan, BPStream(\pan),
-				\ffreq, ffreq[i], //.asPattern.asStream.trace(prefix: i.asString ++ ": "),
-//				\fdec, fdec[i],
+				\ffreq, ffreq[i],
 				\fdec, 0.15 / Pkey(\ffreq).explin(104, 1700, 3, 0.75, \none),
 				\wet, ~fmltWetCtl//,
-//				\traceFreq, 1
-			) //.collect { |ev| [ev.ffreq, ev.fdec].debug; ev }
+			)
 		} ! 2
 	};
 };
@@ -450,3 +452,68 @@ s.freqscope
 
 MultiEQ(2).edit(BP(\drum8).chan);
 PeakMonitor(0)
+
+
+
+
+(
+BP(#[drum7, drum8]).do { |bp|
+	bp.override = { |key, pat, ref = true, revertAction|
+		var	streamkey = (key ++ "Stream").asSymbol,
+			savekey = ("save" ++ streamkey).asSymbol,
+			overkey = ("override" ++ streamkey).asSymbol,
+			overstream;
+
+		savekey.envirGet.isNil.if({
+			savekey.envirPut(streamkey.envirGet);
+		});
+		
+		overkey.envirPut(pat.asStream);
+
+			// need a variant on cleanupstream that will seamlessly hand control back
+			// to the original stream; cleanupstream returns nil and stops the parent stream
+		overstream = Routine({ |inval|
+			var	nextval;
+			while { (nextval = overkey.envirGet.next(inval)).notNil }
+				{	ref.if({
+						(nextval.isSymbol and: { nextval.envirGet.notNil }).if({
+							inval = nextval.envirGet.next(inval).yield;
+						}, { inval = nextval.yield; });
+					}, {
+						inval = nextval.yield;
+					});
+				};
+					// end of the line; restore the original stream
+					// and return 1 valid value so that the main pattern doesn't die
+					// after substitution, this routine will not get called again
+			streamkey.envirPut(savekey.envirGet);
+			savekey.envirPut(nil);
+			overkey.envirPut(nil);
+			revertAction.value;
+			streamkey.envirGet.next(inval).yield;
+		});
+		
+		streamkey.debug("put overstream").envirPut(overstream);
+		streamkey.envirGet.debug("current overstream");
+
+//currentEnvironment.listVars;
+
+		currentEnvironment
+	};
+	bp.gest_ = { |gpat|
+		"set gest".debug;
+		\gest.envirPut(gpat.asPattern.collect { |g| ~lastGest = g; g });
+		currentEnvironment
+	};
+	bp.putAction = { |key, value|
+				var	streamKey;
+				(value.isPattern
+					or: {	streamKey = (key ++ "Stream").asSymbol;
+							streamKey.envirGet.notNil })
+				.if({
+					(streamKey ?? { streamKey = (key ++ "Stream").asSymbol }).envirPut(value.asStream);
+					if(streamKey == \gestStream) { "changed gestStream".debug };
+				});
+			};
+};
+)
