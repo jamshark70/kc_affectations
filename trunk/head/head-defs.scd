@@ -1082,9 +1082,11 @@ PR(\counterpoint).clone {
 
 SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		attack = 0.001, decay = 0.02, outbus,
-		ffreq = 2000, ffreq2 = -1, fcurve = 2.1, fatk = 0.01, fdec = 0.1, wet = 1|
+		ffreq = 2000, ffreq2 = -1, fcurve = 2.1, fatk = 0.01, fdec = 0.1, wet = 1,
+		hpFreq = -1|
 	var sig, sig2, eg;
 	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
+	sig = Select.ar(hpFreq < 0, [HPF.ar(sig, hpFreq.clip(20, 20000)), sig]);
 	eg = EnvGen.kr(Env.linen(attack, time, decay) /*, doneAction:2 */);
 	ffreq2 = Select.kr(ffreq2 < 0, [ffreq2, ffreq]);
 	ffreq = EnvGen.kr(Env([ffreq, ffreq2], [time], fcurve * sign(ffreq2 - ffreq)));
@@ -1252,13 +1254,13 @@ makeBP: { |name|
 		},
 		useGui: { |vpi| ~ffreqCtl => VP(vpi) },
 		free: { ~ffreqCtl.free },
-		bufPaths: "~/sounds/drums/Udu/*FING*".pathMatch,
+		bufPaths: "~/sounds/drums/Udu/*eq-FING*".pathMatch,
 		amps: 0,
 		barHook: {
 			~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
 		},
 		baseIndices: #[1, 4, 7, 10],
-		baseAmp: 3.7,
+		baseAmp: 1 /* finger-amp */,
 		def: \bufGrainRLPFPan
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
@@ -1307,7 +1309,7 @@ makeBP: { |name|
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
 		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
 		timeConversion: { |time| time * thisThread.clock.tempo },
-		amp: Pseq(#[1, 3.7], inf),
+		amp: Pseq(#[1, 1 /* finger-amp */], inf),
 		rate: Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
 		start: 0,
 		pan: ~pan ? 0,
@@ -1413,7 +1415,7 @@ PR(\abstractProcess).clone {
 		ost: Pbind(
 			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
 			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
-			\amp, Pseq(#[1, 3.7], inf),
+			\amp, Pseq(#[1, 1 /* finger-amp */], inf),
 			\rate, Place(#[[0.5, 0.6, 0.6, 0.5], 1], inf),
 			\start, 0,
 			\pan, Plazy { BPStream(\pan) },
@@ -1422,7 +1424,7 @@ PR(\abstractProcess).clone {
 		ost1: Pbind(
 			\delta, Pseq(#[0.25, 0.25, 0.5, 0.5], 1),
 			\bufIndex, Ppatlace([0, Pxrand((1..4), inf)], inf),
-			\amp, Pseq(#[1, 3.7], inf),
+			\amp, Pseq(#[1, 1 /* finger-amp */], inf),
 			\rate, Place(#[[0.5, 0.6], 1], inf),
 			\start, 0,
 			\pan, Plazy { BPStream(\pan) },
@@ -1444,7 +1446,7 @@ PR(\abstractProcess).clone {
 				\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
 					Pseq(#[0, 1, 0, 0, 1, 1], inf)
 				),
-				\amp, Pif(Pkey(\bufIndex) > 0, 3.7, 1)
+				\amp, Pif(Pkey(\bufIndex) > 0, 1 /* finger-amp */, 1)
 					* Pswitch1([1, ~ost2AmpCtl], Pseq(#[0, 0, 0, 1, 0, 1], inf)),
 				\rate, Pif(Pkey(\bufIndex) > 0, 1, Pseq(#[0.5, 0.5, 0.6, 0.6, 0.6, 0.5])),
 				\start, 0,
@@ -1545,7 +1547,7 @@ PR(\abstractProcess).clone {
 					\prevFlag, Pdelay(Pkey(\flag)),
 					\busyFlag, Pfunc { |ev| ev[\flag] + ev[\prevFlag] > 0 },
 					\bufIndex, Pclutch(Pxrand((1..4), inf), Pkey(\busyFlag)),
-					\amp, Pswitch1(#[1.48, 3.7], Pkey(\flag).sign),
+					\amp, Pswitch1(#[0.4, 1 /* finger-amp */], Pkey(\flag).sign),
 					\rate, rate,
 					\start, 0,
 					\pan, BPStream(\pan),
@@ -1656,6 +1658,7 @@ PR(\abstractProcess).clone {
 		},
 		barsync: { |pat|
 			var	q = thisThread.clock.nextBar - thisThread.beats - ~leadTime;
+[q, thisThread.clock.nextBar, thisThread.beats, ~leadTime].debug("barsync" + ~collIndex);
 		 	if(q == 0) { q = thisThread.clock.beatsPerBar };
 			Psync(pat, q, q);
 		},
@@ -1728,7 +1731,7 @@ PR(\abstractProcess).clone {
 				\instrument, \bufGrainPanFmlet,
 				\delta, Pn(factor / n, n),
 				\bufIndex, Pxrand((1..4), inf),
-				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 3.7, 1.5, \none) * amul,
+				\amp, ~fmltWetCtl.asPattern.linexp(0, 1, 1 /* finger-amp */, 1.5, \none) * amul,
 				\rate, 1,
 				\start, 0,
 // 				\pan, #[-1, 1].wrapAt(i + rotate), // BPStream(\pan),
