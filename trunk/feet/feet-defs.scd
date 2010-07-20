@@ -39,16 +39,33 @@ topEnvironment[\feetdir] ?? {
 
 // don't want reverb on netbook
 if(Window.screenBounds.height > 600) {
-	~rvbmc ?? {
-		~rvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
+	// global reverb
+	~glrvbmc ?? {
+		~glrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
 	};
 
-	~rvbmc.doWhenReady {
-		if(~rvb.isNil or: { ~rvb.isPlaying.not }) {
-			~rvb = ~rvbmc.playfx(Instr("busfx.freeverb2"), [0, 1.0, 0.75, 0.5, 1.0]);
+	~glrvbmc.doWhenReady {
+		if(~glrvb.isNil or: { ~glrvb.isPlaying.not }) {
+// 			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), #[0] ++
+// 				[#[1.0, 0.75, 0.5, 1.0], Instr("busfx.freeverb2").specs[1..]].flop
+// 				.collect { |val_spec| KrNumberEditor(*val_spec) }
+			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), [0, KrNumberEditor(1.0, ControlSpec(0, 1, 'linear', 0, 0.5, "")), KrNumberEditor(0.54166668653488, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(0.5, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(1.0, ControlSpec(0, 1, 'amp', 0, 0, "")) ]
+			);
+		};
+	};
+
+	// local reverb should be more stereo-separated
+	~lcrvbmc ?? {
+		~lcrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
+	};
+
+	~lcrvbmc.doWhenReady {
+		if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
+			~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
 		};
 	};
 };
+
 
 // pad
 
@@ -387,6 +404,61 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 		ReplaceOut.ar(outbus, XFade2.ar(sig, sig2, wet.madd(2, -1)));
 	}, metadata: (specs: (thresh: #[0.01, 1, \exp], wet: \bipolar)));
 } => Func(\makeWateryFx);
+
+(
+{ |name, ugenFunc, metadata, rates|
+	var	findCtl = { |cname|
+		block { |break|
+			UGen.buildSynthDef.children.do { |unit|
+				if(unit.isKindOf(Control)) {
+					unit.channels.do { |out|
+						if(out.name == cname) { break.(out) }
+					}
+				}
+			};
+			nil
+		}
+	};
+	SynthDef(name, { |distance = 5, distNear = 5, distFar = 14,
+		glrvbout, lcrvbout, glrvbamt = 0.045, lcrvbamt = -1,
+		attfreq = 15000, attdb = 0, attrs = 1|
+		var result = SynthDef.wrap(ugenFunc), out, pan, outctl;
+		// don't add a new \pan control if the function already made one
+		if((pan = findCtl.(\pan)).isNil) {
+			pan = NamedControl(\pan, 0);
+		};
+		if((outctl = findCtl.(\outbus)).isNil and: { (outctl = findCtl.(\out)).isNil }) {
+//			"make out namedcontrol".debug;
+			outctl = NamedControl(\out, 0);
+		};
+		if(result.rate != \audio) {
+			// not audio rate, look for Out unit
+			// (Out.ar returns 0.0, which is scalar)
+			out = UGen.buildSynthDef.children.detect(_.writesToBus);
+			if(out.notNil) {
+				result = out.inputs[out.inputs.size - out.numAudioChannels .. ];
+				UGen.buildSynthDef.children.remove(out);
+			} {
+				Error("Result of UGen func is not audio rate and has no Out unit").throw;
+			};
+		};
+
+		distance = distance.clip(distNear, distFar);
+		result = result * distNear;
+		Out.ar(outctl, result / distance);
+
+		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
+		result = BHiShelf.ar(result, attfreq, attrs, attdb.neg);
+		Out.ar(glrvbout, result * glrvbamt / distance.sqrt);
+		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.sqrt.reciprocal));
+	}, rates, metadata: metadata);
+} => Func(\addRvbOut);
+);
+
+#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayStereo].do { |name|
+	\addRvbOut.eval((name ++ "Dist").asSymbol, SynthDescLib.at(name).def.func).add;
+};
+
 
 PR(\abstractProcess).clone {
 	~bufPath = "58454_sinatra314_footsteps_wooden_floor_loop.wav";
