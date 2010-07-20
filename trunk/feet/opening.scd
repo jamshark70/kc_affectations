@@ -36,17 +36,26 @@ c.write(b.path.splitext[0] ++ "-pv512.aiff", sampleFormat: "float");
 RosslerL.findRespondingMethodFor(\signalRange)
 
 WrapInstr("chaostest", { |freq = 2, a = 0.2, b = 0.2, c = 5.7, h = 0.05, mul = 0.25|
-	var	x, y;
-	#x, y = A2K.kr(RosslerL.ar(freq, a, b, c, h));
+	var	theta, r, x, y;
+//	#x, y = A2K.kr(RosslerL.ar(freq, a, b, c, h));
 // 	x = x.range(-1, 1);
 // 	y =  y.range(5, 14);
+	#theta, r = ({
+		DemandEnvGen.kr(
+			Dwhite(-1.0, 1.0, inf),
+			Dwhite(0.1, 0.8, inf),
+			Env.shapeNumber(\sine)
+		)
+	} ! 2);
+	x = theta.cos * r;
+	y = theta.sin * r;
 	x = x * mul;
 	y = (y * mul).linlin(-1, 1, 5, 14);
 	SendReply.kr(Impulse.kr(10), "/xy", [x, y]);
 	[x, y]
 }, [#[0.1, 120, exp], #[-10, 10], #[-10, 10], #[0, 10], #[0.001, 0.1, exp], #[0.01, 1.0, \exp]]);
 
-p = WrapPatch("chaostest", [`60, `0.432, `2, `4]).play(bus: ~xy); p.gui;
+p = WrapPatch("chaostest", [`60, `0.432, `2, `4, nil, 1]).play(bus: ~xy); p.gui;
 p.free;
 
 ~xy.getn(2, _.postln)
