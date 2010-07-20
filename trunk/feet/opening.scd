@@ -29,17 +29,42 @@ c.write(b.path.splitext[0] ++ "-pv512.aiff", sampleFormat: "float");
 
 
 // use chaotic attractor as x/y?
+// Rossler gives 3 coordinates but just spirals around, not so exciting
 
-~xy = Bus.control(s, 2);
+~xy = SharedBus.newFrom(Bus.control(s, 2), \me);
 
-Instr("chaostest", { |freq = 2, a = 0.2, b = 0.2, c = 5.7, h = 0.05|
+RosslerL.findRespondingMethodFor(\signalRange)
+
+WrapInstr("chaostest", { |freq = 2, a = 0.2, b = 0.2, c = 5.7, h = 0.05, mul = 0.25|
 	var	x, y;
 	#x, y = A2K.kr(RosslerL.ar(freq, a, b, c, h));
-	x = x.range(-1, 1);
-	y =  y.range(5, 14);
+// 	x = x.range(-1, 1);
+// 	y =  y.range(5, 14);
+	x = x * mul;
+	y = (y * mul).linlin(-1, 1, 5, 14);
 	SendReply.kr(Impulse.kr(10), "/xy", [x, y]);
 	[x, y]
-}, [#[0.1, 20, exp], nil, nil, #[0, 10], #[0.001, 0.1, exp]]);
+}, [#[0.1, 120, exp], #[-10, 10], #[-10, 10], #[0, 10], #[0.001, 0.1, exp], #[0.01, 1.0, \exp]]);
 
-p = Patch("chaostest").play(bus: ~xy);
+p = WrapPatch("chaostest", [`60, `0.432, `2, `4]).play(bus: ~xy); p.gui;
+p.free;
+
+~xy.getn(2, _.postln)
+
+w = Window("where", Rect(800, 50, 400, 400));
+t = StaticText(w, Rect(0, 0, 10, 10)).background_(Color.blue);
+w.front;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/xy', { |time, r, m|
+	defer {
+		t.bounds = t.bounds.moveTo(
+			m[3].linlin(-1, 1, 0, 390),
+			m[4].linlin(5, 14, 390, 0)
+		)
+	}
+}).add;
+
+p.gui;
+p.synth.trace
 
