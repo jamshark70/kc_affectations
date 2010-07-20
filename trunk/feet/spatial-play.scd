@@ -13,7 +13,7 @@ MixingBoard.at(0).refresh;
 ~glrvb.free;
 
 FxPatch(
-	[ 'busfx', 'freeverb2' ], [ 18, KrNumberEditor(1.0, ControlSpec(0, 1, 'linear', 0, 0.5, "")), KrNumberEditor(0.54166668653488, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(0.5, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(1.0, ControlSpec(0, 1, 'amp', 0, 0, "")) ]
+	[ 'busfx', 'freeverb2' ], [ 18, KrNumberEditor(1.0, ControlSpec(0, 1, 'linear', 0, 0.5, "")), KrNumberEditor(0.54166668653488, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(0.5, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(1.0, ControlSpec(0, 1, 'amp', 0, 0, "")) ].collect(_.value)
 )
 FxPatch(
 	[ 'busfx', 'rvb_allpass2' ], [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]
@@ -30,9 +30,10 @@ if(Window.screenBounds.height > 600) {
 
 	~glrvbmc.doWhenReady {
 		if(~glrvb.isNil or: { ~glrvb.isPlaying.not }) {
-			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), #[0] ++
-				[#[1.0, 0.75, 0.5, 1.0], Instr("busfx.freeverb2").specs[1..]].flop
-				.collect { |val_spec| KrNumberEditor(*val_spec) }
+// 			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), #[0] ++
+// 				[#[1.0, 0.75, 0.5, 1.0], Instr("busfx.freeverb2").specs[1..]].flop
+// 				.collect { |val_spec| KrNumberEditor(*val_spec) }
+			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), [0, KrNumberEditor(1.0, ControlSpec(0, 1, 'linear', 0, 0.5, "")), KrNumberEditor(0.54166668653488, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(0.5, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(1.0, ControlSpec(0, 1, 'amp', 0, 0, "")) ]
 			);
 		};
 	};
@@ -44,7 +45,7 @@ if(Window.screenBounds.height > 600) {
 
 	~lcrvbmc.doWhenReady {
 		if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
-			~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [0, 2, nil, nil, nil, 4, nil]);
+			~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
 		};
 	};
 };
@@ -281,25 +282,23 @@ SynthDescLib.at(\bufGrainPan).def.inspect
 			}
 		}
 	};
-	SynthDef(name, { |dist = 5, near = 5, far = 14,
+	SynthDef(name, { |distance = 5, distNear = 5, distFar = 14,
 		glrvbout, lcrvbout, glrvbamt = 0.045, lcrvbamt = -1,
 		attfreq = 15000, attdb = 0, attrs = 1|
 		var result = SynthDef.wrap(ugenFunc), out, pan, outctl;
 		// don't add a new \pan control if the function already made one
 		if((pan = findCtl.(\pan)).isNil) {
-			"make pan namedcontrol".debug;
 			pan = NamedControl(\pan, 0);
 		};
-		if((outctl = findCtl.(\outbus)).debug("find outbus").isNil and: { (outctl = findCtl.(\out)).debug("find out").isNil }) {
-			"make out namedcontrol".debug;
+		if((outctl = findCtl.(\outbus)).isNil and: { (outctl = findCtl.(\out)).isNil }) {
+//			"make out namedcontrol".debug;
 			outctl = NamedControl(\out, 0);
 		};
-		if(result.rate.debug("result rate") != \audio) {
+		if(result.rate != \audio) {
 			// not audio rate, look for Out unit
 			// (Out.ar returns 0.0, which is scalar)
 			out = UGen.buildSynthDef.children.detect(_.writesToBus);
 			if(out.notNil) {
-				"found Out.ar".debug;
 				result = out.inputs[out.inputs.size - out.numAudioChannels .. ];
 				UGen.buildSynthDef.children.remove(out);
 			} {
@@ -307,14 +306,14 @@ SynthDescLib.at(\bufGrainPan).def.inspect
 			};
 		};
 
-		dist = dist.clip(near, far);
-		result = result * near;
-		Out.ar(outctl, result / dist);
+		distance = distance.clip(distNear, distFar);
+		result = result * distNear;
+		Out.ar(outctl, result / distance);
 
 		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
 		result = BHiShelf.ar(result, attfreq, attrs, attdb.neg);
-		Out.ar(glrvbout, result * glrvbamt / dist.sqrt);
-		Out.ar(lcrvbout, result * lcrvbamt * (1 - dist.sqrt.reciprocal));
+		Out.ar(glrvbout, result * glrvbamt / distance.sqrt);
+		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.sqrt.reciprocal));
 	}, rates, metadata: metadata);
 } => Func(\addRvbOut);
 )
@@ -339,9 +338,9 @@ Pdefn(\attrs, Pkey(\dist).linlin(Pkey(\near), Pkey(\far), 1, 3));
 (
 p = n.play(Pbind(
 	\instrument, \test,
-	\near, Pdefn(\dnear),
-	\far, Pdefn(\dfar),
-	\dist, (Ptime() * (2pi/11) - 0.5pi).sin.linlin(-1, 1, Pkey(\near), Pkey(\far)),
+	\distNear, Pdefn(\dnear),
+	\distFar, Pdefn(\dfar),
+	\distance, (Ptime() * (2pi/11) - 0.5pi).sin.linlin(-1, 1, Pkey(\near), Pkey(\far)),
 	\i, Pdefn(\i),
 // 	\pt, ~pt,
 	\start, Pindex(~pt, Pkey(\i), inf) * 44100 - 0.15,
