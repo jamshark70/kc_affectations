@@ -420,8 +420,10 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 		}
 	};
 	SynthDef(name, { |distance = 5, distNear = 5, distFar = 14,
-		glrvbout, lcrvbout, glrvbamt = 0.045, lcrvbamt = -1,
-		attfreq = 15000, attdb = 0, attrs = 1|
+		glrvbout, lcrvbout, glrvbamt = 0.075, lcrvbamt = 0.035,
+		attNearFreq = 9000, attFarFreq = 3000,
+		attNearDb = -5, attFarDb = -18,
+		attNearRs = 2, attFarRs = 2|
 		var result = SynthDef.wrap(ugenFunc), out, pan, outctl;
 		// don't add a new \pan control if the function already made one
 		if((pan = findCtl.(\pan)).isNil) {
@@ -447,8 +449,12 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 		result = result * distNear;
 		Out.ar(outctl, result / distance);
 
-		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
-		result = BHiShelf.ar(result, attfreq, attrs, attdb.neg);
+//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
+		result = BHiShelf.ar(result,
+			distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
+			distance.linlin(distNear, distFar, attNearRs, attFarRs),
+			distance.linlin(distNear, distFar, attNearDb, attFarDb)
+		);
 		Out.ar(glrvbout, result * glrvbamt / distance.sqrt);
 		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.sqrt.reciprocal));
 	}, rates, metadata: metadata);
