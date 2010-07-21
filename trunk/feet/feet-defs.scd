@@ -352,11 +352,12 @@ SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, 
 }).add;
 
 SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
-	attack = 0.01, decay = 0.05|
+	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0|
 	var	frSize = Index.kr(pvbuf, 0),
 		even = PV_PlayBuf(LocalBuf(frSize, 1), pvbuf, rate, startFrame, loop: 0),
-		odd = PV_Copy(even, LocalBuf(frSize, 1)),
-		sig;
+		odd, sig;
+	even = PV_BinShift(even, 1, Line.kr(shiftS, shiftE, time));
+	odd = PV_Copy(even, LocalBuf(frSize, 1));
 	even = PV_EvenBin(even <! odd);
 	odd = PV_OddBin(odd);
 	sig = IFFT([even, odd], 1)
