@@ -414,3 +414,172 @@ Destination: Output 0 -> Bus(audio, 0, 2, localhost)
           level: 1 (0 dB)
             pan: 0
 
+
+
+
+// use chaotic attractor as x/y?
+// Rossler gives 3 coordinates but just spirals around, not so exciting
+// switched to angle/radius
+
+~xy = SharedBus.newFrom(Bus.control(s, 2), \me);
+
+WrapInstr("chaostest", { |freq = 2, a = 0.2, b = 0.2, c = 5.7, h = 0.05, mul = 0.25|
+	var	theta, r, x, y;
+	theta = DemandEnvGen.kr(
+		Dswitch1([
+			Dwhite(-pi, 0, inf),
+			Dwhite(-2pi, -pi, inf),
+			Dwhite(0, pi, inf)
+		], Drand(#[0, 0, 0, 0, 0, 0, 0, 0, 1, 2], inf)),
+		Dwhite(0.1, 0.4, inf),
+		Env.shapeNumber(\sine)
+	);
+	r = DemandEnvGen.kr(
+		Dwhite(0.1, 1.0, inf),
+		Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+		Env.shapeNumber(\sine)
+	);
+// 	theta = Sweep.kr(1, 5 / 2pi);
+// 	r = 1;
+	x = theta.cos * r;
+	y = theta.sin * r;
+	x = x * mul;
+	y = (y * mul).linlin(-1, 1, 5, 20 /* far */);
+	SendReply.kr(Impulse.kr(10), "/xy", [x, y]);
+	[x, y]
+}, [#[0.1, 120, exp], #[-10, 10], #[-10, 10], #[0, 10], #[0.001, 0.1, exp], #[0.01, 1.0, \exp]]);
+
+p = WrapPatch("chaostest", [`60, `0.432, `2, `4, nil, 1]).play(bus: ~xy); //p.gui;
+p.free;
+
+~xy.getn(2, _.postln)
+
+w = Window("where", Rect(800, 50, 400, 400));
+t = StaticText(w, Rect(0, 0, 10, 10)).background_(Color.blue);
+w.front;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/xy', { |time, r, m|
+	defer {
+// 		t.bounds = t.bounds.moveTo(
+// 			m[3].linlin(-1, 1, 0, 390),
+// 			m[4].linlin(5, 20 /* far */, 390, 0)
+// 		)
+		~xy1 = [
+			m[3].linlin(-1, 1, 0, 390),
+			m[4].linlin(5, 20 /* far */, 390, 0)
+		];
+		u.refresh;
+	}
+}).add;
+
+
+t.remove;
+
+u.remove;
+
+~lastTime = 0;
+~blue = Color.blue;
+~xy1 = [0, 0];
+u = UserView(w, w.view.bounds.insetBy(2, 2))
+	.background_(Color.blue(alpha: 0.2))
+	.drawFunc_({
+		Pen.color_(~blue)
+			.fillOval(Rect.aboutPoint(Point(*~xy1), 5, 5));
+	})
+	.mouseOverAction_({ |view, x, y|
+		var	now = Main.elapsedTime;
+		~xy.setn([x.linlin(2, 396, -1.0, 1.0), y.linlin(2, 396, 20 /* far */, 5)]);
+		~xy1 = [x, y];
+		if(now - ~lastTime >= 0.05) {
+			view.refresh;
+			~lastTime = now;
+		};
+	});
+w.acceptsMouseOver_(true);
+
+~mo = u.mouseOverAction;
+u.mouseOverAction = nil;
+w.acceptsMouseOver = false;
+
+w.refresh;
+u.bounds = u.bounds.moveTo(2, 2);
+
+p.gui;
+p.synth.trace
+
+p.run(false);
+p.run(true);
+
+Balance2.ar( left, right, pos: 0, level: 1 )
+
+// plug chaostest into pvplay
+SynthDescLib.at(\pvplayStereoDist).controls.do(_.postln); ""
+
+c.getn(0, 3, _.postln);
+
+PeakMonitor(n);
+
+a = n.play(\pvplayStereoDist, [
+	distance: ("c" ++ (~xy.index + 1)), pan: ("c" ++ ~xy.index),
+	distNear: 5, distFar: 20 /* far */,
+	glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus,
+	glrvbamt: ~rvbamt.asMap, lcrvbamt: ~lcrvbamt.asMap,
+	amp: 10.dbamp,
+	pvbuf: c, startFrame: ~pt[6] / b.duration * (c.numFrames - 3) / 512, time: 20, rate: 0.02
+] ++ (#[attfreq, attrs, attdb].collect { |name, i| [name, ("c" ++ (~attbus.index + i)).asSymbol] }).flat);
+
+a.trace;
+
+\addRvbOut.eval(\test, { |pan, amp = 1|
+	var	trig = Impulse.kr(8);
+	Pan2.ar(
+		SinOsc.ar(TExpRand.kr(200, 800, trig), 0,
+			Decay2.kr(trig, 0.01, 0.08, amp)),
+		pan
+	)
+}).add;
+
+SynthDescLib.at(\test).controls.do(_.postln); ""
+
+~attbus = SharedBus.newFrom(Bus.control(s, 3), \me);
+
+z.free;
+z = {
+	var	x, y, attfreq, attrs, attdb;
+	#x, y = In.kr(~xy, 2);
+	attfreq = y.linexp(5, 20 /* far */, 9000, 3000);
+	attrs = 2;
+	attdb = y.linlin(5, 20 /* far */, -5, -18);
+	[attfreq, attrs, attdb]
+}.play(s.asTarget, outbus: ~attbus, addAction: \addToHead);
+
+z.moveToHead(s.asTarget)
+
+z.trace
+
+a = n.play(\test, ([distance: ("c" ++ (~xy.index + 1)), pan: ("c" ++ ~xy.index), glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus, glrvbamt: ~rvbamt.asMap, lcrvbamt: ~lcrvbamt.asMap, amp: ~amp.asMap, distFar: 20 /* far */] ++ (#[attfreq, attrs, attdb].collect { |name, i| [name, ("c" ++ (~attbus.index + i)).asSymbol] }).flat).postln);
+
+a.free
+
+~amp = GenericGlobalControl(\amp, nil, 0.5, #[0, 1, \amp]);
+~rvbamt = GenericGlobalControl(\rvbamt, nil, 0.05, #[0.01, 0.1, \exp]);
+~lcrvbamt = GenericGlobalControl(\lcrvbamt, nil, 0.05, #[0.01, 0.1, \exp]);
+
+[~amp, ~rvbamt].do { |gc| gc => VP(0) };
+~lcrvbamt => VP(0);
+
+a.trace;
+
+~xy.getn(2, _.postln);
+~attbus.getn(3, _.postln);
+
+PeakMonitor(~master);
+
+VP(0).v.controlProxies.do { |gcp|
+	gcp.gc !? { [gcp.gc.name, gcp.gc.value, gcp.gc.spec].postcs }
+};
+
+[ 'amp', 1.0, ControlSpec(0, 1, 'amp', 0.0, 0, "") ]
+[ 'rvbamt', 0.074819663051388, ControlSpec(0.01, 0.1, 'exp', 0.0, 0.01, "") ]
+[ 'lcrvbamt', 0.034938727747491, ControlSpec(0.01, 0.1, 'exp', 0.0, 0.01, "") ]
