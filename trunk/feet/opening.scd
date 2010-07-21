@@ -146,32 +146,102 @@ a = n.play(Ptpar([
 
 a.stop;
 
+f = SoundFile.openRead(Document.current.path.dirname.dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop-pv512.aiff");
 
+BP(\op).maxSynths = 8;
 
 (
 BP(\op).free;
 PR(\basicSynthChooser).chuck(BP(\op), nil, (
+	event: (eventKey: \singleSynthPlayNotify),
+	sfpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav",
+	pvpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop-pv512.aiff",
 	inChannels: 2,
 	master: ~master,
 	glrvbmc: ~glrvbmc,
 	lcrvbmc: ~lcrvbmc,
+	requiredKeys: #[readyToPlay],
+	readyToPlay: nil,
+	alwaysReset: true,
+	numSplashEv: 5,
+	maxSynths: 12,
 	userprep: {
+		var	sf;
+
+		SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0|
+			var	theta, r, x, y;
+			theta = DemandEnvGen.kr(
+				Dwhite(-2pi, 2pi, inf),
+				Dwhite(0.25, 0.9, inf),
+				Env.shapeNumber(\sine)
+			);
+			r = DemandEnvGen.kr(
+				Dwhite(0.1, 1.0, inf),
+				Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+				Env.shapeNumber(\sine)
+			);
+			x = theta.cos * r;
+			y = theta.sin * r;
+			x = x * mul;
+			y = (y * mul).linlin(-1, 1, distNear, distFar);
+			SendReply.kr(send * Impulse.kr(10), "/xy", [x, y]);
+			Out.kr(out, [x, y]);
+		}, #[\ir, \ir]).add;
+
 		[~glrvbmc, ~lcrvbmc].do(~chan.sendsSignalTo(_));
 		~xys = { SharedBus.newFrom(Bus.control(s, 2), ~collIndex) } ! 10;
-		~xysynths = ~xys.collect { |xybus|
-			var patch;
-			patch = WrapPatch("xy", [5, 20, 1, `0]).play(bus: xybus, callback: e {
-				patch.synth.debug("moving").moveToHead(~chan.fadergroup);
-			});
-		};
 		~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
+
+		~pvbuf = Buffer.readAndQuery(s, ~pvpath.standardizePath, completionFunc: e {
+			~pvbuf.getn(0, 3, e { |val|
+				~fftSize = val[0];
+				~hop = val[1];
+				~winType = val[2];
+				~numPvFrames = (~pvbuf.numFrames - 3) / ~fftSize;
+				[~fftSize, ~hop, ~winType, ~numPvFrames].debug("pv specs");
+				~readyToPlay = true;
+			});
+		});
+		if((sf = SoundFile.openRead(~sfpath.standardizePath)).notNil) {
+			~sfdur = sf.duration;
+		} {
+			"Couldn't get duration from %. ~sfdur remains empty.".format(~sfpath).warn;
+		};
+		~readLabels.();
+		~activeSynths = IdentitySet.new;
 	},
 	userfree: {
 		[~glrvbmc, ~lcrvbmc].do(~chan.stopsSendingTo(_));
-		~xysynths.free;
 		~xys.do(_.releaseBus(~collIndex));
+		~pvbuf.free;
 	},
-	synth: \pvplayStereoDist,
+	preparePlay: {
+		~xysynths = ~xys.collect { |xybus|
+			Synth(\xy1, [mul: 1, send: 0, out: xybus], ~chan.fadergroup, \addToHead);
+		};
+	},
+	removeXySynths: {
+		~xysynths.do(_.free);
+	},
+	recvEventNotify: { |node|
+		var	self, ufunc;
+		if(node.isKindOf(Synth)) {
+			self = currentEnvironment;
+			ufunc = { |obj, what|
+				if(what == \n_end) {
+					obj.removeDependant(ufunc);
+					self[\activeSynths].remove(obj);
+					if(self[\isPlaying].not and: { self[\activeSynths].isEmpty }) {
+						self.removeXySynths
+					};
+				}
+			};
+			~activeSynths.add(node);
+			NodeWatcher.register(node);
+			node.addDependant(ufunc);
+		};
+	},
+	synth: \pv,
 	objects: (
 		pv: (
 			def: \pvplayStereoDist,
@@ -180,23 +250,72 @@ PR(\basicSynthChooser).chuck(BP(\op), nil, (
 				glrvbout: ~glrvbmc.inbus,
 				lcrvbout: ~lcrvbmc.inbus,
 				pvbuf: Plazy { ~pvbuf.asPattern },
-				pt: Pn(Pshuf(~pt, 1), inf),
-				startFrame: Pkey(\pt) * (((c.numFrames - 3) / 512) / b.duration),
-				#[pan, distance]: Pseq(~xymaps, inf),
-				shiftS: Pwhite(8, 30, inf),
+				pt: Plazy { Pn(Pshuf(~pt, 1), inf) },
+				startFrame: Plazy { Pkey(\pt) * (~numPvFrames / ~sfdur) },
+				#[pan, distance]: Plazy { Pseq(~xymaps, inf) },
+				shiftS: Pwhite(8, 30, inf) * Pseg(
+		Pseq([1, 0, Ppatlace([Pwhite(0.2, 0.6, inf), 0], inf)], inf), //.trace(prefix: "shift endpoint: "),
+		Pseq([20, Pwrand([Pwhite(4.0, 8.0, 1), Pwhite(0.2, 0.6, 1)], #[0.8, 0.2], inf)], 1),
+		\lin
+	),
 				shiftE: Pkey(\shiftS) * Pwhite(0.1, 0.4, inf),
-				rate: Pexprand(0.05, 1.0, inf),
+				rate: Pexprand(Env(#[0.05, 1], #[90], \exp), 1.0, inf),
 				time: 0.25 / Pkey(\rate),
 				decay: Pkey(\time) * 0.14,
-				amp: 6.dbamp,
+				amp: Env([0, 2], #[3], 2.1), //6.dbamp,
 				delta: Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
 					Pn(1, { rrand(2, 5) }),
 					Pexprand(0.05, 0.2, { rrand(8, 14) })
-				], inf), Pkey(\time) * 0.1)
+				], inf), Pkey(\time) * 0.1),
+				instrument: Pfunc { |ev|
+					if(~activeSynths.size < ~maxSynths) { ev[\instrument] } { \rest }
+				}
 			]
 		)
-	)
+	),
+	superPattern: PR(\basicSynthChooser).v[\asPattern],
+	splashPattern: {
+		Pbind(
+			\instrument, \pvplayStereoDist,
+			\pvbuf, ~pvbuf,
+			\rate, Pgeom.fromEndpoints(1, 0.02, ~numSplashEv),
+			\time, 0.6 / Pkey(\rate),
+			\decay, Pkey(\time) * 0.14,
+			\amp, 12.dbamp, //BPStream(\pvamp),
+			\pt, Pn(Pshuf(~pt, 1), inf),
+			\startFrame, BPStream(\pvstartFrame),
+			\pan, Pstutter(2, Pseries.fromEndpoints(-1.0, 0, (~numSplashEv * 0.5).roundUp.asInteger))
+				* Pseq(#[1, -1], inf, { 2.rand }),
+			\distance, Pseries.fromEndpoints(15, 5, ~numSplashEv),
+			\glrvbout, ~glrvbmc.inbus, \glrvbamt, 0.3,
+			\lcrvbout, ~lcrvbmc.inbus,
+			\chan, ~chan,
+			\delta, 0
+		)
+	},
+	asPattern: {
+		Pseq([
+			~splashPattern.(),
+			Event.silent(rrand(0.15, 0.45)),
+			~superPattern.()
+		])
+	},
+	processLabels: PR(\steps1).v[\processLabels],
+	readLabels: {
+		~pt = TabFileReader.read(~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)]
+			++ "labels.txt");
+		~processLabels.();
+	},
+	reset: {
+		var	str;
+		currentEnvironment.env.keys.do { |key|
+			if((str = key.asString).contains("Stream")) {
+				~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+			}
+		}
+	}
 ));
+0 => BP(\op);
 )
 
 
@@ -285,3 +404,50 @@ a = n.play(
 );
 
 a.stop;
+
+();
+BP(\op).use {
+//	~pvshiftS = Pwhite(8, 30, inf) * Env(#[1, 0], #[24], \lin);
+	~pvshiftS = Pwhite(8, 30, inf) * Pseg(
+		Pseq([1, 0, Ppatlace([Pwhite(0.2, 0.6, inf), 0], inf)], inf), //.trace(prefix: "shift endpoint: "),
+		Pseq([20, Pwrand([Pwhite(4.0, 8.0, 1), Pwhite(0.2, 0.6, 1)], #[0.8, 0.2], inf)], 1),
+		\lin
+	);
+	~pvshiftE = Pkey(\shiftS) * Pwhite(0.1, 0.4, inf);
+	~pvrate = Pexprand(Env(#[0.05, 1], #[90], \exp), 1.0, inf);
+	~pvamp = Env([0, 2], #[3], 2.1);
+};
+
+BP(\op).pvshiftS.postcs
+BP(\op).pvamp.postcs
+BP(\op).pvampStream
+
+BP(\op).splashPattern = {
+	Pbind(
+		\instrument, \pvplayStereoDist,
+		\pvbuf, ~pvbuf,
+		\rate, Pgeom.fromEndpoints(1, 0.02, ~numSplashEv),
+		\time, 0.6 / Pkey(\rate),
+		\decay, Pkey(\time) * 0.14,
+		\amp, 12.dbamp, //BPStream(\pvamp),
+		\pt, Pn(Pshuf(~pt, 1), inf),
+		\startFrame, BPStream(\pvstartFrame),
+		\pan, Pstutter(2, Pseries.fromEndpoints(-1.0, 0, (~numSplashEv * 0.5).roundUp.asInteger))
+			* Pseq(#[1, -1], inf, { 2.rand }),
+		\distance, Pseries.fromEndpoints(15, 5, ~numSplashEv),
+		\glrvbout, ~glrvbmc.inbus, \glrvbamt, 0.3,
+		\lcrvbout, ~lcrvbmc.inbus,
+		\chan, ~chan,
+		\delta, 0
+	)
+};
+
+t = TLSequenceIterator([
+	{ ~master.startRecord(thisProcess.platform.recordingsDir +/+ "explosion1.aiff");
+		1
+	},
+	bpCmd: (name: \op, dur: 60),
+	\cmdSync,
+	6,
+	{ ~master.stopRecord; 0 }
+]).play;
