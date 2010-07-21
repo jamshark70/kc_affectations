@@ -1,5 +1,7 @@
 // todo:
-// try multiple xy buses, cycle thru in pattern
+// Ptpar is going in the right direction
+// start dense, thin out, transition from stretching to normal rate
+// then do running across the floor
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 #[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
@@ -24,6 +26,7 @@ m => MCG(0); n => MCG(1);
 [~glrvb, ~lcrvb].do(_.run(false));
 [~glrvb, ~lcrvb].do(_.run(true));
 
+PeakMonitor(~master)
 
 b.free;
 b = Buffer.readAndQuery(s, topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav");
@@ -50,16 +53,48 @@ a = {
 c.write(b.path.splitext[0] ++ "-pv512.aiff", sampleFormat: "float");
 
 
+~xys = { Bus.control(s, 2) } ! 10;
+~xys = ~xys.collect(SharedBus.newFrom(_, \me));
+
+WrapInstr("xy", { |distNear = 5, distFar = 20, mul = 0.25, send = 0|
+	var	theta, r, x, y;
+	theta = DemandEnvGen.kr(
+		Dwhite(-2pi, 2pi, inf),
+		Dwhite(0.25, 0.9, inf),
+		Env.shapeNumber(\sine)
+	);
+	r = DemandEnvGen.kr(
+		Dwhite(0.1, 1.0, inf),
+		Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+		Env.shapeNumber(\sine)
+	);
+	x = theta.cos * r;
+	y = theta.sin * r;
+	x = x * mul;
+	y = (y * mul).linlin(-1, 1, distNear, distFar);
+	SendReply.kr(send * Impulse.kr(10), "/xy", [x, y]);
+	[x, y]
+}, [#[1, 50], #[1, 50], #[0.01, 1.0, \exp]]);
+
+
+~xysynths = ~xys.collect { |xybus|
+	WrapPatch("xy", [5, 20, 1, `0]).play(bus: xybus)
+};
+
+~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
+
+
+
 // start: fast + stretched steps
 SynthDescLib.at(\pvplayStereoDist).controls.do(_.postln); ""
 
 Pdefn(\pan, Pwhite(-1.0, 1.0, inf));
 Pdefn(\distance, Pwhite(5.0, 20.0, inf));
-//Pdefn(\rate, Pexprand(0.05, 1.0, inf));
-Pdefn(\rate, Pswitch1([Pexprand(0.05, 0.2, inf), Pexprand(0.6, 1.2, inf)], Pwrand(#[0, 1], #[0.3, 0.7], inf)));
+Pdefn(\rate, Pexprand(0.05, 1.0, inf));
+//Pdefn(\rate, Pswitch1([Pexprand(0.05, 0.2, inf), Pexprand(0.6, 1.2, inf)], Pwrand(#[0, 1], #[0.3, 0.7], inf)));
 Pdefn(\time, 0.25 / Pkey(\rate));
 Pdefn(\decay, Pkey(\time) * 0.14);
-Pdefn(\amp, 5.dbamp); // Pwhite(0, 5, inf).dbamp
+Pdefn(\amp, 15.dbamp); // Pwhite(0, 5, inf).dbamp
 Pdefn(\delta, Pkey(\time) * Ptempo() * Pwhite(0.3, 0.6, inf));
 
 Pdefn(\delta, Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
@@ -67,11 +102,9 @@ Pdefn(\delta, Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
 	Pexprand(0.05, 0.2, { rrand(8, 14) })
 ], inf), Pkey(\time) * 0.1));
 
-Pseg(
-	Pexprand(0.04, 0.4, inf),
-	Pwhite(2.0, 6.0, inf),
-	\exp
-).trace
+Pdefn(\shiftS, Pwhite(8, 30, inf));
+Pdefn(\shiftE, Pkey(\shiftS) * Pwhite(0.1, 0.4, inf));
+
 
 z = 5;
 a = n.play(Ptpar([
@@ -100,27 +133,72 @@ a = n.play(Ptpar([
 		\pvbuf, c,
 		\pt, Pn(Pshuf(~pt, 1), inf),
 		\startFrame, Pkey(\pt) * (((c.numFrames - 3) / 512) / b.duration),
-		*[[
-			\pan,
-			\distance,
-			\rate,
-			\time,
-			\decay,
-			\amp,
-			\delta
-		], [
-			Pdefn(\pan),
-			Pdefn(\distance),
-			Pdefn(\rate),
-			Pdefn(\time),
-			Pdefn(\decay),
-			Pdefn(\amp),
-			Pdefn(\delta),
-		]].flop.flat
-	)
+		#[pan, distance], Pseq(~xymaps, inf),
+		\shiftS, Pdefn(\shiftS),
+		\shiftE, Pdefn(\shiftE),
+		\rate, Pdefn(\rate),
+		\time, Pdefn(\time),
+		\decay, Pdefn(\decay),
+		\amp, Pdefn(\amp),
+		\delta, Pdefn(\delta)
+	)//.trace(prefix: $\n)
 ]));
 
 a.stop;
+
+
+
+(
+BP(\op).free;
+PR(\basicSynthChooser).chuck(BP(\op), nil, (
+	inChannels: 2,
+	master: ~master,
+	glrvbmc: ~glrvbmc,
+	lcrvbmc: ~lcrvbmc,
+	userprep: {
+		[~glrvbmc, ~lcrvbmc].do(~chan.sendsSignalTo(_));
+		~xys = { SharedBus.newFrom(Bus.control(s, 2), ~collIndex) } ! 10;
+		~xysynths = ~xys.collect { |xybus|
+			var patch;
+			patch = WrapPatch("xy", [5, 20, 1, `0]).play(bus: xybus, callback: e {
+				patch.synth.debug("moving").moveToHead(~chan.fadergroup);
+			});
+		};
+		~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
+	},
+	userfree: {
+		[~glrvbmc, ~lcrvbmc].do(~chan.stopsSendingTo(_));
+		~xysynths.free;
+		~xys.do(_.releaseBus(~collIndex));
+	},
+	synth: \pvplayStereoDist,
+	objects: (
+		pv: (
+			def: \pvplayStereoDist,
+			args: [
+				distNear: 5, distFar: 20,
+				glrvbout: ~glrvbmc.inbus,
+				lcrvbout: ~lcrvbmc.inbus,
+				pvbuf: Plazy { ~pvbuf.asPattern },
+				pt: Pn(Pshuf(~pt, 1), inf),
+				startFrame: Pkey(\pt) * (((c.numFrames - 3) / 512) / b.duration),
+				#[pan, distance]: Pseq(~xymaps, inf),
+				shiftS: Pwhite(8, 30, inf),
+				shiftE: Pkey(\shiftS) * Pwhite(0.1, 0.4, inf),
+				rate: Pexprand(0.05, 1.0, inf),
+				time: 0.25 / Pkey(\rate),
+				decay: Pkey(\time) * 0.14,
+				amp: 6.dbamp,
+				delta: Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
+					Pn(1, { rrand(2, 5) }),
+					Pexprand(0.05, 0.2, { rrand(8, 14) })
+				], inf), Pkey(\time) * 0.1)
+			]
+		)
+	)
+));
+)
+
 
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
 	r.remove;
