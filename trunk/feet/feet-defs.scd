@@ -67,6 +67,75 @@ if(Window.screenBounds.height > 600) {
 };
 
 
+
+// trajectories for cheap-ass spatialization
+Proto {
+	~numSynths = 10;
+	~prep = {
+		~group = Group.before(s.asTarget);
+
+		SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0|
+			var	theta, r, x, y;
+			theta = DemandEnvGen.kr(
+				Dwhite(-2pi, 2pi, inf),
+				Dwhite(0.25, 0.9, inf),
+				Env.shapeNumber(\sine)
+			);
+			r = DemandEnvGen.kr(
+				Dwhite(0.1, 1.0, inf),
+				Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+				Env.shapeNumber(\sine)
+			);
+			x = theta.cos * r;
+			y = theta.sin * r;
+			x = x * mul;
+			y = (y * mul).linlin(-1, 1, distNear, distFar);
+			SendReply.kr(send * Impulse.kr(10), "/xy", [x, y]);
+			Out.kr(out, [x, y]);
+		}, #[\ir, \ir]).add;
+
+		~xys = { Bus.control(s, 2) } ! ~numSynths;
+		~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
+		~clients = IdentitySet.new;
+	};
+
+	~freeCleanup = {
+		[~group, ~xys].free;
+	};
+
+	~makeSynths = {
+		~xysynths ?? {
+			~xysynths = ~xys.collect { |xybus|
+				Synth(\xy1, [mul: 1, send: 0, out: xybus], ~group);
+			}
+		};
+	};
+
+	~removeSynths = {
+		~xysynths !? {
+			~xysynths.do(_.free);
+			~xysynths = nil;
+		};
+	};
+
+	~isUsedBy = { |name|
+		if(~clients.includes(name)) {
+			"% is already used by %.".format(~collIndex.asCompileString, name.asCompileString).warn
+		} {
+			~clients.add(name);
+			~makeSynths.();
+		}
+	};
+
+	~notUsedBy = { |name|
+		~clients.remove(name);
+		if(~clients.isEmpty) {
+			~removeSynths.()
+		}
+	};
+} => PR(\trajectories);
+
+
 // pad
 
 WrapInstr("osc2.vosc3panslide", { |freq, startFreq, slideTime = 0, slideTrig = 1, panS, panE|
@@ -351,8 +420,9 @@ SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, 
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
 
+// amp is per-event control; ampMap should be mapped to kr bus for continuous volume control
 SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
-	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0|
+	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0, ampMap = 1|
 	var	frSize = Index.kr(pvbuf, 0),
 		even = PV_PlayBuf(LocalBuf(frSize, 1), pvbuf, rate, startFrame, loop: 0),
 		odd, sig;
@@ -360,9 +430,9 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 	odd = PV_Copy(even, LocalBuf(frSize, 1));
 	even = PV_EvenBin(even <! odd);
 	odd = PV_OddBin(odd);
-	sig = IFFT([even, odd], 1)
+	sig = Limiter.ar(IFFT([even, odd], 1) * amp * ampMap)
 		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
-	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan, amp));
+	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan));
 }).add;
 
 
@@ -465,6 +535,153 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 #[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayStereo].do { |name|
 	\addRvbOut.eval((name ++ "Dist").asSymbol, SynthDescLib.at(name).def.func).add;
 };
+
+
+// opening blast!
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayNotify),
+		sfpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav",
+		pvpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop-pv512.aiff",
+		inChannels: 2,
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		requiredKeys: #[readyToPlay],
+		readyToPlay: nil,
+		alwaysReset: true,
+		numSplashEv: 5,
+		maxSynths: 8,
+		trajectoryKey: \traj,
+		initAmp: 0.36,
+		userprep: {
+			var	sf;
+
+			[~glrvbmc, ~lcrvbmc].do(~chan.sendsSignalTo(_));
+
+			~pvbuf = Buffer.readAndQuery(s, ~pvpath.standardizePath, completionFunc: e {
+				~pvbuf.getn(0, 3, e { |val|
+					~fftSize = val[0];
+					~hop = val[1];
+					~winType = val[2];
+					~numPvFrames = (~pvbuf.numFrames - 3) / ~fftSize;
+					// [~fftSize, ~hop, ~winType, ~numPvFrames].debug("pv specs");
+					~readyToPlay = true;
+				});
+			});
+			if((sf = SoundFile.openRead(~sfpath.standardizePath)).notNil) {
+				~sfdur = sf.duration;
+			} {
+				"Couldn't get duration from %. ~sfdur remains empty.".format(~sfpath).warn;
+			};
+			~readLabels.();
+			~activeSynths = IdentitySet.new;
+			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
+		},
+		useGui: { |vpi| ~ampCtl => VP(vpi) },
+		userfree: {
+			[~glrvbmc, ~lcrvbmc].do(~chan.stopsSendingTo(_));
+			~xys.do(_.releaseBus(~collIndex));
+			[~pvbuf, ~ampCtl].free;
+		},
+		preparePlay: {
+			BP(~trajectoryKey).isUsedBy(~collIndex);
+		},
+		recvEventNotify: { |node|
+			var	self, ufunc;
+			if(node.isKindOf(Synth)) {
+				self = currentEnvironment;
+				ufunc = { |obj, what|
+					if(what == \n_end) {
+						obj.removeDependant(ufunc);
+						self[\activeSynths].remove(obj);
+						if(self[\isPlaying].not and: { self[\activeSynths].isEmpty }) {
+							BP(self[\trajectoryKey]).notUsedBy(self.collIndex);
+						};
+					}
+				};
+				~activeSynths.add(node);
+				NodeWatcher.register(node);
+				node.addDependant(ufunc);
+			};
+		},
+		synth: \pv,
+		objects: (
+			pv: (
+				def: \pvplayStereoDist,
+				args: [
+					distNear: 5, distFar: 20,
+					glrvbout: ~glrvbmc.inbus,
+					lcrvbout: ~lcrvbmc.inbus,
+					pvbuf: Plazy { ~pvbuf.asPattern },
+					pt: Plazy { Pn(Pshuf(~pt, 1), inf) },
+					startFrame: Plazy { Pkey(\pt) * (~numPvFrames / ~sfdur) },
+					#[pan, distance]: Plazy { Pseq(BP(~trajectoryKey).xymaps, inf) },
+					shiftS: Pif(Ptime() <= 36, Pwhite(8, 30, inf) * Env(#[1, 0], #[36], \lin)),
+					shiftE: Pkey(\shiftS) * Pwhite(0.1, 0.4, inf),
+					rate: Pif(Pwhite(0.0, 1.0, inf) < 0.1, Pwhite(0.05, 0.09, inf), Pexprand(Env(#[0.05, 1], #[90], \exp), 1.0, inf)),
+					time: 0.25 / Pkey(\rate),
+					decay: Pkey(\time) * 0.14,
+					amp: Pif(Pkey(\rate) < 0.1, 4, 1) * Env([0, 2, 2, 0], #[3, 26, 7], #[2.1, 0, -2.1]),
+					ampMap: Plazy { Pn(~ampCtl.asMap, inf) },
+					delta: Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
+						Pn(1, { rrand(2, 5) }),
+						Pexprand(0.05, 0.2, { rrand(8, 14) })
+					], inf), Pkey(\time) * 0.1),
+					instrument: Pfunc { |ev|
+						if(~activeSynths.size < ~maxSynths) { ev[\instrument] } { \rest }
+					}
+				]
+			)
+		),
+		superPattern: PR(\basicSynthChooser).v[\asPattern],
+		splashPattern: {
+			Pbind(
+				\instrument, \pvplayStereoDist,
+				\pvbuf, ~pvbuf,
+				\rate, Pgeom.fromEndpoints(1, 0.02, ~numSplashEv),
+				\time, 0.6 / Pkey(\rate),
+				\decay, Pkey(\time) * 0.14,
+				\amp, 12.dbamp,
+				\ampMap, ~ampCtl.asMap,
+				\pt, Pn(Pshuf(~pt, 1), inf),
+				\startFrame, BPStream(\pvstartFrame),
+				\pan, Pstutter(2, Pseries.fromEndpoints(-1.0, 0, (~numSplashEv * 0.5).roundUp.asInteger))
+					* Pseq(#[1, -1], inf, { 2.rand }),
+				\distance, Pseries.fromEndpoints(15, 5, ~numSplashEv),
+				\glrvbout, ~glrvbmc.inbus, \glrvbamt, 0.3,
+				\lcrvbout, ~lcrvbmc.inbus,
+				\chan, ~chan,
+				\delta, 0
+			)
+		},
+		asPattern: {
+			Pseq([
+				~splashPattern.(),
+				Event.silent(rrand(0.15, 0.45)),
+				~superPattern.()
+			])
+		},
+		processLabels: PR(\steps1).v[\processLabels],
+		readLabels: {
+			~pt = TabFileReader.read(~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)]
+				++ "labels.txt");
+			~processLabels.();
+		},
+		reset: {
+			var	str;
+			currentEnvironment.env.keys.do { |key|
+				if((str = key.asString).contains("Stream")) {
+					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+				}
+			}
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\opening);
 
 
 PR(\abstractProcess).clone {
