@@ -164,7 +164,7 @@ PR(\basicSynthChooser).chuck(BP(\op), nil, (
 	readyToPlay: nil,
 	alwaysReset: true,
 	numSplashEv: 5,
-	maxSynths: 12,
+	maxSynths: 8,
 	userprep: {
 		var	sf;
 
@@ -216,12 +216,17 @@ PR(\basicSynthChooser).chuck(BP(\op), nil, (
 		~pvbuf.free;
 	},
 	preparePlay: {
-		~xysynths = ~xys.collect { |xybus|
-			Synth(\xy1, [mul: 1, send: 0, out: xybus], ~chan.fadergroup, \addToHead);
+		~xysynths ?? {
+			~xysynths = ~xys.collect { |xybus|
+				Synth(\xy1, [mul: 1, send: 0, out: xybus], ~chan.fadergroup, \addToHead);
+			}
 		};
 	},
 	removeXySynths: {
-		~xysynths.do(_.free);
+		~xysynths !? {
+			~xysynths.do(_.free);
+			~xysynths = nil;
+		};
 	},
 	recvEventNotify: { |node|
 		var	self, ufunc;
@@ -253,16 +258,17 @@ PR(\basicSynthChooser).chuck(BP(\op), nil, (
 				pt: Plazy { Pn(Pshuf(~pt, 1), inf) },
 				startFrame: Plazy { Pkey(\pt) * (~numPvFrames / ~sfdur) },
 				#[pan, distance]: Plazy { Pseq(~xymaps, inf) },
-				shiftS: Pwhite(8, 30, inf) * Pseg(
-		Pseq([1, 0, Ppatlace([Pwhite(0.2, 0.6, inf), 0], inf)], inf), //.trace(prefix: "shift endpoint: "),
-		Pseq([20, Pwrand([Pwhite(4.0, 8.0, 1), Pwhite(0.2, 0.6, 1)], #[0.8, 0.2], inf)], 1),
-		\lin
-	),
+				shiftS: Pif(Ptime() <= 36, Pwhite(8, 30, inf) * Env(#[1, 0], #[36], \lin)),
+// 				shiftS: Pwhite(8, 30, inf) * Pseg(
+// 					Pseq([1, 0, Ppatlace([Pwhite(0.2, 0.6, inf), 0], inf)], inf),
+// 					Pseq([20, Pwrand([Pwhite(4.0, 8.0, 1), Pwhite(0.2, 0.6, 1)], #[0.8, 0.2], inf)]),
+// 					\lin
+// 				),
 				shiftE: Pkey(\shiftS) * Pwhite(0.1, 0.4, inf),
 				rate: Pexprand(Env(#[0.05, 1], #[90], \exp), 1.0, inf),
 				time: 0.25 / Pkey(\rate),
 				decay: Pkey(\time) * 0.14,
-				amp: Env([0, 2], #[3], 2.1), //6.dbamp,
+				amp: Env(#[0, 2, 2, 0], #[3, 26, 7], #[2.1, 0, -2.1]),
 				delta: Ptempo() * max(Pwhite(0.3, 0.6, inf) * Pseq([
 					Pn(1, { rrand(2, 5) }),
 					Pexprand(0.05, 0.2, { rrand(8, 14) })
@@ -422,6 +428,13 @@ BP(\op).pvshiftS.postcs
 BP(\op).pvamp.postcs
 BP(\op).pvampStream
 
+BP(\op).pvshiftS = Pif(Ptime() <= 36, Pwhite(8, 30, inf) * Env(#[1, 0], #[36], \lin));
+BP(\op).pvamp = Env([0, 2, 2, 0], #[3, 26, 7], #[2.1, 0, -2.1]);
+
+// play with rate to get this condition to fire more often
+BP(\op).pvamp = Pif(Pkey(\rate) < 0.1, 4, 1) * Env([0, 2, 2, 0], #[3, 26, 7], #[2.1, 0, -2.1]);
+
+
 BP(\op).splashPattern = {
 	Pbind(
 		\instrument, \pvplayStereoDist,
@@ -451,3 +464,4 @@ t = TLSequenceIterator([
 	6,
 	{ ~master.stopRecord; 0 }
 ]).play;
+0.6/0.02
