@@ -514,52 +514,69 @@ BP(\op).splashPattern = {
 	};
 
 t = TLSequenceIterator([
-	{ ~master.startRecord(thisProcess.platform.recordingsDir +/+ "explosion1.aiff");
+	{ ~master.startRecord(thisProcess.platform.recordingsDir +/+ "steps-clatter.aiff");
 		1
 	},
-	bpCmd: (name: \op, dur: 60),
+	bpCmd: (name: \st, dur: 45),
 	\cmdSync,
-	6,
+	2,
 	{ ~master.stopRecord; 0 }
 ]).play;
 
 
+Error.debug = true;
+Server.default.queryAllNodes;
+
+o.remove;
+
 
 (
+BP(\st).free;
 PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	event: (eventKey: \singleSynthPlayer, instrument: \bufGrainPanFiltDist),
+	alwaysReset: true,
 
-	bufPaths: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav",
+	bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
 
 	inChannels: 2,
 	master: ~master,
 	glrvbmc: ~glrvbmc,
 	lcrvbmc: ~lcrvbmc,
 
-	gest: Pfunc { ~gestures.keys.choose },
-	initAmp: 1,
+	autoRun: true,
 
+	gest: Pfunc { ~gestures.keys.choose },
+	initAmp: 0.3,
+
+	early: 0.1,
 	buf: 0,
-	pt: Plazy { Pwhite(0, ~pt.size-2, inf) },
-	start: Plazy {
-		(Pindex(~pt, Pkey(\pt)) - 0.18) * Pfunc { |ev| ~buffers[ev[\bufIndex]].sampleRate }
+	ptIndex: Plazy { Pwhite(0, ~pt.size-2, inf) },
+	start: Pfunc { |ev|
+		(~pt[ev[\pt]] - (~early * ev[\rate])) * ~buffers[ev[\bufIndex]].sampleRate
 	},
-	time: ,
-	rate: ,
-	fastDelta: ,
-	amp: ,
+	time: 0.4,
+	rate: Pexprand(0.9, 1.7, inf),
+	ffreq: 18000,
+	fastDelta: Pexprand(0.08, 0.3, inf),
+	amp: 7.dbamp,
+	numEv: Pwhite(5, 12, inf),
+	gDelta: Pwhite(0.5, 2.5, inf),
+	distNear: 5,
+	distFar: 20,
 
 	postMCCreation: { |chan|
 		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
-// 		~gestures = ~gestures.value;
 		~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
 		~event.putAll((glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus, chan: ~chan,
 			ampMap: ~ampCtl.asMap
 		));
+		~readLabels.();
 	},
+	useGui: { |vpi| ~ampCtl => VP(vpi) },
 	free: {
 		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
+		~ampCtl.free;
 	},
 	stopCleanup: {
 		~spawner = nil
@@ -568,20 +585,27 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	// external hook to drop a gesture in!
 	runGesture: { |parms|
 		if(~isPlaying) {
-			~spawner.par(~makeGesture.(parms))
+			parms ?? { parms = () };
+			parms[\gest] ?? { parms[\gest] = ~gestStream.next };
+			if(parms[\gest].notNil) {
+				~spawner.par(~makeGesture.(parms))
+			} {
+				"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
+				.postf(~collIndex.asCompileString);
+			};
 		} {
 			"BP(%) is not playing, can't run a gesture".format(~collIndex.asCompileString).warn;
 		};
 	},
 
 	makeGesture: { |parms|
-		~gestures[parms[\gest] ?? ~gestStream.next].value(parms)
+		~gestures[parms[\gest] ?? { ~gestStream.next }].value(parms)
 		<>
 		~baseValuePat.value(parms)
 	},
 
 	// more later
-	~xyPat: { |parms|
+	xyPat: { |parms|
 		Ptuple([
 			Pseries.fromEndpoints(rrand(-1.0, 0.2), rrand(0.2, 1.0), parms[\numEv]) * #[-1, 1].choose,
 			Pseries.fromEndpoints(rrand(~distNear, ~distFar), rrand(~distNear, ~distFar),
@@ -602,10 +626,20 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 
 	asPattern: {
 		~numEvStream ?? { ~makeStreamForKey.(\numEv) };
+		~gDeltaStream ?? { ~makeStreamForKey.(\gDelta) };
+		~gestStream ?? { ~makeStreamForKey.(\gest) };
 		Pspawner { |sp|
 			~spawner = sp;
-			loop {
-				sp.wait(0.1);
+			if(~autoRun) {
+				"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
+				loop {
+					~runGesture.();
+					sp.wait(~gDeltaStream.next());
+				}
+			} {
+				loop {
+					sp.wait(0.1);
+				}
 			}
 		}
 	},
@@ -614,11 +648,12 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			\distNear, Pfunc { ~distNear },
 			\distFar, Pfunc { ~distFar },
 			\bufIndex, Plazy { BPStream(\buf) },
-			\bufnum, Pfunc({ |ev| ~buffers[ev[\bufIndex]].bufnum }),
-			\pt, Plazy { BPStream(\pt) },
+			\bufnum, Pfunc { |ev| ~buffers[ev[\bufIndex]].bufnum },
+			\pt, Plazy { BPStream(\ptIndex) },
+			\rate, Plazy { BPStream(\rate) },
 			\start, Plazy { BPStream(\start) },
 			\time, Plazy { BPStream(\time) },
-			\rate, Plazy { BPStream(\rate) } //,
+			\ffreq, Plazy { BPStream(\ffreq) } //,
 //			\amp, Plazy { BPStream(\amp) }
 		)
 	},
@@ -630,4 +665,39 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		~processLabels.();
 	}
 ));
+0 => BP(\st);
 )
+
+BP(\st).free = {
+	[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
+	~ampCtl.free;
+};
+
+BP(\st).v[\free].postcs
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	r.remove;
+	Synth.basicNew(\dummy, s, m[1]).trace
+}).add;
+
+BP(\st).fastDelta = Pexprand(0.08, 0.3, inf);
+BP(\st).amp = 7.dbamp;
+BP(\st).gDelta = Pwhite(0.5, 2.5, inf);
+
+BP(\st).xyPat = { |parms|
+		Ptuple([
+			Pseries.fromEndpoints(rrand(-1.0, 0.2), rrand(0.2, 1.0), parms[\numEv]) * #[-1, 1].choose,
+			Pseries.fromEndpoints(rrand(~distNear, ~distFar), rrand(~distNear, ~distFar),
+				parms[\numEv])
+		])
+	};
+
+BP(\st).autoRun = false;
+BP(\st).autoRun = true;
+
+Proto {
+	~doAction = {
+		BP(\st).runGesture;
+	}
+} => BP(\run);
+0 => BP(\run);
