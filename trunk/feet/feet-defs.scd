@@ -526,8 +526,9 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 			distance.linlin(distNear, distFar, attNearRs, attFarRs),
 			distance.linlin(distNear, distFar, attNearDb, attFarDb)
 		);
-		Out.ar(glrvbout, result * glrvbamt / distance.sqrt);
-		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.sqrt.reciprocal));
+		distance = distance.sqrt;
+		Out.ar(glrvbout, result * glrvbamt / distance);
+		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
 	}, rates, metadata: metadata);
 } => Func(\addRvbOut);
 );
