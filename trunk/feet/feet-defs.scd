@@ -379,10 +379,10 @@ SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1,
 }).add;
 
 SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
-		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
+		attack = 0.001, decay = 0.02, outbus, filtFreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
 		filtAmp = 1,
-		shapebuf = -1, shapeXf = 1, chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
-		lpfreq = 2000, lprq = 1|
+		/* shapebuf = -1, shapeXf = 1, */ chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
+		ffreq = 2000, lprq = 1|
 	var harm = \harm.kr((1..5)),
 		amps = \amps.kr((1..5).reciprocal),
 		decays = \decays.kr(1 ! 5),
@@ -390,12 +390,12 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
 			* EnvGen.kr(Env.linen(attack, time, decay)),
 		// Klank(decay) - Klank(attack) is like a bank of Formlets
-		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtDecay)
-			- Klank.ar(`[harm, amps, decays], sig, freqscale: ffreq, decayscale: filtAttack),
+		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtDecay)
+			- Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtAttack),
 		shaped, dly, cfreqRand = chorusFreq * 0.2;
 	sig = sig + (Limiter.ar(filt) * filtAmp);
-	shaped = Select.ar(shapebuf < 0, [Shaper.ar(shapebuf, sig), sig]);
-	sig = XFade2.ar(sig, shaped, shapeXf);
+//	shaped = Select.ar(shapebuf < 0, [Shaper.ar(shapebuf, sig), sig]);
+//	sig = XFade2.ar(sig, shaped, shapeXf);
 	dly = sig;
 	chorusAmps.do { |amp|
 		dly = DelayL.ar(dly, chorusDelay + chorusAmt,
@@ -407,7 +407,7 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 		sig = sig + dly;
 	};
 // 	sig = LeakDC.ar(sig);
-	sig = RLPF.ar(sig, lpfreq, lprq);
+	sig = RLPF.ar(sig, ffreq, lprq);
 	DetectSilence.ar(sig, 0.001, doneAction: 2);
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
@@ -825,8 +825,8 @@ PR(\abstractProcess).clone {
 				\filtDecay, BPStream(\accDecay),
 //				\filtAmp, parms[\numWalkers].reciprocal,
 // 				\filtAmp, BPStream(\filtAmp),
-				\ffreq, BPStream(\combFreq),
-				\lpfreq, ~hiFilt,
+				\filtFreq, BPStream(\combFreq),
+				\ffreq, ~hiFilt,
 				\chorusAmt, BPStream(\syncopChorusAmt),
 				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
 			)
@@ -841,9 +841,9 @@ PR(\abstractProcess).clone {
 				\filtDecay, BPStream(\accDecay),
 //				\filtAmp, parms[\numWalkers].reciprocal,
 // 				\filtAmp, BPStream(\filtAmp),
-				// ~def uses ffreq; klank synth uses lpfreq
-				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
-				\lpfreq, ~hiFilt,
+				// ~def uses ffreq; klank synth uses ffreq
+				\filtFreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
+				\ffreq, ~hiFilt,
 				\chorusAmt, BPStream(\syncopChorusAmt),
 				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
 			)
@@ -886,11 +886,11 @@ PR(\abstractProcess).clone {
 				\delta, 1,
 				\amp, ~amp.(i, parms),
 //				\amp, Pif(Pbinop('==', Pkey(\instrument), ~def), ~amp.(i, parms), parms[\numWalkers].reciprocal),
-				\ffreq, BPStream(\combFreq),
+				\filtFreq, BPStream(\combFreq),
 				\filtAttack, 0.01,
 				\filtDecay, Env(#[0.01, 0.01, 2.0], [parms.preSyncop, parms.dur - parms.preSyncop], \exp),
 //				\filtAmp, parms[\numWalkers].reciprocal,
-				\lpfreq, 3500
+				\ffreq, 3500
 			) 
 		},
 
@@ -904,14 +904,14 @@ PR(\abstractProcess).clone {
 				\filtDecay, BPStream(\klankDecay),
 // skip amp control: this is less likely to play multiple klanks at the same time
 //				\filtAmp, parms[\numWalkers].reciprocal,
-				// ~def uses ffreq; klank synth uses lpfreq
+				// ~def uses ffreq; klank synth uses ffreq
 // 				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt, BPStream(\combFreq)),
-				\ffreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt,
+				\filtFreq, Pif(Pbinop('==', Pkey(\instrument), ~def), ~loFilt,
 					~syncopCombFreq.(i, parms).collect { |notenum, ev|
 						ev[\mode].asMode.cps(notenum)
 					}
 				),
-				\lpfreq, ~hiFilt,
+				\ffreq, ~hiFilt,
 				\chorusAmt, BPStream(\syncopChorusAmt),
 				\chorusDelay, Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf),
 				\chorusAmps, [~chorusAmps]
@@ -986,13 +986,13 @@ PR(\abstractProcess).clone {
 						memorySize: 30
 					),
 					\mode, BPStream(\bloxMode),
-					\ffreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
+					\filtFreq, Pfunc { |ev| ev[\mnotes].unmapMode(ev[\mode]).midicps },
 					\filtAttack, BPStream(\klankAttack),
 					\filtDecay, BPStream(\klankDecay), // Pkey(\filtAttack) + 0.08,
 					\chorusAmt, 0, //BPStream(\syncopChorusAmt),
 					\chorusDelay, 0, //Pkey(\chorusAmt) * Pwhite(1.1, 2.0, inf)
 					\chorusAmps, [0 ! 3],
-					\lpfreq, ~hiFilt,
+					\ffreq, ~hiFilt,
 					\delta, Pstutter(Pwhite(3, 10, inf), 4 / Pxrand((4..10), inf)),
 						// Pif allows Pgeom to run when delta does not change
 						// Pdiff is always 0 for the first event in a given Pn iteration!
