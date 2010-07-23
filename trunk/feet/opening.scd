@@ -777,23 +777,30 @@ SynthDescLib.at(\bufGrainPanKlankDist).controls.do(_.postln); ""
 SynthDescLib.at(\bufGrainPanFiltDist).controls.do(_.postln); ""
 BP(\st).event.instrument
 
-// bit boring
+// kinda wack mixing 3 together, slowed down so much
 BP(\st).slowDelta = Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf);
-BP(\st).slowRate = Pwhite(0.6, 0.8, inf);
+BP(\st).slowRate = Pwhite(0.5, 0.8, inf);
+BP(\st).slowRate = Pwhite(0.2, 0.5, inf);
+
 BP(\st).gestures.slowSteps = { |parms|
 	Pbind(
 		\instrument, \pvplayPanDist,
 		\pvbuf, ~pvbuf,
+		\pt, BPStream(\ptIndex).clump(3),
+		\start, ~start,
 		\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
 		#[pan, distance], ~xyPat.(parms),
 		\delta, BPStream(\slowDelta),
-		\rate, BPStream(\slowRate),
+		\rate, BPStream(\slowRate).clump(3),
 		\time, Pkey(\delta),
 		\amp, BPStream(\amp),
-		\shiftS, rrand(-15, -4, inf),
+		\shiftS, 0, //({ rrand(-2, 12) } ! 3).debug("shift"),
 		\shiftE, Pkey(\shiftS)
 	)
 };
+
 BP(\st).gest = \slowSteps;
 BP(\st).numEv = Pwhite(3, 5, inf);
 BP(\st).gDelta = Pwhite(2.5, 4.0, inf);
+
+BP(\st).event.eventKey = \polySynthPlayer;
