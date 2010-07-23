@@ -1,6 +1,15 @@
 // todo:
 // then do running across the floor
 
+// video notes:
+// keep sparse at first
+// turning backstage to launch new variations
+// what is the pitch theme?
+// straight line vs curved
+// parallel vs crossing paths
+// track fwd/back position of dancers for 'distance' parm?
+
+
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 #[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
 s.waitForBoot(e { (Document.current.path.dirname +/+ "feet-defs.scd").debug("loading").loadPath });
@@ -588,6 +597,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			parms ?? { parms = () };
 			parms[\gest] ?? { parms[\gest] = ~gestStream.next };
 			if(parms[\gest].notNil) {
+				parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
 				~spawner.par(~makeGesture.(parms))
 			} {
 				"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
@@ -599,7 +609,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	},
 
 	makeGesture: { |parms|
-		~gestures[parms[\gest] ?? { ~gestStream.next }].value(parms)
+		~gestures[parms[\gest]].value(parms)
 		<>
 		~baseValuePat.value(parms)
 	},
@@ -615,11 +625,18 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 
 	gestures: (
 		clatter: { |parms|
-			parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
 			Pbind(
 				#[pan, distance], ~xyPat.(parms),
 				\delta, BPStream(\fastDelta),
 				\amp, BPStream(\amp)
+			)
+		},
+		oneKlank: { |parms|
+			Pbind(
+			)
+		},
+		oneKlankSteps: { |parms|
+			Pbind(
 			)
 		}
 	),
@@ -701,3 +718,20 @@ Proto {
 	}
 } => BP(\run);
 0 => BP(\run);
+
+SynthDescLib.at(\bufGrainPanKlankDist).controls.do(_.postln); ""
+ControlName  P 22 ffreq control 2000
+ControlName  P 23 filtAttack control 0.10000000149012
+ControlName  P 24 filtDecay control 1
+ControlName  P 25 filtAmp control 1
+ControlName  P 26 shapebuf control -1
+ControlName  P 27 shapeXf control 1
+ControlName  P 28 chorusFreq control 0.050000000745058
+ControlName  P 29 chorusAmt control 0.019999999552965
+ControlName  P 30 chorusDelay control 0.029999999329448
+ControlName  P 31 lpfreq control 2000
+ControlName  P 32 lprq control 1
+ControlName  P 33 harm control 1
+ControlName  P 38 amps control 1
+ControlName  P 43 decays control 1
+ControlName  P 48 chorusAmps control 1
