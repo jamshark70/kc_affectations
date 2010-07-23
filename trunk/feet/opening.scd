@@ -538,6 +538,8 @@ Server.default.queryAllNodes;
 
 o.remove;
 
+// need to borrow pvbuf from opening
+Fact(\opening) => BP(\op);
 
 (
 BP(\st).free;
@@ -546,6 +548,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	alwaysReset: true,
 
 	bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
+	pvSource: \op,
 
 	inChannels: 2,
 	master: ~master,
@@ -573,14 +576,31 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	distNear: 5,
 	distFar: 20,
 
+	kfreq: Pexprand(300, 800, inf),
+	kdecay: Pexprand(0.01, 0.1, inf),
+	kamp: 1,
+
 	postMCCreation: { |chan|
 		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
 		~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
-		~event.putAll((glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus, chan: ~chan,
+		~event.putAll((
+			// just in case reverb channels don't exist,
+			// push them to hw input buses (to suppress output)
+			glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+			lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+			chan: ~chan,
 			ampMap: ~ampCtl.asMap
 		));
 		~readLabels.();
+
+		if(BP.exists(~pvSource)) {
+			#[pvbuf, fftSize, hop, numPvFrames].do { |key|
+				key.envirPut(BP(~pvSource)[key]);
+			}
+		} {
+			"BP(%) not found; can't use any pv gestures.".format(~pvSource.asCompileString).warn
+		};
 	},
 	useGui: { |vpi| ~ampCtl => VP(vpi) },
 	free: {
@@ -609,9 +629,11 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	},
 
 	makeGesture: { |parms|
-		~gestures[parms[\gest]].value(parms)
-		<>
-		~baseValuePat.value(parms)
+		Pchain(
+			~gestures[parms[\gest]].value(parms),
+			~baseValuePat.value(parms),
+			(parms: parms)
+		)
 	},
 
 	// more later
@@ -633,10 +655,38 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		},
 		oneKlank: { |parms|
 			Pbind(
+				\instrument, Pn(\bufGrainPanKlankDist, 1),
+				#[pan, distance], parms[\xy] ?? {
+					[rrand(-1.0, 1.0), rrand(~distNear, ~distFar)]
+				},
+				\delta, 0.5,
+				\amp, BPStream(\amp),
+				\filtFreq, BPStream(\kfreq),
+				\filtAttack, 0.01,
+				\filtDecay, BPStream(\kdecay),
+				\filtAmp, BPStream(\kamp),
+// 				\chorusFreq, 
+// 				\chorusAmt, 
+// 				\chorusDelay, 
+//				\ffreq, 
+//				\lprq, 
+//				\harm, 
+//				\amps, 
+//				\decays, 
+				\chorusAmps, #[0, 0, 0]
 			)
 		},
 		oneKlankSteps: { |parms|
 			Pbind(
+				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
+				#[pan, distance], ~xyPat.(parms),
+				\delta, BPStream(\fastDelta),
+				\amp, BPStream(\amp),
+				\filtFreq, BPStream(\kfreq),
+				\filtAttack, 0.01,
+				\filtDecay, BPStream(\kdecay),
+				\filtAmp, BPStream(\kamp),
+				\chorusAmps, #[0, 0, 0]
 			)
 		}
 	),
@@ -685,6 +735,10 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 0 => BP(\st);
 )
 
+BP(\st).gest = \oneKlank;
+BP(\st).gest = \oneKlankSteps;
+BP(\st).event.put(\glrvbout, s.options.numOutputBusChannels).put(\lcrvbout, s.options.numOutputBusChannels);
+
 BP(\st).free = {
 	[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
 	~ampCtl.free;
@@ -720,18 +774,26 @@ Proto {
 0 => BP(\run);
 
 SynthDescLib.at(\bufGrainPanKlankDist).controls.do(_.postln); ""
-ControlName  P 22 ffreq control 2000
-ControlName  P 23 filtAttack control 0.10000000149012
-ControlName  P 24 filtDecay control 1
-ControlName  P 25 filtAmp control 1
-ControlName  P 26 shapebuf control -1
-ControlName  P 27 shapeXf control 1
-ControlName  P 28 chorusFreq control 0.050000000745058
-ControlName  P 29 chorusAmt control 0.019999999552965
-ControlName  P 30 chorusDelay control 0.029999999329448
-ControlName  P 31 lpfreq control 2000
-ControlName  P 32 lprq control 1
-ControlName  P 33 harm control 1
-ControlName  P 38 amps control 1
-ControlName  P 43 decays control 1
-ControlName  P 48 chorusAmps control 1
+SynthDescLib.at(\bufGrainPanFiltDist).controls.do(_.postln); ""
+BP(\st).event.instrument
+
+// bit boring
+BP(\st).slowDelta = Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf);
+BP(\st).slowRate = Pwhite(0.6, 0.8, inf);
+BP(\st).gestures.slowSteps = { |parms|
+	Pbind(
+		\instrument, \pvplayPanDist,
+		\pvbuf, ~pvbuf,
+		\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+		#[pan, distance], ~xyPat.(parms),
+		\delta, BPStream(\slowDelta),
+		\rate, BPStream(\slowRate),
+		\time, Pkey(\delta),
+		\amp, BPStream(\amp),
+		\shiftS, rrand(-15, -4, inf),
+		\shiftE, Pkey(\shiftS)
+	)
+};
+BP(\st).gest = \slowSteps;
+BP(\st).numEv = Pwhite(3, 5, inf);
+BP(\st).gDelta = Pwhite(2.5, 4.0, inf);
