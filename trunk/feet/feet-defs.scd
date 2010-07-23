@@ -413,10 +413,12 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 }).add;
 
 SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
-	attack = 0.01, decay = 0.05|
+	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0|
 	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
-		sig = IFFT(fft, 1)
-			* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
+		sig;
+	fft = PV_BinShift(fft, 1, Line.kr(shiftS, shiftE, time));
+	sig = IFFT(fft, 1)
+		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
 
@@ -561,7 +563,7 @@ make: { |name|
 		userprep: {
 			var	sf;
 
-			[~glrvbmc, ~lcrvbmc].do(~chan.sendsSignalTo(_));
+			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
 			~pvbuf = Buffer.readAndQuery(s, ~pvpath.standardizePath, completionFunc: e {
 				~pvbuf.getn(0, 3, e { |val|
@@ -584,7 +586,7 @@ make: { |name|
 		},
 		useGui: { |vpi| ~ampCtl => VP(vpi) },
 		userfree: {
-			[~glrvbmc, ~lcrvbmc].do(~chan.stopsSendingTo(_));
+			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
 			~xys.do(_.releaseBus(~collIndex));
 			[~pvbuf, ~ampCtl].free;
 		},
@@ -615,8 +617,8 @@ make: { |name|
 				def: \pvplayStereoDist,
 				args: [
 					distNear: 5, distFar: 20,
-					glrvbout: ~glrvbmc.inbus,
-					lcrvbout: ~lcrvbmc.inbus,
+					glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+					lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
 					pvbuf: Plazy { ~pvbuf.asPattern },
 					pt: Plazy { Pn(Pshuf(~pt, 1), inf) },
 					startFrame: Plazy { Pkey(\pt) * (~numPvFrames / ~sfdur) },
