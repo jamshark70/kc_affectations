@@ -129,7 +129,7 @@ f = File(p.dirname +/+ "58454_labels2.txt", "w");
 f.close;
 
 // peaks for ~pt -- need early peak AND on-the-spot peak
-~pt = TabFileReader.read(BP(\op).sfpath.dirname +/+ "58454_labels.txt");
+~pt = TabFileReader.read(BP(\op).sfpath.dirname +/+ "58454_labels4.txt");
 ~pt.do { |row|
 	2.do { |i| row[i] = row[i].asFloat }
 };
@@ -163,7 +163,7 @@ Pprotect(
 
 (Pseries(0, 1, inf) +.x Pseq(#[0, 100], 1)).asStream.nextN(20)
 
-f = File(BP(\op).sfpath.dirname +/+ "58454_labels3.txt", "w");
+f = File(BP(\op).sfpath.dirname +/+ "58454_labels5.txt", "w");
 ~pt.do { |row|
 	row.do { |item, i|
 		if(i > 0) { f << $\t };
