@@ -546,7 +546,7 @@ Fact(\opening) => BP(\op);
 (
 BP(\st).free;
 PR(\basicBufferPlayer).chuck(BP(\st), nil, (
-	event: (eventKey: \singleSynthPlayer, instrument: \bufGrainPanFiltDist),
+	event: (eventKey: \polySynthPlayer, instrument: \bufGrainPanFiltDist),
 	alwaysReset: true,
 
 	bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
@@ -576,14 +576,18 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	amp: Pindex(Pfunc { |ev|
 		var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
 		~peaks[(early <= 0).binaryValue]
-	}, Pfin(1, Pkey(\pt)), inf).reciprocal,
+	}, Pfin(1, Pkey(\pt)), inf).reciprocal.trace(prefix: "amp: "),
 	numEv: Pwhite(5, 12, inf),
 	gDelta: Pwhite(0.5, 2.5, inf),
 	distNear: 5,
 	distFar: 20,
 
-	kfreq: Pexprand(300, 800, inf),
-	kdecay: Pexprand(0.01, 0.1, inf),
+	slowDelta: Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf),
+	slowRate: Pwhite(0.5, 0.8, inf),
+	slowShift: Pexprand(1, 15, inf) - 3,
+
+	kfreq: Pseq(#[74, 79, 78], inf).trace(prefix: "kfreq: ").midicps,
+	kdecay: Pexprand(0.011, 0.1, inf),
 	kamp: 1,
 
 	postMCCreation: { |chan|
@@ -642,12 +646,22 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		)
 	},
 
-	// more later
 	xyPat: { |parms|
 		Ptuple([
-			Pseries.fromEndpoints(rrand(-1.0, 0.2), rrand(0.2, 1.0), parms[\numEv]) * #[-1, 1].choose,
-			Pseries.fromEndpoints(rrand(~distNear, ~distFar), rrand(~distNear, ~distFar),
-				parms[\numEv])
+			if(parms[\xEnds].notNil) {
+				Pseries.fromEndpoints(*(parms[\xEnds] ++ parms[\numEv]))
+			} {
+				Pseries.fromEndpoints(
+					rrand(-1.0, 0.2), rrand(0.2, 1.0), parms[\numEv]
+				) * #[-1, 1].choose
+			},
+			if(parms[\yEnds].notNil) {
+				Pseries.fromEndpoints(*(parms[\yEnds] ++ parms[\numEv]))
+			} {
+				Pseries.fromEndpoints(rrand(~distNear, ~distFar), rrand(~distNear, ~distFar),
+					parms[\numEv]
+				)
+			}
 		])
 	},
 
@@ -679,7 +693,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 //				\harm, 
 //				\amps, 
 //				\decays, 
-				\chorusAmps, #[0, 0, 0]
+				\chorusAmps, #[[0, 0, 0]]
 			)
 		},
 		oneKlankSteps: { |parms|
@@ -688,11 +702,11 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				#[pan, distance], ~xyPat.(parms),
 				\delta, BPStream(\fastDelta),
 				\amp, BPStream(\amp),
-				\filtFreq, BPStream(\kfreq),
+				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
 				\filtAttack, 0.01,
 				\filtDecay, BPStream(\kdecay),
 				\filtAmp, BPStream(\kamp),
-				\chorusAmps, #[0, 0, 0]
+				\chorusAmps, #[[0, 0, 0]]
 			)
 		},
 		decay: { |parms|
@@ -700,15 +714,72 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			Pbind(
  				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
 				\early, 0,
+				\pt, Pstutter(inf, BPStream(\ptIndex).reject(#[3, 10, 14].includes(_))),
 				\start, Pstutter(inf, BPStream(\start)),
 				\delta, rrand(0.08, 0.16),
 				\time, Pkey(\delta) * rrand(0.6, 0.8),
 				\rate, Pstutter(inf, Pkey(\rate)),
-				\amp, Pstutter(inf, BPStream(\amp))
-					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]),
+				\amp, Pstutter(inf, BPStream(\amp)) / Pindex(~ampCorrections, Pkey(\pt), inf)
+					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]) * -6.dbamp,
 				\ffreq, Pstutter(inf, Pkey(\ffreq))
 					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
 			);
+		},
+		slowSteps: { |parms|
+			Pbind(
+				\instrument, \pvplayPanDist,
+				\pvbuf, ~pvbuf,
+				\pt, BPStream(\ptIndex).clump(3),
+				\start, ~start,
+				\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+				#[pan, distance], ~xyPat.(parms),
+				\delta, BPStream(\slowDelta),
+				\rate, BPStream(\slowRate).clump(3),
+				\time, Pkey(\delta),
+				\amp, BPStream(\amp) * (-4.dbamp),
+				\shiftS, BPStream(\slowShift).clump(3),
+				\shiftE, Pkey(\shiftS)
+			)
+		},
+		slowStepStretch: { |parms|
+			parms[\xEnds] ?? {
+				parms[\xEnds] = [rrand(0.5, 1.0) * #[-1, 1].choose, 0]
+			};
+			parms[\yEnds] ?? {
+				parms[\yEnds] = [rrand(0.5, 1.0).linlin(0.0, 1.0, ~distNear, ~distFar), ~distNear]
+			};
+			Pbind(
+				\instrument, \pvplayPanDist,
+				\early, 0,
+				\pvbuf, ~pvbuf,
+				\pt, BPStream(\ptIndex).clump(3),
+				\start, ~start,
+				\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+				#[pan, distance], Pseq([
+					Pfin(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
+					[#[-1, 0, 1], ~distNear]
+				]),
+				\delta, (BPStream(\slowDelta) * Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7),
+					parms[\numEv])) ++ 0.4,
+				\rate, Pseq([
+					Pfin(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
+					Pwhite(0.04, 0.1, 1)
+				]),
+				\time, Pseq([
+					Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
+					Pkey(\delta) / Pkey(\rate)
+				]),
+				\amp, BPStream(\amp) * Pseq([
+					Pn(-4.dbamp, parms[\numEv] /* - 1 */),
+					1
+				]),
+				\origShiftS, BPStream(\slowShift).clump(3),
+				\shiftS, Pkey(\origShiftS) + Pseq([
+					Pfin(parms[\numEv] /* - 1 */, 0),
+					Pwhite(3, 9, 1)
+				]),
+				\shiftE, Pkey(\origShiftS)
+			) //.collect { |ev| if(ev[\shiftS][0] > ev[\origShiftS][0]) { ev.postcs } { ev } }
 		}
 	),
 
@@ -751,7 +822,9 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		~bufPaths[0].dirname
 			+/+ ~bufPaths[0].basename[.. ~bufPaths[0].basename.indexOf($_)]
 			++ "labels3.txt"
-	}
+	},
+
+	ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613]
 ));
 0 => BP(\st);
 )
@@ -784,6 +857,8 @@ BP(\st).xyPat = { |parms|
 		])
 	};
 
+BP(\st).gest = Pseq(BP(\st).gestures.keys.asArray.sort, inf).trace;
+
 BP(\st).autoRun = false;
 BP(\st).autoRun = true;
 
@@ -802,6 +877,7 @@ BP(\st).event.instrument
 BP(\st).slowDelta = Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf);
 BP(\st).slowRate = Pwhite(0.5, 0.8, inf);
 BP(\st).slowRate = Pwhite(0.2, 0.5, inf);
+BP(\st).slowShift = Pexprand(1, 15, inf) - 3;
 
 BP(\st).gestures.slowSteps = { |parms|
 	Pbind(
@@ -814,17 +890,63 @@ BP(\st).gestures.slowSteps = { |parms|
 		\delta, BPStream(\slowDelta),
 		\rate, BPStream(\slowRate).clump(3),
 		\time, Pkey(\delta),
-		\amp, BPStream(\amp),
-		\shiftS, 0, //({ rrand(-2, 12) } ! 3).debug("shift"),
+		\amp, BPStream(\amp) * (-4.dbamp),
+		\shiftS, BPStream(\slowShift).clump(3),
 		\shiftE, Pkey(\shiftS)
 	)
 };
+
+BP(\st).gestures.slowStepStretch = { |parms|
+	parms[\xEnds] ?? {
+		parms[\xEnds] = [rrand(0.5, 1.0) * #[-1, 1].choose, 0]
+	};
+	parms[\yEnds] ?? {
+		parms[\yEnds] = [rrand(0.5, 1.0).linlin(0.0, 1.0, ~distNear, ~distFar), ~distNear]
+	};
+	Pbind(
+		\instrument, \pvplayPanDist,
+		\early, 0,
+		\pvbuf, ~pvbuf,
+		\pt, BPStream(\ptIndex).clump(3),
+		\start, ~start,
+		\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+		#[pan, distance], Pseq([
+			Pfin(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
+			[#[-1, 0, 1], ~distNear]
+		]),
+		\delta, (BPStream(\slowDelta) * Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7), parms[\numEv]))
+			++ 0.4,
+		\rate, Pseq([
+			Pfin(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
+			Pwhite(0.04, 0.1, 1)
+		]),
+		\time, Pseq([
+			Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
+			Pkey(\delta) / Pkey(\rate)
+		]),
+		\amp, BPStream(\amp) * Pseq([
+			Pn(-4.dbamp, parms[\numEv] /* - 1 */),
+			1
+		]),
+		\origShiftS, BPStream(\slowShift).clump(3),
+		\shiftS, Pkey(\origShiftS) + Pseq([
+			Pfin(parms[\numEv] /* - 1 */, 0),
+			Pwhite(3, 9, 1)
+		]),
+		\shiftE, Pkey(\origShiftS)
+	) //.collect { |ev| if(ev[\shiftS][0] > ev[\origShiftS][0]) { ev.postcs } { ev } }
+};
+
+
+BP(\st).gest = \slowStepStretch;
 
 BP(\st).gest = \slowSteps;
 BP(\st).numEv = Pwhite(3, 5, inf);
 BP(\st).gDelta = Pwhite(2.5, 4.0, inf);
 
 BP(\st).event.eventKey = \polySynthPlayer;
+
+1/0.070451948642731
 
 BP(\st).gest = \decay;
 
@@ -833,12 +955,13 @@ BP(\st).gestures.decay = { |parms|
 			Pbind(
  				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
 				\early, 0,
+				\pt, Pstutter(inf, BPStream(\ptIndex).reject(#[3, 10, 14].includes(_))),
 				\start, Pstutter(inf, BPStream(\start)),
 				\delta, rrand(0.08, 0.16),
 				\time, Pkey(\delta) * rrand(0.6, 0.8),
 				\rate, Pstutter(inf, Pkey(\rate)),
-				\amp, Pstutter(inf, BPStream(\amp))
-					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]),
+				\amp, Pstutter(inf, BPStream(\amp)) / Pindex(~ampCorrections, Pkey(\pt), inf)
+					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]) * -6.dbamp,
 				\ffreq, Pstutter(inf, Pkey(\ffreq))
 					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
 			);
@@ -847,9 +970,57 @@ BP(\st).gestures.decay = { |parms|
 BP(\st).use {
 	~amp = Pindex(Pfunc { |ev|
 		var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
-		~peaks[(early <= 0).binaryValue]
-	}, Pfin(1, Pkey(\pt)), inf).reciprocal;
+~peaks.flop[ev[\pt]].debug("both");
+		~peaks[(early <= 0).binaryValue.debug("which")]
+	}, Pfin(1, Pkey(\pt).trace(prefix: "pt: ")), inf).reciprocal.trace(prefix: "amp: ");
 };
+
+BP(\st).pt[[9, 3]]
+[315652, 134374] / 44100
+
+m = BP(\st).chan;
+z = PeakMonitor(m);
+p = BP(\st);
+
+y = z.dependants.detect(_.notNil);
+y.dump
+y.instVarAt(8)
+
+m.play(\bufGrainPan, [start: (p.pt[9] - 0.000) * 44100, time: 0.08*0.6, rate: 1, amp: p.peaks[1][9].reciprocal, bufnum: p.buffers[0]]);
+
+i = 14; m.play(\bufGrainPan, [start: (p.pt[i] - 0.000) * 44100, time: 0.08*0.6, rate: 1, amp: p.peaks[1][i].reciprocal, bufnum: p.buffers[0]]);
+
+w = ResizeFlowWindow("x", Rect(10, 10, 200, 100));
+Button(w, 100@20).states_([["click"]]).action_({ [~i, y.instVarAt(8).flop[0].maxItem].postln });
+w.recursiveResize.front;
+
+q = m.play(Ptpar([
+	0, Pbind(
+		\instrument, \bufGrainPan,
+		\i, Pn(Pseries(0, 1, p.pt.size), inf).collect { |x| ~i = x },
+		\start, Pindex(p.pt, Pkey(\i), inf) * 44100,
+		\time, 0.08 * 0.6,
+		\amp, Pindex(p.peaks[1], Pkey(\i), inf).reciprocal / Pseq(#[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613], inf) * -12.dbamp,
+		\bufnum, p.buffers[0],
+		\delta, 2
+	),
+	0.5, Pbind(
+		\play, { [topEnvironment[\i], y.instVarAt(8).flop[0].maxItem].postln },
+		\delta, 2
+	)
+]));
+
+q.stop;
+p.peaks[1][[6, 10, 16, 17]] / [0.58741980791092, 0.62214255332947, 0.42652836441994, 0.83408385515213] * -15.dbamp;
+
+
+p.peaks[1][[2, 5, 6, 10, 16, 17, 21, 24, 26]]
+
+BP(\st).labelPath = BP(\st).labelPath.replace("3.", "5.");
+BP(\st).readLabels;
+
+
+1/1.5096764904905
 
 BP(\st).peaks.size
 BP(\st).peaks.do(_.postln); ""
