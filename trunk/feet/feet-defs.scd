@@ -669,10 +669,9 @@ make: { |name|
 			])
 		},
 		processLabels: PR(\steps1).v[\processLabels],
-		readLabels: {
-			~pt = TabFileReader.read(~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)]
-				++ "labels.txt");
-			~processLabels.();
+		readLabels: PR(\steps1).v[\readLabels],
+		labelPath: {
+			~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)] ++ "labels3.txt"
 		},
 		reset: {
 			var	str;
@@ -750,13 +749,17 @@ PR(\abstractProcess).clone {
 		currentEnvironment
 	};
 
+	~labelPath = {
+		~path.dirname +/+ ~path.basename[.. ~path.basename.indexOf($_)] ++ "labels3.txt"
+	};
 	~readLabels = {
-		~pt = TabFileReader.read(~path.dirname +/+ ~path.basename[.. ~path.basename.indexOf($_)]
-			++ "labels.txt");
+		~pt = TabFileReader.read(~labelPath.());
 		~processLabels.();
 	};
 	~processLabels = {
-		~pt = ~pt.flop[0].asFloat;
+		var	orig = ~pt, flop = orig.flop;
+		~pt = flop[0].asFloat;
+		~peaks = flop[#[3, 4]].collect(_.tryPerform(\asFloat));
 		~ptd = ~pt.differentiate.drop(1);
 		~pt = ~pt.drop(1);
 		~mean = ~ptd.mean;
@@ -1212,12 +1215,12 @@ PR(\abstractProcess).clone {
 
 
 SynthDescLib.at(\returnPeak) ?? {
-	SynthDef(\returnPeak, { |bufnum, start, frames|
+	SynthDef(\returnPeak, { |bufnum, start, frames, trigid|
 		var	term = Line.ar(0, 1, frames / BufSampleRate.ir(bufnum)),
 			sig = PlayBuf.ar(1, bufnum, rate: BufRateScale.ir(bufnum), startPos: start),
 			peak = Peak.ar(sig),
 			done = Done.kr(term) + Done.kr(sig);
-		SendTrig.kr(done, 0, peak);
+		SendTrig.kr(done, trigid, peak);
 		FreeSelf.kr(done);
 	}).add;
 };
