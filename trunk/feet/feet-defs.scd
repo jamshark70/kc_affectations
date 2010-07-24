@@ -412,14 +412,14 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	Out.ar(outbus, Pan2.ar(sig, pan, amp));
 }).add;
 
-SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
+SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, ampMap = 1, pan,
 	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0|
 	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
 		sig;
 	fft = PV_BinShift(fft, 1, Line.kr(shiftS, shiftE, time));
 	sig = IFFT(fft, 1)
 		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
-	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
 // amp is per-event control; ampMap should be mapped to kr bus for continuous volume control
