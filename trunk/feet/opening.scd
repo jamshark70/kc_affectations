@@ -9,6 +9,7 @@
 // parallel vs crossing paths
 // track fwd/back position of dancers for 'distance' parm?
 
+BP.all.free;
 
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 #[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
@@ -37,6 +38,8 @@ PeakMonitor(~master)
 
 b.free;
 b = Buffer.readAndQuery(s, topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav");
+
+//(BP(\op).sfpath.dirname +/+ "58454_labels.txt").openDocument
 
 ~pt = TabFileReader.read(b.path.dirname +/+ "58454_labels.txt");
 ~pt = ~pt.flop[0].asFloat;
@@ -363,10 +366,9 @@ make: { |name|
 			])
 		},
 		processLabels: PR(\steps1).v[\processLabels],
-		readLabels: {
-			~pt = TabFileReader.read(~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)]
-				++ "labels.txt");
-			~processLabels.();
+		readLabels: PR(\steps1).v[\readLabels],
+		labelPath: {
+			~sfpath.dirname +/+ ~sfpath.basename[.. ~sfpath.basename.indexOf($_)] ++ "labels3.txt"
 		},
 		reset: {
 			var	str;
@@ -564,13 +566,17 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	buf: 0,
 	ptIndex: Plazy { Pwhite(0, ~pt.size-2, inf) },
 	start: Pfunc { |ev|
-		(~pt[ev[\pt]] - (~early * ev[\rate])) * ~buffers[ev[\bufIndex]].sampleRate
+		(~pt[ev[\pt]] - ((ev[\early] ?? { ev[\parms][\early] ?? { ~early } }) * ev[\rate]))
+			* ~buffers[ev[\bufIndex]].sampleRate
 	},
 	time: 0.4,
 	rate: Pexprand(0.9, 1.7, inf),
 	ffreq: 18000,
 	fastDelta: Pexprand(0.08, 0.3, inf),
-	amp: 7.dbamp,
+	amp: Pindex(Pfunc { |ev|
+		var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
+		~peaks[(early <= 0).binaryValue]
+	}, Pfin(1, Pkey(\pt)), inf).reciprocal,
 	numEv: Pwhite(5, 12, inf),
 	gDelta: Pwhite(0.5, 2.5, inf),
 	distNear: 5,
@@ -688,6 +694,21 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				\filtAmp, BPStream(\kamp),
 				\chorusAmps, #[0, 0, 0]
 			)
+		},
+		decay: { |parms|
+			parms[\numEv] = rrand(12, 24);
+			Pbind(
+ 				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
+				\early, 0,
+				\start, Pstutter(inf, BPStream(\start)),
+				\delta, rrand(0.08, 0.16),
+				\time, Pkey(\delta) * rrand(0.6, 0.8),
+				\rate, Pstutter(inf, Pkey(\rate)),
+				\amp, Pstutter(inf, BPStream(\amp))
+					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]),
+				\ffreq, Pstutter(inf, Pkey(\ffreq))
+					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
+			);
 		}
 	),
 
@@ -725,11 +746,11 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		)
 	},
 	processLabels: PR(\steps1).v[\processLabels],
-	readLabels: {
-		~pt = TabFileReader.read(~bufPaths[0].dirname
+	readLabels: PR(\steps1).v[\readLabels],
+	labelPath: {
+		~bufPaths[0].dirname
 			+/+ ~bufPaths[0].basename[.. ~bufPaths[0].basename.indexOf($_)]
-			++ "labels.txt");
-		~processLabels.();
+			++ "labels3.txt"
 	}
 ));
 0 => BP(\st);
@@ -804,3 +825,51 @@ BP(\st).numEv = Pwhite(3, 5, inf);
 BP(\st).gDelta = Pwhite(2.5, 4.0, inf);
 
 BP(\st).event.eventKey = \polySynthPlayer;
+
+BP(\st).gest = \decay;
+
+BP(\st).gestures.decay = { |parms|
+			parms[\numEv] = rrand(12, 24);
+			Pbind(
+ 				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
+				\early, 0,
+				\start, Pstutter(inf, BPStream(\start)),
+				\delta, rrand(0.08, 0.16),
+				\time, Pkey(\delta) * rrand(0.6, 0.8),
+				\rate, Pstutter(inf, Pkey(\rate)),
+				\amp, Pstutter(inf, BPStream(\amp))
+					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]),
+				\ffreq, Pstutter(inf, Pkey(\ffreq))
+					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
+			);
+		};
+
+BP(\st).use {
+	~amp = Pindex(Pfunc { |ev|
+		var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
+		~peaks[(early <= 0).binaryValue]
+	}, Pfin(1, Pkey(\pt)), inf).reciprocal;
+};
+
+BP(\st).peaks.size
+BP(\st).peaks.do(_.postln); ""
+
+( 'instrument': bufGrainPanFiltDist, 'pt': 4, 'clock': a TempoClock, 'eventKey': singleSynthPlayer, 
+  'rate': 0.95516796320561, 'collIndex': st, 'glrvbout': SharedBus(audio, 18, 2, localhost), 'bufIndex': 0, 'distFar': 20, 
+  'removeFromCleanup': [  ], 'delta': 0.10389504432678, 'distNear': 5, 'bufnum': 1, 'ampMap': c11, 
+  'lcrvbout': SharedBus(audio, 20, 2, localhost), 'propagateDownward': a Function, 'distance': 19, 'time': 0.075599667303675, 'pan': -0.92339754104614, 
+  'start': 160702.17298226, 'amp': 4.3262391523084, 'ffreq': 18000, 'timingOffset': 0, 'chan': a MixerChannel, 
+  'parms': ( 'numEv': 12, 'gest': decay ) )
+
+BP(\st).peaks[1][23].reciprocal
+
+~savePt = BP(\st).ptIndex;
+BP(\st).ptIndex = 4;
+
+164914.4637 / 44100
+BP(\st).pt[4]
+
+BP(\st).start = Pfunc { |ev|
+		(~pt[ev[\pt]] - ((ev[\early] ?? { ev[\parms][\early] ?? { ~early } }) * ev[\rate]))
+			* ~buffers[ev[\bufIndex]].sampleRate
+	};
