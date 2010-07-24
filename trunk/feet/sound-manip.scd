@@ -128,6 +128,55 @@ f = File(p.dirname +/+ "58454_labels2.txt", "w");
 });
 f.close;
 
+// peaks for ~pt -- need early peak AND on-the-spot peak
+~pt = TabFileReader.read(BP(\op).sfpath.dirname +/+ "58454_labels.txt");
+~pt.do { |row|
+	2.do { |i| row[i] = row[i].asFloat }
+};
+
+Pprotect(
+	Pfset(
+		{
+			o = OSCresponderNode(s.addr, '/tr', { |t, r, m|
+				i = m[2] % 100;
+				j = 3 + (m[2] >= 100).binaryValue;
+				~pt[i] = ~pt[i].extend(max(j+1, ~pt[i].size)).put(j, m[3]);
+			}).add;
+		},
+		Pbind(
+			\instrument, \returnPeak,
+			\bufnum, BP(\st).buffers[0],
+			\start, (Pstutter(2, Pseq(~pt.flop[0], 1)) - Pseq(#[0.15, 0], inf)) * 44100,
+			\frames, 22050,
+			\trigid, Pseries(0, 1, inf) +.x Pseq(#[0, 100], 1),
+			\delta, 0.1
+		),
+		{
+			{ o.remove; "done".postln }.defer(0.8)
+		}
+	),
+	{ o.remove }
+).play;
+
+~pt.do(_.postln); ""
+(BP(\op).sfpath.dirname +/+ "58454_lab*").pathMatch
+
+(Pseries(0, 1, inf) +.x Pseq(#[0, 100], 1)).asStream.nextN(20)
+
+f = File(BP(\op).sfpath.dirname +/+ "58454_labels3.txt", "w");
+~pt.do { |row|
+	row.do { |item, i|
+		if(i > 0) { f << $\t };
+		f << item;
+	};
+	f << Char.nl;
+};
+f.close;
+
+f.path
+(BP(\op).sfpath.dirname +/+ "58454_labels3.txt").openDocument;
+
+OSCresponder.all.detect({ |o| o.cmdName == '/tr' }).nodes.copy.do(_.remove);
 
 p = m.play(
 	Pbind(
