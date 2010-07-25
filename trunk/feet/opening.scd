@@ -1139,33 +1139,78 @@ BP(\st).gestures.klankDecay = { |parms|
 ~dummy = Proto.new;
 m = PR(\melSegWithAdapt).copy.prepare([
 	#[74, 79, 78],
-	1, 1, 1
+	4, 4, 1
 ].asNotes, SequenceNote(74, 1, 1, 1), ~dummy, (mode: \g), true);
 
 m.listVars
 m.segs[0].listVars
 
-5.do {
-	o = \splitNote2.eval(m.segs.last);
+// maybe reasonable
+10.do {
+	o = \affSplitNote3.eval(m.segs.last);
 	// o.do(_.postln);
 	o !? { m.addAdapt(o, ()) };
 };
 
 m.segs.last.notes.do(_.postln); ""
+m.segs.last.notes.collect({ |n| n.freq }).unmapMode(\g).collect { |n| n.asInteger.asMIDINote };
 
 
 // choose note just outside range
 // need variant that will keep intervals smaller
-{ |source| var i = source.notes.size.rand, out, dur;
+{ |source| var i = source.notes.size.rand, out, dur, new;
 	out = source.notes.copy;
 	dur = out[i].dur;
 	out[i] = out[i].copy.dur_(rrand(0.25, dur).round(0.25));
 	(out[i].dur != dur).if({
-		out = out.insert(i+1, SequenceNote(rrand(source.loNote - 3, source.hiNote + 3).round, dur = dur - out[i].dur, dur + rrand(-0.1, 0.1), out[i].args));
+		while {
+			(new = (out[i].freq/*.debug("old")*/ + 2.rand2)/*.debug("+rand")*/.fold(source.loNote - 3, source.hiNote + 3)).round/*.debug("new")*/ == out[i].freq
+		};
+		out = out.insert(i+1, SequenceNote(new, dur = dur - out[i].dur, dur + rrand(-0.1, 0.1), out[i].args));
 		out
 	}, { nil });	// nil == no adaptation
 } => Func(\affSplitNote3);
 
+
+
+// string rewriting - fail
+p = BP(\st).chan.play(Pbind(
+	\root, 7,
+	\degree, Pseq(#[4, 7, 6]) ++ \patRejectLastN.eval(Prewrite(Pseq(#[4, 7, 6], inf), (
+		0: #[5, 0, 6],
+		1: #[1, 0, 2, 3],
+		2: #[6, 7, 4],
+		3: #[3, 0, 6, 5],
+		4: #[4, 5, 1],
+		5: #[5, 7, 6],
+		6: #[6, 7, 10],
+		7: #[9, 7, 5, 6],
+// 		8: #[]
+		9: #[9, 4, 3],
+		10: #[10, 9, 5, 9]
+	), 10), 1),
+	\dur, 1
+));
+
+p.stop;
+
+x = Prewrite(Pn(0, inf).trace(prefix: "root: "), (
+	0: Pwhite(1, 2, 1).trace(prefix: "rw0: "),
+	1: Prand(#[0, 2], 1).trace(prefix: "rw1: "),
+	2: Pwhite(0, 1, 1).trace(prefix: "rw2: ")
+), 2).asStream;
+
+10.do { x.next.postln };
+
+
+f = { |count, level, rules| [count, level].debug; { "dgf".choose } ! 2 };
+x = Plsys(Pseq("dgf", 2), [
+	"d" -> f,
+	"g" -> f,
+	"f" -> f
+], level: 2).asStream;
+
+x.nextN(20);
 
 
 // sequence
