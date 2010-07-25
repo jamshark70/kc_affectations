@@ -590,6 +590,10 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	kfreq: Pseq(#[74, 79, 78], inf).trace(prefix: "kfreq: ").midicps,
 	kdecay: Pexprand(0.011, 0.1, inf),
 	kamp: 1,
+	defaultKlankHarm: (1..5),
+	defaultKlankAmps: (1..5).reciprocal,
+	defaultKlankDecays: 1 ! 5,
+	defaultChorusAmps: (1..3).reciprocal * 0.3,
 
 	postMCCreation: { |chan|
 		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
@@ -686,15 +690,13 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				\filtAttack, 0.01,
 				\filtDecay, BPStream(\kdecay),
 				\filtAmp, BPStream(\kamp),
-// 				\chorusFreq, 
-// 				\chorusAmt, 
-// 				\chorusDelay, 
-//				\ffreq, 
-//				\lprq, 
-//				\harm, 
-//				\amps, 
-//				\decays, 
-				\chorusAmps, #[[0, 0, 0]]
+				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+				\chorusAmt, parms[\chorusAmt] ?? { 0.02 },
+				\chorusDelay, parms[\chorusDelay] ?? { 0.03 },
+				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
 			)
 		},
 		oneKlankSteps: { |parms|
@@ -707,7 +709,13 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				\filtAttack, 0.01,
 				\filtDecay, BPStream(\kdecay),
 				\filtAmp, BPStream(\kamp),
-				\chorusAmps, #[[0, 0, 0]]
+				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+				\chorusAmt, parms[\chorusFreq] ?? { 0.02 },
+				\chorusDelay, parms[\chorusFreq] ?? { 0.03 },
+				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
 			)
 		},
 		decay: { |parms|
@@ -770,10 +778,11 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 					Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
 					Pkey(\delta) / Pkey(\rate)
 				]),
-				\amp, BPStream(\amp) * Pseq([
-					Pn(-4.dbamp, parms[\numEv] /* - 1 */),
-					1
-				]),
+				\amp, BPStream(\amp) * -4.dbamp,
+// 				\amp, BPStream(\amp) * Pseq([
+// 					Pn(-4.dbamp, parms[\numEv] /* - 1 */),
+// 					1
+// 				]),
 				\origShiftS, BPStream(\slowShift).clump(3),
 				\shiftS, Pkey(\origShiftS) + Pseq([
 					Pfin(parms[\numEv] /* - 1 */, 0),
@@ -826,7 +835,8 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	},
 
 	// oh earth mother, this is a damnably wretched hack but I had to do SOMETHING!!
-	ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613]
+	ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613],
+	listGest: { ~gestures.keys.asArray.sort.do(_.postln); "" }
 ));
 0 => BP(\st);
 )
@@ -1052,6 +1062,62 @@ BP(\st).amp = BP(\st).amp.pattern;
 
 BP(\st).listGest = { ~gestures.keys.asArray.sort.do(_.postln); "" };
 
+
+BP(\st).gestures.oneKlank = { |parms|
+			Pbind(
+				\instrument, Pn(\bufGrainPanKlankDist, 1),
+				#[pan, distance], parms[\xy] ?? {
+					[rrand(-1.0, 1.0), rrand(~distNear, ~distFar)]
+				},
+				\delta, 0.5,
+				\amp, BPStream(\amp),
+				\filtFreq, BPStream(\kfreq),
+				\filtAttack, 0.01,
+				\filtDecay, BPStream(\kdecay),
+				\filtAmp, BPStream(\kamp),
+// 				\chorusFreq, 
+// 				\chorusAmt, 
+// 				\chorusDelay, 
+//				\ffreq, 
+//				\lprq, 
+//				\harm, 
+//				\amps, 
+//				\decays, 
+				\chorusAmps, #[[0, 0, 0]]
+			)
+		};
+
+BP(\st).gestures.oneKlankSteps = { |parms|
+	var once = true;
+			Pbind(
+				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
+				#[pan, distance], ~xyPat.(parms),
+				\delta, BPStream(\fastDelta),
+				\amp, BPStream(\amp),
+				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
+				\filtAttack, 0.01,
+				\filtDecay, BPStream(\kdecay),
+				\filtAmp, BPStream(\kamp),
+				\chorusFreq, Pstutter(inf, Pwhite(0.05, 0.11, inf)),
+				\chorusAmt, 0.02,
+				\chorusDelay, 0.03,
+				\chorusAmps, [(1..3).reciprocal * 0.3],
+				\ffreq, BPStream(\ffreq)
+			).collect { |ev|
+				if(once) { once = false; ev.filtDecay.debug };
+				ev
+			}
+		};
+
+BP(\st).kdecay = Pwhite(0.5, 0.8, inf);
+BP(\st).gest = \oneKlankSteps;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	r.remove;
+	Synth.basicNew(\dummy, s, m[1]).trace
+}).add;
+
+
 // sequence
 PR(\trajectories) => BP(\traj);
 
@@ -1070,7 +1136,7 @@ t = TLSequenceIterator([
 		bp.gDelta = Pwhite(2.5, 4.0, inf);
 		bp.slowRate = Pwhite(0.5, 0.8, inf);
 		bp.defaultParms = nil;
-		bp.kdecay = Pexprand(0.3, 0.5, inf);
+		bp.kdecay = Pexprand(0.75, 0.9, inf);
 		bp.makeStreamForKey(\kfreq);	// reset this one
 		bp.autoRun = true;
 
