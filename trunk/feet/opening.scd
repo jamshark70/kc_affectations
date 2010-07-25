@@ -560,6 +560,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	autoRun: true,
 
 	gest: Pfunc { ~gestures.keys.choose },
+	defaultParms: nil,
 	initAmp: 0.3,
 
 	early: 0.1,
@@ -576,7 +577,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	amp: Pindex(Pfunc { |ev|
 		var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
 		~peaks[(early <= 0).binaryValue]
-	}, Pfin(1, Pkey(\pt)), inf).reciprocal.trace(prefix: "amp: "),
+	}, Pfin(1, Pkey(\pt)), inf).reciprocal, //.trace(prefix: "amp: "),
 	numEv: Pwhite(5, 12, inf),
 	gDelta: Pwhite(0.5, 2.5, inf),
 	distNear: 5,
@@ -792,7 +793,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			if(~autoRun) {
 				"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
 				loop {
-					~runGesture.();
+					~runGesture.(~defaultParms.().copy);
 					sp.wait(~gDeltaStream.next());
 				}
 			} {
@@ -824,6 +825,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			++ "labels3.txt"
 	},
 
+	// oh earth mother, this is a damnably wretched hack but I had to do SOMETHING!!
 	ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613]
 ));
 0 => BP(\st);
@@ -924,10 +926,11 @@ BP(\st).gestures.slowStepStretch = { |parms|
 			Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
 			Pkey(\delta) / Pkey(\rate)
 		]),
-		\amp, BPStream(\amp) * Pseq([
-			Pn(-4.dbamp, parms[\numEv] /* - 1 */),
-			1
-		]),
+		\amp, BPStream(\amp) * (-4.dbamp),
+// 		\amp, BPStream(\amp) * Pseq([
+// 			Pn(-4.dbamp, parms[\numEv] /* - 1 */),
+// 			1
+// 		]),
 		\origShiftS, BPStream(\slowShift).clump(3),
 		\shiftS, Pkey(\origShiftS) + Pseq([
 			Pfin(parms[\numEv] /* - 1 */, 0),
@@ -1044,3 +1047,79 @@ BP(\st).start = Pfunc { |ev|
 		(~pt[ev[\pt]] - ((ev[\early] ?? { ev[\parms][\early] ?? { ~early } }) * ev[\rate]))
 			* ~buffers[ev[\bufIndex]].sampleRate
 	};
+
+BP(\st).amp = BP(\st).amp.pattern;
+
+BP(\st).listGest = { ~gestures.keys.asArray.sort.do(_.postln); "" };
+
+// sequence
+PR(\trajectories) => BP(\traj);
+
+(
+t = TLSequenceIterator([
+	bpCmd: (name: \op, dur: 35, prepareBP: { |bp|
+		bp.ampCtl.value = 0.68;
+	}),
+	12,
+	gcAutoSynthCmd: (gc: BP(\op).ampCtl, name: \ctlPoint, outName: \outbus,
+		value: 0, time: 25, curve: -2),
+	bpCmd: (name: \st, prepareBP: { |bp|
+		bp.ampCtl.value = 0;
+		bp.gest = Pseq([Pn(\slowSteps, { rrand(2, 4) }), \slowStepStretch], inf);
+		bp.numEv = Pwhite(4, 7, inf);
+		bp.gDelta = Pwhite(2.5, 4.0, inf);
+		bp.slowRate = Pwhite(0.5, 0.8, inf);
+		bp.defaultParms = nil;
+		bp.kdecay = Pexprand(0.3, 0.5, inf);
+		bp.makeStreamForKey(\kfreq);	// reset this one
+		bp.autoRun = true;
+
+		bp.gestures.oneKlankStepsCallback = { |parms|
+			CleanupStream(~gestures[\oneKlankSteps].(parms).asStream, parms[\callback])
+		};
+	}),
+	gcAutoSynthCmd: (gc: BP(\st).ampCtl, name: \ctlPoint, outName: \outbus,
+		value: 0.7, time: 14, curve: 2),
+	\cmdSync,
+	20,
+	loopCmd: (repeats: 3,
+		cmds: [
+			funcCmd: (
+				setDoneSignal: {
+					~doneSignal = true;
+					defer(e {
+						~window = Window("go", Rect.aboutPoint(Window.screenBounds.center, 50, 20));
+						Button(~window, ~window.view.bounds.insetBy(2, 2))
+						.states_([["play note soon"]])
+						.action_(e { ~stop.() });
+						~window.front;
+					});
+				},
+				func: 0,
+				clearDoneSignal: {
+					defer(e { ~window.close });
+				}
+			),
+			\cmdSync,
+			funcCmd: (
+				doneSignal: true,
+				func: {
+					BP(\st).override(\gest, Pn(\oneKlankStepsCallback, 1), false,
+						// override cleanup will always hit before the next gesture is picked
+						// therefore it won't use defaultParms that aren't meant for it
+						{ BP(\st).defaultParms = nil });
+					// guarantee next "note" can't happen until last note gesture is done
+					BP(\st).defaultParms = (numEv: rrand(10, 20), callback: e { ~stop.() });
+				}
+			),
+			\cmdSync
+		]
+	),
+	\cmdSync,
+	{ "post-loop".debug; 0 }
+]).play;
+)
+
+t.stop;
+t.isRunning
+
