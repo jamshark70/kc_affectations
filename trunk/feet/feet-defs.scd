@@ -358,16 +358,16 @@ type: \bp
 
 // footstep counterpoint
 
-SynthDef(\bufGrainPanFilt, { |start, time, bufnum, pan, rate = 1, amp = 1,
+SynthDef(\bufGrainPanFilt, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000|
 	var sig;
 	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
 		* EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
 	sig = LPF.ar(sig, ffreq);
-	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
-SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1,
+SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
 		attack = 0.001, decay = 0.02, outbus, ffreq = 2000, filtDecay = 0.1, filtAmp = 1|
 	var sig;
 	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
@@ -375,10 +375,10 @@ SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	// 0.06 ~= 16 Hz, likely as low a freq as you'll need
 	sig = Limiter.ar(sig + CombL.ar(LeakDC.ar(sig), 0.06, ffreq.reciprocal, filtDecay, filtAmp));
 	DetectSilence.ar(sig, 0.001, doneAction: 2);
-	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
-SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
+SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
 		attack = 0.001, decay = 0.02, outbus, filtFreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
 		filtAmp = 1,
 		/* shapebuf = -1, shapeXf = 1, */ chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
@@ -409,7 +409,7 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1,
 // 	sig = LeakDC.ar(sig);
 	sig = RLPF.ar(sig, ffreq, lprq);
 	DetectSilence.ar(sig, 0.001, doneAction: 2);
-	Out.ar(outbus, Pan2.ar(sig, pan, amp));
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
 SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, ampMap = 1, pan,
