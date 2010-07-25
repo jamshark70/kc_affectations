@@ -682,7 +682,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			Pbind(
 				\instrument, Pn(\bufGrainPanKlankDist, 1),
 				#[pan, distance], parms[\xy] ?? {
-					[rrand(-1.0, 1.0), rrand(~distNear, ~distFar)]
+					[rrand(-1.0, 1.0), rrand(0.1, 0.5).linlin(0, 1, ~distNear, ~distFar)]
 				},
 				\delta, 0.5,
 				\amp, BPStream(\amp),
@@ -700,38 +700,43 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			)
 		},
 		oneKlankSteps: { |parms|
-			Pbind(
-				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
-				#[pan, distance], ~xyPat.(parms),
-				\delta, BPStream(\fastDelta),
-				\amp, BPStream(\amp),
-				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
-				\filtAttack, 0.01,
-				\filtDecay, BPStream(\kdecay),
-				\filtAmp, BPStream(\kamp),
-				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
-				\chorusAmt, parms[\chorusFreq] ?? { 0.02 },
-				\chorusDelay, parms[\chorusFreq] ?? { 0.03 },
-				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
-				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
-				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
-				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
+			Pseq(
+				#[oneKlank, clatter].collect { |key| ~gestures[key].(parms) },
+				1
 			)
+// 			Pbind(
+// 				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
+// 				#[pan, distance], ~xyPat.(parms),
+// 				\delta, BPStream(\fastDelta),
+// 				\amp, BPStream(\amp),
+// 				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
+// 				\filtAttack, 0.01,
+// 				\filtDecay, BPStream(\kdecay),
+// 				\filtAmp, BPStream(\kamp),
+// 				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+// 				\chorusAmt, parms[\chorusFreq] ?? { 0.02 },
+// 				\chorusDelay, parms[\chorusFreq] ?? { 0.03 },
+// 				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+// 				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+// 				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+// 				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
+// 			)
 		},
 		decay: { |parms|
-			parms[\numEv] = rrand(12, 24);
+			parms[\numEv] = rrand(18, 28);
+			parms[\yEnds] = [rrand(0.3, 0.4), rrand(0.75, 1.0)].linlin(0, 1, ~distNear, ~distFar);
 			Pbind(
- 				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
+				#[pan, distance], ~xyPat.(parms),
 				\early, 0,
 				\pt, Pstutter(inf, BPStream(\ptIndex).reject(#[3, 10, 14].includes(_))),
 				\start, Pstutter(inf, BPStream(\start)),
-				\delta, rrand(0.08, 0.16),
-				\time, Pkey(\delta) * rrand(0.6, 0.8),
+				\delta, rrand(0.06, 0.09),//.debug("decay delta"),
+				\time, Pkey(\delta) * rrand(1.75, 2.2), //rrand(0.6, 0.8),
 				\rate, Pstutter(inf, Pkey(\rate)),
 				\amp, Pstutter(inf, BPStream(\amp)) / Pindex(~ampCorrections, Pkey(\pt), inf)
 					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]) * -6.dbamp,
 				\ffreq, Pstutter(inf, Pkey(\ffreq))
-					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
+					* Pgeom.fromEndpoints(1, rrand(0.005, 0.012), parms[\numEv])
 			);
 		},
 		slowSteps: { |parms|
@@ -963,20 +968,29 @@ BP(\st).event.eventKey = \polySynthPlayer;
 
 BP(\st).gest = \decay;
 
+BP(\st).use {
+	var parms;
+	parms = (yEnds: [rrand(0.15, 0.4), rrand(0.75, 1.0)].linlin(0, 1, ~distNear, ~distFar),
+		numEv: 10);
+parms.debug;
+	Pseries.fromEndpoints(*(parms[\yEnds] ++ parms[\numEv]).debug).postcs
+};
+
 BP(\st).gestures.decay = { |parms|
-			parms[\numEv] = rrand(12, 24);
+			parms[\numEv] = rrand(18, 28);
+			parms[\yEnds] = [rrand(0.3, 0.4), rrand(0.75, 1.0)].linlin(0, 1, ~distNear, ~distFar);
 			Pbind(
- 				#[pan, distance], Pstutter(inf, ~xyPat.(parms)),
+				#[pan, distance], ~xyPat.(parms),
 				\early, 0,
 				\pt, Pstutter(inf, BPStream(\ptIndex).reject(#[3, 10, 14].includes(_))),
 				\start, Pstutter(inf, BPStream(\start)),
-				\delta, rrand(0.08, 0.16),
-				\time, Pkey(\delta) * rrand(0.6, 0.8),
+				\delta, rrand(0.06, 0.09),//.debug("decay delta"),
+				\time, Pkey(\delta) * rrand(1.75, 2.2), //rrand(0.6, 0.8),
 				\rate, Pstutter(inf, Pkey(\rate)),
 				\amp, Pstutter(inf, BPStream(\amp)) / Pindex(~ampCorrections, Pkey(\pt), inf)
 					* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]) * -6.dbamp,
 				\ffreq, Pstutter(inf, Pkey(\ffreq))
-					* Pgeom.fromEndpoints(1, rrand(0.05, 0.2), parms[\numEv])
+					* Pgeom.fromEndpoints(1, rrand(0.005, 0.012), parms[\numEv])
 			);
 		};
 
@@ -1112,23 +1126,61 @@ BP(\st).gestures.oneKlankSteps = { |parms|
 BP(\st).kdecay = Pwhite(0.5, 0.8, inf);
 BP(\st).gest = \oneKlankSteps;
 
-o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
-	r.remove;
-	Synth.basicNew(\dummy, s, m[1]).trace
-}).add;
+
+BP(\st).gestures.clatterDecay = { |parms|
+	Pseq(#[clatter, decay].collect { |key| ~gestures[key].(parms) }, 1)
+};
+BP(\st).gestures.klankDecay = { |parms|
+	Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
+};
+
+
+// melody adaptation without using full melody BP... possible?
+~dummy = Proto.new;
+m = PR(\melSegWithAdapt).copy.prepare([
+	#[74, 79, 78],
+	1, 1, 1
+].asNotes, SequenceNote(74, 1, 1, 1), ~dummy, (mode: \g), true);
+
+m.listVars
+m.segs[0].listVars
+
+5.do {
+	o = \splitNote2.eval(m.segs.last);
+	// o.do(_.postln);
+	o !? { m.addAdapt(o, ()) };
+};
+
+m.segs.last.notes.do(_.postln); ""
+
+
+// choose note just outside range
+// need variant that will keep intervals smaller
+{ |source| var i = source.notes.size.rand, out, dur;
+	out = source.notes.copy;
+	dur = out[i].dur;
+	out[i] = out[i].copy.dur_(rrand(0.25, dur).round(0.25));
+	(out[i].dur != dur).if({
+		out = out.insert(i+1, SequenceNote(rrand(source.loNote - 3, source.hiNote + 3).round, dur = dur - out[i].dur, dur + rrand(-0.1, 0.1), out[i].args));
+		out
+	}, { nil });	// nil == no adaptation
+} => Func(\affSplitNote3);
+
 
 
 // sequence
 PR(\trajectories) => BP(\traj);
+d = DDWTimer.new;
 
 (
 t = TLSequenceIterator([
 	bpCmd: (name: \op, dur: 35, prepareBP: { |bp|
 		bp.ampCtl.value = 0.68;
+		if(d.class == DDWTimer) { d.reset };
 	}),
 	12,
 	gcAutoSynthCmd: (gc: BP(\op).ampCtl, name: \ctlPoint, outName: \outbus,
-		value: 0, time: 25, curve: -2),
+		value: 0, time: 22, curve: -2),
 	bpCmd: (name: \st, prepareBP: { |bp|
 		bp.ampCtl.value = 0;
 		bp.gest = Pseq([Pn(\slowSteps, { rrand(2, 4) }), \slowStepStretch], inf);
@@ -1156,8 +1208,8 @@ t = TLSequenceIterator([
 					defer(e {
 						~window = Window("go", Rect.aboutPoint(Window.screenBounds.center, 50, 20));
 						Button(~window, ~window.view.bounds.insetBy(2, 2))
-						.states_([["play note soon"]])
-						.action_(e { ~stop.() });
+							.states_([["play note soon"]])
+							.action_(e { ~stop.() });
 						~window.front;
 					});
 				},
@@ -1182,7 +1234,17 @@ t = TLSequenceIterator([
 		]
 	),
 	\cmdSync,
-	{ "post-loop".debug; 0 }
+	{ "post-loop".debug; 5 },
+	{	var	bp = BP(\st);
+		bp.gest = Pseq([
+			Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
+				#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
+			\slowStepStretch
+		], inf);
+		bp.gDelta = Pwhite(1.5, 3.0, inf);
+		bp.numEv = Pwhite(6, 14, inf);
+		0
+	}
 ]).play;
 )
 
