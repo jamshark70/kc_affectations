@@ -1212,6 +1212,36 @@ x = Plsys(Pseq("dgf", 2), [
 
 x.nextN(20);
 
+35.asDigit
+
+[1, 2].integrate
+
+Mode(\default).v.copy.root_(7) => Mode(\g);
+Mode(\g).v.postcs
+
+($B.digit + 28).unmapMode(\g).asInteger.asMIDINote
+
+x = Plsys(Pseq("BED", 1), (0..35).collect { |i|
+	String.with(i.asDigit) -> { |in|
+		([in[0].digit] ++ ({ #[-2, -1, 1, 2].choose } ! 2)).integrate
+		.collect(_.asDigit).as(String)
+	}
+}, level: 0);
+
+p = Penvir((level: Pseries(0, 1, inf).asStream, curLevel: 0), Pbind(
+	\root, 7,
+	\octave, 4,
+	\amp, 0.02 * Pseq([2, Pn(1, { ((3 pow: ~curLevel).asInteger - 1) })], inf).trace,
+	\legato, Pseq([4, Pn(0.8, { (3 pow: ~curLevel).asInteger - 1 })], inf),
+	\delta, 1,
+	\degree, Pn(Plazy { x.level_(~curLevel = ~level.next) }, inf).collect(_.digit)
+)).play;
+
+p.stop;
+
+.collect { |ch| (ch.digit + 28).unmapMode(\g) };
+
+x.next;
 
 // sequence
 PR(\trajectories) => BP(\traj);
