@@ -595,29 +595,37 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				Pseq([in[1], Pn(level+1, inf)], 1)
 			], 1)
 		} {
-			int.debug("dropped");
+			[int, level].debug("dropped");
 			Pn([0, 0], 0)	// <-- drop this branch totally
 		}
 	},
-	kfreq: Pcollect({ |pair| pair.copy.put(0, Mode(\g).cps(pair[0])) },
-		PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
-			{ |in| in[0] < 0 } -> { |in, level|
-				var int = if(0.5.coin) { #[3, -1].debug(">>> add motive") }
-					{ { #[-1, 1, 2, 3].choose } ! rrand(1, 2) };
-				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
-			},
-			{ |in| in[0] > 10 } -> { |in, level|
-				var int = if(0.5.coin) { #[-3, 1].debug(">>> add motive") }
-					{ { #[-3, -2, -1, 1].choose } ! rrand(1, 2) };
-				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
-			},
-			{ true } -> { |in, level|
-				var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose.debug(">>> add motive") }
-					{ { #[-2, -1, 1, 2].choose } ! rrand(1, 2) };
-				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
-			}
-		]).keepLowerLevels_(true),
-		kdecay: Pexprand(0.011, 0.1, inf),
+	kfreq: //Pcollect({ |pair| pair.copy.put(0, Mode(\g).cps(pair[0] + 35)) },
+		// w/o Plazy, rewriteEmbedder would come from the wrong environment
+		Plazy {
+			PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
+				{ |in| in[0] < 0 } -> { |in, level|
+					var int = if(0.5.coin) { #[3, -1].debug(">>> add motive") }
+						{ { #[-1, 1, 2, 3].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				},
+				{ |in| in[0] > 10 } -> { |in, level|
+					var int = if(0.5.coin) { #[-3, 1].debug(">>> add motive") }
+						{ { #[-3, -2, -1, 1].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				},
+				{ true } -> { |in, level|
+					var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose.debug(">>> add motive") }
+						{ { #[-2, -1, 1, 2].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				}
+			]).keepLowerLevels_(true).rewriteEmbedder_(~rewriteEmbedder)
+		}
+	/*)*/,
+	nextLowerInt: Pseries({ rrand(1, 3) }, Prand(#[-2, -1, 1, 2], inf), inf)
+		.fold(-10, 10).reject { |x, ev| x >= ev[\filtDegree] } - Pkey(\filtDegree),
+	chordInt: Pwhite(-3, -1, inf),
+	chordN: 0,
+	kdecay: Pexprand(0.011, 0.1, inf),
 	kamp: 1,
 	defaultKlankHarm: (1..5),
 	defaultKlankAmps: (1..5).reciprocal,
@@ -710,12 +718,13 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		oneKlank: { |parms|
 			Pbind(
 				\instrument, Pn(\bufGrainPanKlankDist, 1),
-				#[pan, distance], parms[\xy] ?? {
-					[rrand(-1.0, 1.0), rrand(0.1, 0.5).linlin(0, 1, ~distNear, ~distFar)]
-				},
+// 				#[pan, distance], parms[\xy] ?? {
+// 					[rrand(-1.0, 1.0), rrand(0.1, 0.5).linlin(0, 1, ~distNear, ~distFar)]
+// 				},
 				\delta, 0.5,
 				\amp, BPStream(\amp),
-				\filtFreq, BPStream(\kfreq),
+				#[filtDegree, level], BPStream(\kfreq),
+				\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
 				\filtAttack, 0.01,
 				\filtDecay, BPStream(\kdecay),
 				\filtAmp, BPStream(\kamp),
@@ -725,7 +734,19 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
 				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
 				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
-				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
+				\decays, parms[\decays] ?? { [~defaultKlankDecays] },
+				\pan, rrand(-1.0, 1.0),
+				\distance, Pkey(\level).linlin(1, 6, ~distNear, ~distFar)
+			)
+		},
+		klankHarmonize: { |parms|
+			Pbindf(~gestures[\oneKlank].(parms),
+				\nextLower, BPStream(\nextLowerInt),
+				\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
+				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLowerInt), Pkey(\chord)], inf)
+					// isNumber: \chord might be empty array
+					// in which case the last 'integrate' item would be [], not valid
+					.collect { |item| item.flat.integrate/*.select(_.isNumber)*/ }
 			)
 		},
 		oneKlankSteps: { |parms|
@@ -824,6 +845,12 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				]),
 				\shiftE, Pkey(\origShiftS)
 			) //.collect { |ev| if(ev[\shiftS][0] > ev[\origShiftS][0]) { ev.postcs } { ev } }
+		},
+		clatterDecay: { |parms|
+			Pseq(#[clatter, decay].collect { |key| ~gestures[key].(parms) }, 1)
+		},
+		klankDecay: { |parms|
+			Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
 		}
 	),
 
@@ -1340,12 +1367,20 @@ t = TLSequenceIterator([
 	\cmdSync,
 	{ "post-loop".debug; 5 },
 	{	var	bp = BP(\st);
-		bp.gest = Pseq([
-			Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
-				#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
-			\slowStepStretch
-		], inf);
-		bp.gDelta = Pwhite(1.5, 3.0, inf);
+// 		bp.gest = Pseq([
+// 			Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
+// 				#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
+// 			\slowStepStretch
+// 		], inf);
+		bp.gest = Pswitch1([
+			Pseq([
+				Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
+					#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
+				\slowStepStretch
+			], inf),
+			Prand(#[oneKlankSteps, klankDecay], inf)
+		], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 1.0], #[120])).collect(_.binaryValue));
+		bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
 		bp.numEv = Pwhite(6, 14, inf);
 		0
 	}
@@ -1355,3 +1390,25 @@ t = TLSequenceIterator([
 t.stop;
 t.isRunning
 
+BP(\st).gestStream.next;
+BP(\st).kfreqStream.next;
+
+BP(\st).gDelta = Pwhite(0.5, 1.2, inf);
+
+
+
+BP(\st).gestures.klankHarmonize = { |parms|
+			DebugPbind(
+				\nextLower, BPStream(\nextLowerInt),
+				\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
+				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLowerInt), Pkey(\chord)], inf)
+					// isNumber: \chord might be empty array
+					// in which case the last 'integrate' item would be [], not valid
+					.collect { |item| item.flat.integrate/*.select(_.isNumber)*/ }
+			)
+			<> ~gestures[\oneKlank].(parms)
+		};
+
+BP(\st).gest = \klankHarmonize;
+
+BP(\st).play(0); { BP(\st).stop(0) }.defer(1);
