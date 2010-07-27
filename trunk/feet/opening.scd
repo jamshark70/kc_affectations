@@ -587,8 +587,37 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 	slowRate: Pwhite(0.5, 0.8, inf),
 	slowShift: Pexprand(1, 15, inf) - 3,
 
-	kfreq: Pseq(#[74, 79, 78], inf).trace(prefix: "kfreq: ").midicps,
-	kdecay: Pexprand(0.011, 0.1, inf),
+//	kfreq: Pseq(#[74, 79, 78], inf).trace(prefix: "kfreq: ").midicps,
+	rewriteEmbedder: { |int, in, level|
+		if(int.every(_.inclusivelyBetween(-16, 16))) {
+			Ptuple([
+				Pseq(int, 1),
+				Pseq([in[1], Pn(level+1, inf)], 1)
+			], 1)
+		} {
+			int.debug("dropped");
+			Pn([0, 0], 0)	// <-- drop this branch totally
+		}
+	},
+	kfreq: Pcollect({ |pair| pair.copy.put(0, Mode(\g).cps(pair[0])) },
+		PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
+			{ |in| in[0] < 0 } -> { |in, level|
+				var int = if(0.5.coin) { #[3, -1].debug(">>> add motive") }
+					{ { #[-1, 1, 2, 3].choose } ! rrand(1, 2) };
+				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+			},
+			{ |in| in[0] > 10 } -> { |in, level|
+				var int = if(0.5.coin) { #[-3, 1].debug(">>> add motive") }
+					{ { #[-3, -2, -1, 1].choose } ! rrand(1, 2) };
+				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+			},
+			{ true } -> { |in, level|
+				var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose.debug(">>> add motive") }
+					{ { #[-2, -1, 1, 2].choose } ! rrand(1, 2) };
+				~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+			}
+		]).keepLowerLevels_(true),
+		kdecay: Pexprand(0.011, 0.1, inf),
 	kamp: 1,
 	defaultKlankHarm: (1..5),
 	defaultKlankAmps: (1..5).reciprocal,
