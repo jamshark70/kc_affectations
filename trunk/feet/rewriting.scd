@@ -127,14 +127,17 @@ q = PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 0], 1), Pseries(0, 1, in
 q.next;
 
 
+PeakMonitor(n);
+
 (
 f = { |int, in, level|
-	if(int.every(_.inclusivelyBetween(-10, 10))) {
+	if(int.every(_.inclusivelyBetween(-16, 16))) {
 		Ptuple([
 			Pseq(int, 1),
 			Pseq([in[1], Pn(level+1, inf)], 1)
 		], 1)
 	} {
+		int.debug("dropped");
 		Pn([0, 0], 0)	// <-- drop this branch totally
 	}
 };
@@ -143,17 +146,17 @@ p = n.play(Pbind(
 	\octave, 5,
 	#[degree, level], PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
 		{ |in| in[0] < 0 } -> { |in, level|
-			var int = if(0.7.coin) { #[3, -1].debug(">>> add motive") }
+			var int = if(0.5.coin) { #[3, -1].debug(">>> add motive") }
 				{ { #[-1, 1, 2, 3].choose } ! rrand(1, 2) };
 			f.(([in[0]] ++ int).integrate, in, level);
 		},
-		{ |in| in[0] > 14 } -> { |in, level|
-			var int = if(0.1.coin) { #[3, -1].debug(">>> add motive") }
+		{ |in| in[0] > 10 } -> { |in, level|
+			var int = if(0.5.coin) { #[-3, 1].debug(">>> add motive") }
 				{ { #[-3, -2, -1, 1].choose } ! rrand(1, 2) };
 			f.(([in[0]] ++ int).integrate, in, level);
 		},
 		{ true } -> { |in, level|
-			var int = if(0.45.coin) { #[3, -1].debug(">>> add motive") }
+			var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose.debug(">>> add motive") }
 				{ { #[-2, -1, 1, 2].choose } ! rrand(1, 2) };
 			f.(([in[0]] ++ int).integrate, in, level);
 		}
