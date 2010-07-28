@@ -11,6 +11,7 @@
 
 BP.all.free;
 
+s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 #[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
 s.waitForBoot(e { (Document.current.path.dirname +/+ "feet-defs.scd").debug("loading").loadPath });
@@ -595,7 +596,7 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 				Pseq([in[1], Pn(level+1, inf)], 1)
 			], 1)
 		} {
-			[int, level].debug("dropped");
+//			[int, level].debug("dropped");
 			Pn([0, 0], 0)	// <-- drop this branch totally
 		}
 	},
@@ -604,17 +605,17 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 		Plazy {
 			PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
 				{ |in| in[0] < 0 } -> { |in, level|
-					var int = if(0.5.coin) { #[3, -1].debug(">>> add motive") }
+					var int = if(0.5.coin) { #[3, -1] /*.debug(">>> add motive")*/ }
 						{ { #[-1, 1, 2, 3].choose } ! rrand(1, 3) };
 					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
 				},
 				{ |in| in[0] > 10 } -> { |in, level|
-					var int = if(0.5.coin) { #[-3, 1].debug(">>> add motive") }
+					var int = if(0.5.coin) { #[-3, 1] /*.debug(">>> add motive")*/ }
 						{ { #[-3, -2, -1, 1].choose } ! rrand(1, 3) };
 					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
 				},
 				{ true } -> { |in, level|
-					var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose.debug(">>> add motive") }
+					var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose/*.debug(">>> add motive")*/ }
 						{ { #[-2, -1, 1, 2].choose } ! rrand(1, 3) };
 					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
 				}
@@ -740,37 +741,25 @@ PR(\basicBufferPlayer).chuck(BP(\st), nil, (
 			)
 		},
 		klankHarmonize: { |parms|
-			Pbindf(~gestures[\oneKlank].(parms),
+			Pbind(
 				\nextLower, BPStream(\nextLowerInt),
 				\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
-				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLowerInt), Pkey(\chord)], inf)
-					// isNumber: \chord might be empty array
-					// in which case the last 'integrate' item would be [], not valid
-					.collect { |item| item.flat.integrate/*.select(_.isNumber)*/ }
+				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLower), Pkey(\chord)], inf)
+					.collect { |item| Mode(\g).cps(item.flat.integrate + 35) }
 			)
+			<> ~gestures[\oneKlank].(parms)
 		},
 		oneKlankSteps: { |parms|
 			Pseq(
 				#[oneKlank, clatter].collect { |key| ~gestures[key].(parms) },
 				1
 			)
-// 			Pbind(
-// 				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
-// 				#[pan, distance], ~xyPat.(parms),
-// 				\delta, BPStream(\fastDelta),
-// 				\amp, BPStream(\amp),
-// 				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
-// 				\filtAttack, 0.01,
-// 				\filtDecay, BPStream(\kdecay),
-// 				\filtAmp, BPStream(\kamp),
-// 				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
-// 				\chorusAmt, parms[\chorusFreq] ?? { 0.02 },
-// 				\chorusDelay, parms[\chorusFreq] ?? { 0.03 },
-// 				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
-// 				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
-// 				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
-// 				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
-// 			)
+		},
+		klankHrmSteps: { |parms|
+			Pseq(
+				#[klankHarmonize, clatter].collect { |key| ~gestures[key].(parms) },
+				1
+			)
 		},
 		decay: { |parms|
 			parms[\numEv] = rrand(18, 28);
@@ -1305,6 +1294,10 @@ d = DDWTimer.new;
 
 (
 t = TLSequenceIterator([
+	{ ~master.level = -10.dbamp;
+		~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet-open.aiff");
+		1
+	},
 	bpCmd: (name: \op, dur: 35, prepareBP: { |bp|
 		bp.ampCtl.value = 0.68;
 		if(d.class == DDWTimer) { d.reset };
@@ -1372,16 +1365,38 @@ t = TLSequenceIterator([
 // 				#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
 // 			\slowStepStretch
 // 		], inf);
+		bp.chordN = 0;
 		bp.gest = Pswitch1([
 			Pseq([
 				Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
 					#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
 				\slowStepStretch
 			], inf),
-			Prand(#[oneKlankSteps, klankDecay], inf)
+			Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf)
 		], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 1.0], #[120])).collect(_.binaryValue));
 		bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
 		bp.numEv = Pwhite(6, 14, inf);
+		90
+	},
+	{	BP(\st).chordN = 1;
+		20
+	},
+	bpCmd: (name: \waterch, dur: 36, prepareBP: { |bp|
+		bp.reset;
+		BP(\st).stop(0);
+		SynthDef(\waterauto, { |outbus|
+			var amp = LFNoise1.kr(0.8).exprange(0.01, 0.1);
+			Out.kr(outbus, SinOsc.kr(LFNoise1.kr(0.5).exprange(0.2, 1.2), 0, amp, 1))
+		}).add;
+	}),
+	gcAutoSynthCmd: (gc: VC(\waterpad).v.globalControls[\freqmul], name: \waterauto, outName: \outbus,
+		dur: 40),
+	16,
+	mixerAutoSynthCmd: (mixer: ~master, name: \ctlPoint, outName: \outbus,
+		value: 0, time: 20, curve: -2.1, stopAction: { BP(\st).stop }),
+	\cmdSync,
+	{ "over".debug;
+		~master.stopRecord;
 		0
 	}
 ]).play;
@@ -1397,14 +1412,18 @@ BP(\st).gDelta = Pwhite(0.5, 1.2, inf);
 
 
 
+BP(\st).nextLowerInt = Pseries({ rrand(1, 3) }, Prand(#[-2, -1, 1, 2], inf), inf)
+		.fold(-10, 10).reject { |x, ev| x.debug("x") >= ev[\filtDegree].debug("filtdeg"); } - Pkey(\filtDegree);
+
+BP(\st).nextLowerIntStream.next((filtDegree: 4));
+
+
 BP(\st).gestures.klankHarmonize = { |parms|
-			DebugPbind(
+			Pbind(
 				\nextLower, BPStream(\nextLowerInt),
 				\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
-				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLowerInt), Pkey(\chord)], inf)
-					// isNumber: \chord might be empty array
-					// in which case the last 'integrate' item would be [], not valid
-					.collect { |item| item.flat.integrate/*.select(_.isNumber)*/ }
+				\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLower), Pkey(\chord)], inf)
+					.collect { |item| Mode(\g).cps(item.flat.integrate + 35) }
 			)
 			<> ~gestures[\oneKlank].(parms)
 		};
@@ -1412,3 +1431,32 @@ BP(\st).gestures.klankHarmonize = { |parms|
 BP(\st).gest = \klankHarmonize;
 
 BP(\st).play(0); { BP(\st).stop(0) }.defer(1);
+
+BP(\st).prepareForPlay;
+BP(\st).reset; BP(\st).makeStreamForKey(\kfreq);
+
+BP(\st).v[\isPlaying] = true;
+e = BP(\st).eventStream.next(BP(\st).event.copy);
+e.asKeyValuePairs.clump(2).sort { |a, b| a[0] < b[0] }.do(_.postln);
+BP(\st).v[\isPlaying] = false; ""
+
+e.asKeyValuePairs.clump(2).sort { |a, b| a[0] < b[0] }.do(_.postln); ""
+
+e.copy.play;
+
+BP(\st).chordN = 1;
+BP(\st).kdecay.postcs
+
+k = VC(\waterpad).globalControls[\freqmul];
+k => VP(2);
+
+k.watch.automate {
+	var amp = LFNoise1.kr(0.8).exprange(0.01, 0.1);
+	SinOsc.kr(LFNoise1.kr(0.5).exprange(0.2, 1.2), 0, amp, 1)
+};
+
+k.autoSynth.trace
+
+k.stopWatching.stopAuto;
+
+VC(\waterpad).v.nodes.detect(_.isPlaying).trace
