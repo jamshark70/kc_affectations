@@ -1671,7 +1671,7 @@ type: \bp) => Fact(\brook);
 
 // water chords
 (
-keys: #[master, rvbmc],
+keys: #[master, glrvbmc],
 numCombs: 10,
 cFundamental: 67.midicps,
 cStep: 67.midicps / 4,	// i.e., 67.midicps is 4th partial, next comb will be 5th
@@ -1679,12 +1679,13 @@ cLevelRatio: 1.5.dbamp,
 make: { |name|
 	var out;
 
-	WrapInstr([\osc2, \vosc3map2], { |freq, bufbase, numbufs, basefreq, topfreq, gate|
+	WrapInstr([\osc2, \vosc3map2], { |freq, bufbase, numbufs, basefreq, topfreq, gate, freqmul = 1|
 		var	baselog = log2(basefreq),
-			freqmap = ((log2(freq) - baselog) / (log2(topfreq) - baselog)
+			newfreq = freq * freqmul,
+			freqmap = ((log2(newfreq) - baselog) / (log2(topfreq) - baselog)
 				* (numbufs - 1)).clip(0, numbufs - 1.001);
-		WrapInstr.wrap([\osc2, \vosc3], [freq, gate, bufbase, freqmap]);
-	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, #[0, 1]]);
+		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap]);
+	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1]]);
 	
 	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1|
 		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate]),
@@ -1721,11 +1722,11 @@ make: { |name|
 		~ch.doWhenPlaying { ~ch.synth.moveToTail(chan.effectgroup) };
 	});
 	~combsMC = MixerChannel(name ++ "comb", s, 2, 2, level: ~target.level * ~cLevelRatio, outbus: ~master, completionFunc: { |chan|
-		chan.newPostSend(~rvbmc, 0.8);
+		chan.newPostSend(~glrvbmc, 0.8);
 	});
 	~target.doWhenReady {
 		~target.newPreSend(~combsMC, 0);
-		~target.newPostSend(~rvbmc, 0.75);
+		~target.newPostSend(~glrvbmc, 0.75);
 	};
 
 	~levelSync = Updater(~target.controls[\level], e { |levelCtl, parms|
@@ -1744,6 +1745,7 @@ make: { |name|
 	out.mapGlobal(\rq, nil, 1, \myrq);
 	out.mapGlobal(\clevel, nil, 1, \amp);
 	out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
+	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
 	out
 },
 free: { ~levelSync.remove; [~target, ~combsMC, ~wt, ~bigdelay, ~littledelays].free },
