@@ -204,3 +204,23 @@ p.oneWalkerPattern = { |gesture, i, parms|
 		<>
 		parms
 	};
+
+
+
+// 			Pbind(
+// 				\instrument, Pseq([\bufGrainPanKlankDist, Pkey(\instrument)], 1),
+// 				#[pan, distance], ~xyPat.(parms),
+// 				\delta, BPStream(\fastDelta),
+// 				\amp, BPStream(\amp),
+// 				\filtFreq, Pstutter(inf, BPStream(\kfreq)),
+// 				\filtAttack, 0.01,
+// 				\filtDecay, BPStream(\kdecay),
+// 				\filtAmp, BPStream(\kamp),
+// 				\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+// 				\chorusAmt, parms[\chorusFreq] ?? { 0.02 },
+// 				\chorusDelay, parms[\chorusFreq] ?? { 0.03 },
+// 				\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+// 				\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+// 				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+// 				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
+// 			)
