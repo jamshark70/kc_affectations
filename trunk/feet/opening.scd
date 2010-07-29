@@ -1295,7 +1295,7 @@ d = DDWTimer.new;
 (
 t = TLSequenceIterator([
 	{ ~master.level = -10.dbamp;
-		~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet-open.aiff");
+//		~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet-open.aiff");
 		1
 	},
 	bpCmd: (name: \op, dur: 35, prepareBP: { |bp|
@@ -1312,7 +1312,7 @@ t = TLSequenceIterator([
 		bp.gDelta = Pwhite(2.5, 4.0, inf);
 		bp.slowRate = Pwhite(0.5, 0.8, inf);
 		bp.defaultParms = nil;
-		bp.kdecay = Pexprand(0.75, 0.9, inf);
+		bp.kdecay = Pexprand(0.014, 0.017, inf).trace(prefix: "kdecay: ");
 		bp.makeStreamForKey(\kfreq);	// reset this one
 		bp.autoRun = true;
 
@@ -1323,7 +1323,7 @@ t = TLSequenceIterator([
 	gcAutoSynthCmd: (gc: BP(\st).ampCtl, name: \ctlPoint, outName: \outbus,
 		value: 0.7, time: 14, curve: 2),
 	\cmdSync,
-	20,
+//	20,
 	loopCmd: (repeats: 3,
 		cmds: [
 			funcCmd: (
@@ -1366,6 +1366,7 @@ t = TLSequenceIterator([
 // 			\slowStepStretch
 // 		], inf);
 		bp.chordN = 0;
+		bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[100], 7)).trace(prefix: "kdecay: ");
 		bp.gest = Pswitch1([
 			Pseq([
 				Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
@@ -1396,7 +1397,7 @@ t = TLSequenceIterator([
 		value: 0, time: 20, curve: -2.1, stopAction: { BP(\st).stop }),
 	\cmdSync,
 	{ "over".debug;
-		~master.stopRecord;
+//		~master.stopRecord;
 		0
 	}
 ]).play;
