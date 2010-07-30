@@ -1740,7 +1740,7 @@ make: { |name|
 	});
 	~bigdelay = Buffer.alloc(s, 44100, 1);
 	~littledelays = Buffer.allocConsecutive(~numCombs, s, (s.sampleRate / ~cFundamental).roundUp);
-	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0], \sin), vtimespec: #[1, 1, exp].asSpec, detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
+	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0], \sin), /*vtimespec: #[1, 1, exp].asSpec,*/ detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
 	out.mapGlobal(\ffreq, nil, 400, \freq);
 	out.mapGlobal(\rq, nil, 1, \myrq);
 	out.mapGlobal(\clevel, nil, 1, \amp);
@@ -1780,10 +1780,34 @@ MIDIRecBuf(\waterch, [
 PR(\arpeg1).clone {
 	~superAsPattern = ~asPattern;
 	~asPattern = { |inEvent|
-		~preInsertStream !? {
-			inEvent = ~preInsertStream.next(inEvent);
+ 		~preInsertStream !? {
+ 			inEvent = ~preInsertStream.next(inEvent);
+ 		};
+		~lastEv !? {
+			~lastEv.use { ~releaseNote.() };
+			~lastEv = nil;
 		};
-		~superAsPattern.(inEvent);
+		~superAsPattern.(inEvent).postcs.collect { |ev|
+			var	synths, count;
+			if(ev[\length] == inf) {
+				~lastEv = ev.put(\immediateOSC, true);
+				thisThread.clock.sched(0, e {
+					var	synths = ev[\nodes].collect(_.synth),
+						count = synths.size,
+						ufunc = { |obj, what|
+							if(what == \n_end) {
+								obj.removeDependant(ufunc);
+								// ~lastEv might have changed since synths started
+								if((count = count - 1) == 0 and: { ~lastEv === ev }) {
+									~lastEv = nil;
+								};
+							}
+						};
+					synths.do { |node| node.addDependant(ufunc) };
+				});
+			};
+			ev
+		};
 	};
 } => PR(\arpeg1PreInsert);
 
