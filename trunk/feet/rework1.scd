@@ -707,3 +707,132 @@ BP(\st).prepareForPlay;
 p.eventStream.next(p.event.copy).postcs; ""
 //SynthDescLib.at(\bufGrainPanKlank).controls.detect { |cn| cn.name == "chorusAmps" }
 
+
+
+// track chord parms
+// tracking window
+~xyb = Bus.control(s, 2);
+
+w = Window("track", Rect.aboutPoint(Window.screenBounds.center, 200, 200));
+u = UserView(w, w.view.bounds.insetBy(2, 2))
+	.mouseOverAction_(e { |view, x, y| ~xyb.setn([x, y]) })
+	.background_(Color.yellow(alpha: 0.3));
+w.acceptsMouseOver_(true);
+w.front;
+
+~xyb.getn(2, _.postln)
+
+v = VC(\waterpad);
+g = v.globalControls;
+
+g[\ffreq].automate { In.kr(~xyb.index + 1, 1).linexp(0, u.bounds.height, 12000, 200) };
+g[\ffreq].watch;
+
+u.mouseOverAction_(e { |view, x, y| ~xyb.setn([x, y]) })	
+
+a = {
+	var	xy = In.kr(~xyb, 2),
+		smooth = RunningSum.kr(xy, 120) / 120,
+		diff = HPZ1.kr(smooth, 2),
+//		direction = diff[0].sign,
+		radius = diff.squared.sum.sqrt;
+	radius.poll(Impulse.kr(8) * (diff.abs.sum > 0), "radius");
+	Silent.ar(1)
+}.play;
+
+a.free;
+
+// not bad at all
+g[\freqmul].watch.automate {
+	var	xy = In.kr(~xyb, 2),
+		smooth = RunningSum.kr(xy, 120) / 120,
+		diff = HPZ1.kr(smooth, 2),
+//		direction = diff[0].sign,
+		radius = diff.squared.sum.sqrt;
+	SinOsc.kr(
+		LFNoise1.kr(0.5).exprange(0.2, 1.2) * radius,
+		0,
+		radius.linlin(0, 2.5, 0, 0.15),
+		1
+	)
+};
+
+MBM(0)[\waterch].properties
+BP(\waterch).child.chords.do({ |ch| ch.notes.asFloat.collect { |n| n.unmapMode(\g).asInteger.asMIDINote }.postln });
+
+BP(\waterch).arpeg = \block;
+
+// for now, assume block chords
+// also assume no concurrent chords - release 1 before playing next
+PR(\arpeg1).clone {
+	~superAsPattern = ~asPattern;
+	~asPattern = { |inEvent|
+// 		~preInsertStream !? {
+// 			inEvent = ~preInsertStream.next(inEvent);
+// 		};
+		~lastEv !? {
+			~lastEv.use { ~releaseNote.() };
+			~lastEv = nil;
+		};
+		~superAsPattern.(inEvent).collect { |ev| ~lastEv = ev };
+	};
+} => PR(\arpeg1PreInsert);
+
+p = BP(\waterch);
+
+p.macro = inf;
+p.arpeg = \block;
+p.child.makeChordPattern = { Pseq(~chords, inf) };
+
+// triggerable! and cleans itself up if triggered twice successively
+p.triggerOneEvent(0);
+p.child.lastEv.use { ~releaseNote.() };
+
+
+e = p.eventStream.next(p.event.copy);
+
+p.child.asPattern = { |inEvent|
+ 		~preInsertStream !? {
+ 			inEvent = ~preInsertStream.next(inEvent);
+ 		};
+		~lastEv !? {
+			~lastEv.use { ~releaseNote.() };
+			~lastEv = nil;
+		};
+		~superAsPattern.(inEvent).postcs.collect { |ev|
+			var	synths, count;
+			if(ev[\length] == inf) {
+			~lastEv = ev.put(\immediateOSC, true);
+				thisThread.clock.sched(0, e {
+					var	synths = ev[\nodes].collect(_.synth),
+						count = synths.size,
+						ufunc = { |obj, what|
+							if(what == \n_end) {
+								obj.removeDependant(ufunc);
+								// ~lastEv might have changed since synths started
+								if((count = count - 1) == 0 and: { ~lastEv === ev }) {
+									~lastEv = nil;
+								};
+							}
+						};
+					synths.do { |node| node.addDependant(ufunc) };
+				});
+			};
+			ev
+		};
+	};
+
+p.child.listVars;
+p.child.noteStream.next(())
+p.child.notePattern.postcs
+p.child.chordStream.next(())
+p.child.makeChordPattern.inspect
+
+p.child.lastEv
+p.child.lastEv.newFreq
+
+p.child.lastEv = nil;
+
+p.child.lastEv.use { ~releaseNote.() };
+VC(\waterpad).v.target.server.latency
+p.child.lastEv.asKeyValuePairs.clump(2).sort { |a, b| a[0] < b[0] }.do(_.postln); ""
