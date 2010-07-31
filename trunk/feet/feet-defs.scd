@@ -1841,3 +1841,83 @@ PR(\arpeg1).clone {
 	BP(name)
 }, type: \bp) => Fact(\waterch);
 
+
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthPlayer),
+		bufSource: \op,
+		inChannels: 2,
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		alwaysReset: true,
+		userprep: {
+			if(BP.exists(~bufSource) and: { BP(~bufSource).v[\pvbuf].notNil }) {
+				~pvbuf = BP(~bufSource).pvbuf;
+				~pt = BP(~bufSource).pt;
+				~peaks = BP(~bufSource).peaks;
+			} {
+				"Couldn't load BP(%); BP(%) not ready".format(~collIndex.asCompileString, ~bufSource.asCompileString).warn;
+			};
+			~ampCtl = GenericGlobalControl(\amp, nil, 0.75, #[0, 1, \amp]);
+			~event.putAll((distNear: 5, distFar: 20,
+				glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				pvbuf: ~pvbuf, ampMap: ~ampCtl.asMap
+			));
+		},
+		userfree: { ~ampCtl.free },
+		useGui: { |vpi| ~ampCtl => VP(vpi) },
+		synth: \pvc,
+		delta: 1.5,
+		panWidth: 0.3,
+		panCenter: Pn(Pseries.fromEndpoints(0, 0.9, 3), inf),
+		objects: (
+			pvc: (
+				def: \addRvbOut.eval(\pvplayPanC, { |pvbuf, startFrame, time = 1, rate = 1,
+						amp = 1, ampMap = 1, pan,
+						attack = 0.01, decay = 0.05,
+						numTeeth = 20, cphase = 0, cwidth = 0.5, crate = 0|
+					var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1),
+							pvbuf, rate, startFrame, loop: 0),
+						sig;
+					cphase = (Sweep.kr(rate: crate) + cphase).wrap(0.0, 1.0);
+					fft = PV_RectComb(fft, numTeeth, cphase, cwidth);
+					sig = IFFT(fft, 1)
+						* EnvGen.kr(Env.linen(attack, time - attack - decay, decay, curve: #[4, 0, -4]),
+							doneAction: 2);
+					Pan2.ar(sig, pan, amp * ampMap);
+				}),
+				args: [
+					\num, 3,
+					\i, Plazy { Pn(Pshuf((0 .. ~pt.size-1), 1), inf) }.clump(Pkey(\num)),
+					\spread, Pn(Pseries(-1, 2 / (Pkey(\num)-1), Pkey(\num).asStream), inf).clump(Pkey(\num)),
+					\pan, (Pkey(\spread) * BPStream(\panWidth) + BPStream(\panCenter)).clip(-1.0, 1.0),
+					\distance, Pseries.fromEndpoints(5, 20, 3),
+					\time, 0.25,
+					\eTopRatio, 0.8,
+					#[attack, decay], Ptuple([Pkey(\eTopRatio), 1 - Pkey(\eTopRatio)], inf) * Pkey(\time),
+					\playspeed, Pwhite(1.2, 1.9, inf),
+					\startFrame, Plazy { (Pindex(~pt, Pkey(\i), inf) + (Pkey(\time) * Pkey(\playspeed))) }
+						* (BP(\op).numPvFrames / z.duration),
+					\rate, Pkey(\playspeed).neg,
+					\amp, Plazy { Pindex(~peaks[1], Pkey(\i), inf) }.reciprocal / Pkey(\num) * 20.dbamp,
+					\cwidth, Pgeom.fromEndpoints(1.0, 0.3, 3),
+					\crate, Pgeom.fromEndpoints(0.1, 15, 3),
+					\cphase, Pwhite(0.0, 0.98, inf)
+				]
+			)
+		),
+		reset: {
+			var	str;
+			currentEnvironment.env.keys.do { |key|
+				if((str = key.asString).contains("Stream")) {
+					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+				}
+			}
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\stopturn);
