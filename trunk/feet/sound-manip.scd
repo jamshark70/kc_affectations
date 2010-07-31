@@ -991,3 +991,181 @@ p.preSync = Pfunc { |dur| max(1, dur - rrand(5, 12)).postln };
 p.gesture = \stepsStretch;
 p.dur = Pseq([14, Pseries(3, Pwhite(1, 3, 5))]);
 p.preSync = Pseq([10, Pn(0, inf)]);
+
+
+
+// stop and turn
+z = BP(\st).buffers[0];
+~pt = BP(\st).pt;
+
+i = (~pt.size - 1).rand;
+t = 0.2;
+a = m.play(\bufGrain, [bufnum: z, start: (~pt[i] + t) * 44100, time: t, rate: -1, amp: BP(\st).peaks[0][i].reciprocal].debug);
+
+BP(\st).peaks.size
+a.trace
+
+PeakMonitor(m);
+
+
+i = Pshuf((0..~pt.size-1), 1).asStream.nextN(5);
+r = rrand(1.2, 1.8);
+t = 0.2;
+m.play((instrument: \bufGrain, bufnum: z, start: (~pt[i] + (t*r)) * 44100, time: t, rate: r.neg, amp: BP(\st).peaks[0][i].reciprocal / i.size));
+
+r = 2;
+
+y = BP(\op).pvbuf;
+m.play((instrument: \pvplayPanC, pvbuf: y, startFrame: (~pt[i] + (t*r)) / z.duration * BP(\op).numPvFrames, time: t, rate: r.neg, amp: BP(\st).peaks[1][i].reciprocal * 20.dbamp, cwidth: 0.4, crate: 12));
+
+p = n.play(
+	Pbind(
+		\instrument, \pvplayPanC,
+		\pvbuf, y,
+		\n, 3,
+		\i, Pn(Pshuf(~pt, 1), inf).clump(Pkey(\n)),
+		\pan, Pn(Pseries(-1, 2 / (Pkey(\n)-1), Pkey(\n).asStream), inf).clump(Pkey(\n)),
+		\time, 0.25,
+		\eTopRatio, 0.8,
+		#[attack, decay], Ptuple([Pkey(\eTopRatio), 1 - Pkey(\eTopRatio)], inf) * Pkey(\time),
+		\playspeed, Pwhite(1.2, 1.9, inf),
+		\startFrame, (Pindex(~pt, Pkey(\i), inf) + (Pkey(\time) * Pkey(\playspeed))) * (BP(\op).numPvFrames / z.duration),
+		\rate, Pkey(\playspeed).neg,
+		\amp, Pindex(BP(\st).peaks[1], Pkey(\i), inf).reciprocal / Pkey(\n) * 20.dbamp,
+		\cwidth, Pgeom.fromEndpoints(1.0, 0.3, 3),
+// 		\crate, Pwhite(0.1, 2.5, inf),
+// 		\crate, 0,
+		\crate, Pgeom.fromEndpoints(0.1, 15, 3),
+		\cphase, Pwhite(0.0, 0.98, inf),
+		\delta, 1.5
+	)
+	//.asStream.next(())
+);
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |time, resp, msg| s.sendMsg(\n_trace, msg[1]); }).add;
+
+SynthDef(\pvplayPanC, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, ampMap = 1, pan,
+	attack = 0.01, decay = 0.05, numTeeth = 20, cphase = 0, cwidth = 0.5, crate = 0|
+	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
+		sig;
+// 	fft = PV_BinShift(fft, 1, Line.kr(shiftS, shiftE, time));
+	cphase = (Sweep.kr(rate: crate) + cphase).wrap(0.0, 1.0);
+	fft = PV_RectComb(fft, numTeeth, cphase, cwidth);
+	sig = IFFT(fft, 1)
+		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay, curve: #[4, 0, -4]), doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+}).add;
+
+Env.linen(0.2, 0.6, 0.2, curve: #[4, 0, -4]).plot
+
+
+(
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthPlayer),
+		bufSource: \op,
+		inChannels: 2,
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		alwaysReset: true,
+		userprep: {
+			if(BP.exists(~bufSource) and: { BP(~bufSource).v[\pvbuf].notNil }) {
+				~pvbuf = BP(~bufSource).pvbuf;
+				~pt = BP(~bufSource).pt;
+				~peaks = BP(~bufSource).peaks;
+			} {
+				"Couldn't load BP(%); BP(%) not ready".format(~collIndex.asCompileString, ~bufSource.asCompileString).warn;
+			};
+			~ampCtl = GenericGlobalControl(\amp, nil, 0.75, #[0, 1, \amp]);
+			~event.putAll((distNear: 5, distFar: 20,
+				glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				pvbuf: ~pvbuf, ampMap: ~ampCtl.asMap
+			));
+		},
+		userfree: { ~ampCtl.free },
+		useGui: { |vpi| ~ampCtl => VP(vpi) },
+		synth: \pvc,
+		delta: 1.5,
+		panWidth: 0.3,
+		panCenter: Pn(Pseries.fromEndpoints(0, 0.9, 3), inf),
+		objects: (
+			pvc: (
+				def: \addRvbOut.eval(\pvplayPanC, { |pvbuf, startFrame, time = 1, rate = 1,
+						amp = 1, ampMap = 1, pan,
+						attack = 0.01, decay = 0.05,
+						numTeeth = 20, cphase = 0, cwidth = 0.5, crate = 0|
+					var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1),
+							pvbuf, rate, startFrame, loop: 0),
+						sig;
+					cphase = (Sweep.kr(rate: crate) + cphase).wrap(0.0, 1.0);
+					fft = PV_RectComb(fft, numTeeth, cphase, cwidth);
+					sig = IFFT(fft, 1)
+						* EnvGen.kr(Env.linen(attack, time - attack - decay, decay, curve: #[4, 0, -4]),
+							doneAction: 2);
+					Pan2.ar(sig, pan, amp * ampMap);
+				}),
+				args: [
+					\num, 3,
+					\i, Plazy { Pn(Pshuf((0 .. ~pt.size-1), 1), inf) }.clump(Pkey(\num)),
+					\spread, Pn(Pseries(-1, 2 / (Pkey(\num)-1), Pkey(\num).asStream), inf).clump(Pkey(\num)),
+					\pan, (Pkey(\spread) * BPStream(\panWidth) + BPStream(\panCenter)).clip(-1.0, 1.0),
+					\distance, Pseries.fromEndpoints(5, 20, 3),
+					\time, 0.25,
+					\eTopRatio, 0.8,
+					#[attack, decay], Ptuple([Pkey(\eTopRatio), 1 - Pkey(\eTopRatio)], inf) * Pkey(\time),
+					\playspeed, Pwhite(1.2, 1.9, inf),
+					\startFrame, Plazy { (Pindex(~pt, Pkey(\i), inf) + (Pkey(\time) * Pkey(\playspeed))) }
+						* (BP(\op).numPvFrames / z.duration),
+					\rate, Pkey(\playspeed).neg,
+					\amp, Plazy { Pindex(~peaks[1], Pkey(\i), inf) }.reciprocal / Pkey(\num) * 20.dbamp,
+					\cwidth, Pgeom.fromEndpoints(1.0, 0.3, 3),
+					\crate, Pgeom.fromEndpoints(0.1, 15, 3),
+					\cphase, Pwhite(0.0, 0.98, inf)
+				]
+			)
+		),
+		reset: {
+			var	str;
+			currentEnvironment.env.keys.do { |key|
+				if((str = key.asString).contains("Stream")) {
+					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+				}
+			}
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\stopturn);
+)
+
+
+BP(\stopturn).play(DelayTimeSpec(5));
+
+PeakMonitor(~master)
+BP(\stopturn).ampCtl.bus.get(_.postln)
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	s.sendMsg(\s_getn, m[1], 0, SynthDescLib.at(\pvplayPanC).controls.size);
+	OSCpathResponder(s.addr, ['/n_setn', m[1]], { |t, r, m|
+		r.remove;
+		[SynthDescLib.at(\pvplayPanC).controlNames, m[4..]].flop.do(_.postln); $\n.post
+	}).add;
+}).add;
+
+
+BP(\stopturn).reset;
+BP(\stopturn).triggerOneEvent(0);
+
+BP(\stopturn).use {
+	e = BP(\stopturn).eventStream.next(BP(\stopturn).event.copy);
+};
+
+s.dumpOSC(1);
+BP(\stopturn).triggerOneEvent(0);
+s.dumpOSC(0);
