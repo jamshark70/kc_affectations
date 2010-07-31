@@ -1292,6 +1292,8 @@ x.next;
 PR(\trajectories) => BP(\traj);
 d = DDWTimer.new;
 
+t.stop;
+
 (
 t = TLSequenceIterator([
 	{ ~master.level = -10.dbamp;
@@ -1323,7 +1325,7 @@ t = TLSequenceIterator([
 	gcAutoSynthCmd: (gc: BP(\st).ampCtl, name: \ctlPoint, outName: \outbus,
 		value: 0.7, time: 14, curve: 2),
 	\cmdSync,
-//	20,
+	20,
 	loopCmd: (repeats: 3,
 		cmds: [
 			funcCmd: (
@@ -1366,7 +1368,7 @@ t = TLSequenceIterator([
 // 			\slowStepStretch
 // 		], inf);
 		bp.chordN = 0;
-		bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[100], 7)).trace(prefix: "kdecay: ");
+		bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[100], 7));//.trace(prefix: "kdecay: ");
 		bp.gest = Pswitch1([
 			Pseq([
 				Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
