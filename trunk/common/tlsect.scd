@@ -121,7 +121,7 @@ Proto {
 			~segments[msg[1].asSymbol].prInitProc;
 		} {
 			"Segment % not found (load).".format(msg[1]).warn;
-			addr.sendMsg('/sectNotFound', msg[1], \load);
+			addr.sendMsg('/segNotFound', msg[1], \load);
 		};
 	};
 
@@ -135,7 +135,7 @@ Proto {
 			~currentSect.play;
 		} {
 			"Segment % not found (play).".format(msg[1]).warn;
-			addr.sendMsg('/sectNotFound', msg[1], \play);
+			addr.sendMsg('/segNotFound', msg[1], \play);
 		};
 	};
 
