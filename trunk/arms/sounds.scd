@@ -491,38 +491,89 @@ w.front;
 (
 PR(\abstractProcess).clone {
 	~event = (eventKey: \monoSupport, immediateOSC: true);
+	~vcKey = \am;
+	~prep = {
+		if(VC.exists(~vcKey).not) {
+			"VC(%) doesn't exist. Please create it before using BP(%)."
+				.format(~vcKey.asCompileString, ~collIndex.asCompileString).warn;
+		};
+		~makeStreamForKey.(\level);
+		currentEnvironment
+	};
 	~alwaysReset = true;
 	~pan = 0;
-	~degree = Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf);
+
+	~rewriteProb = 0.3;
+	~phrases = [
+		#[2, 5, 4],
+		#[2, 7, 6, 4, 8],
+		#[2, 5, 6, 4],
+		#[9, 8, 3],
+		#[8, 11, 10, 5, 2, 3, 4],
+		#[-2, -5, 0, 1, 0, 4]
+	];
+	~degree = Plazy {
+		var	self = currentEnvironment;
+		Pswitch(
+			~phrases.collect { |row|
+				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~levelStream.next }, 1), [
+					(_.notNil) -> { |item, level, inval|
+						if(self[\rewriteProb].coin) {
+							item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+						} { [item] }
+					}
+				])
+			},
+			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+		)
+	};
+
 	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf);
-	~legato = 1.01;
+// 	~legato = Pwrand(#[1.01, 0.9, 0.4], #[0.7, 0.2, 0.1], inf); // 1.01;
 	~gate = 0.8;
 	~freqlag = 0.3;
 	~detune = 1.003;
 	~gate = 0.8;
+	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger)).trace(prefix: "level: ");
 	~recvEventNotify = { |node| ~node = node };
 	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
 	~asPattern = {
 		Pbind(
-			\instrument, VC(\am).v.nodes[0].defname.asSymbol,
+			\instrument, VC(~vcKey).v.nodes[0].defname.asSymbol,
+//			\level, BPStream(\level),
 			\node, Pfunc { ~node ?? { 0 } },
-// 			\protoEvent, Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
 			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
 			\node, Pfunc { ~node ?? { 0 } },
 			\root, 7,
 			\freq, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps,
 			\delta, BPStream(\dur),
-//			\legato, BPStream(\legato),
+// 			\legato, BPStream(\legato),
 			\gate, BPStream(\gate),
 			\freqlag, BPStream(\freqlag),
 			\detune, BPStream(\detune),
 			\gate, BPStream(\gate),
 			\pan, BPStream(\pan),
 			\chan, VC(\am).env.target
-		).trace
-	}
+		)
+		// now this is a problem - you don't know when the next trigger is,
+		// so you don't know when to release
+		// removing for now
+// 		.collect { |ev|
+// 			if(~node.notNil and: { ev[\legato] < 1 }) {
+// 				\schedEventBundleArray.eval(ev[\lag] ? 0, ev[\timingOffset] ? 0,
+// 					ev[\server] ?? { Server.default },
+// 					[~node.releaseMsg], nil, true
+// 				);
+// 				~node = nil;
+// 			};
+// 			ev
+// 		};
+	};
+	~reset = Func(\resetBPStreams).v;
 } => PR(\melody);
 )
+
+Pexprand(0.15, 2.99, inf).collect(_.asInteger).asStream.nextN(1000).histo(3, 0, 2);
 
 3.do { |i|
 	var name = ("ml" ++ i).asSymbol;
@@ -547,6 +598,16 @@ BP.all.do { |bp|
 };
 
 
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click"]])
+	.action_({
+		BP(\ml1).triggerOneEvent(0);
+	});
+w.front;
+
+
 BP.all.reset;
 BP.all.do({ |bp| bp.v.reset });  // WHY WHY WHY WHY?????!!!
 ~ct = 0;
@@ -558,7 +619,7 @@ Button(w, w.view.bounds.insetBy(2, 2))
 	.action_({
 		3.do { |i|
 			var name = ("ml" ++ i).asSymbol;
-			if(i <= ~ct) { BP(name).triggerOneEvent(0) };
+			if(i <= ~ct and: { 0.92.coin }) { BP(name).triggerOneEvent(0) };
 		};
 		~ct = ~ct + 1;
 	});
@@ -571,3 +632,49 @@ e = BP(\ml0).eventStream.next(BP(\ml0).event.copy);
 
 BP(\ml0)[\eventStream]
 BP.all.do({ |bp| bp.event.immediateOSC = true });
+
+
+a = [
+	#[2, 5, 4],
+	#[2, 7, 6, 4, 8],
+	#[2, 5, 6, 4],
+	#[9, 8, 3],
+	#[8, 11, 10, 5, 2, 3, 4],
+	#[-2, -5, 0, 1, 0, 4]
+];
+p = Pswitch(
+	a.collect { |row|
+		PR(\rewriter).copy.prep(Pseq(row, 1), Pfin(1, Pkey(\level)), [
+			(_.notNil) -> { |item, level, inval|
+				if(0.3.coin) { item + [0, rrand(1, 3) * #[-1, 1].choose] } { [item] }
+			}
+		])
+	},
+	\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+);
+
+p.inspect
+
+BP.all.do { |bp|
+	bp.degree = p;
+	bp.level = Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger)
+};
+
+BP(\ml1).use { ~eventStream.next(~ev.copy) };
+
+Pdefn(\level, 1);
+
+q = Pswitch(
+	a.collect { |row|
+		PR(\rewriter).copy.prep(Pseq(row, 1), Pfin(1, Pdefn(\level)), [
+			(_.notNil) -> { |item, level, inval|
+				if(0.3.coin) { item + [0, rrand(1, 3) * #[-1, 1].choose] } { [item] }
+			}
+		]) //.keepLowerLevels_(true)
+	},
+	\patRejectLastN.eval(Pseq([0, Prand((0 .. (a.size-1)), inf)]), 1)
+).asStream;
+
+q.nextN(20);
+
+p.list[0].listVars
