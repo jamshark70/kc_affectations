@@ -1,10 +1,7 @@
 // some general definitions
 
-
-#[c, db, d, eb, e, f, gb, g, ab, a, bb, b].do { |key, i|
-	Mode(\default).v.copy.root_(i) => Mode(key);
-	Mode(key).v.transposeRoot(0) => Mode((key ++ "0").asSymbol);
-};
+// just in case... (won't load twice if already loaded)
+(thisProcess.nowExecutingPath.dirname.dirname +/+ "common/common-defs.scd").loadPath;
 
 
 { |minval, midval, maxval|
