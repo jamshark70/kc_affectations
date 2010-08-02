@@ -7,19 +7,12 @@ MIDIPort.init([1]);
 MIDIPort.resetAll;
 
 (
+\makeEmptyMixer8.eval;
+
 [m, n].free;
 m = MixerChannel(\test1, s, 1, 2);
 n = MixerChannel(\test2, s, 2, 2);
 //MixingBoard(\test, nil, m, n);
-
-b = MixingBoard.new;
-8.do { |i|
-	MixerChannelGUI.new(nil, b) => MCG.prNew(i);
-	if(MIDIPort.initialized) {
-		MixerMIDIControl(\omni, nil, MCG(i).v);
-	};
-	b.add(MCG(i).v);
-};
 
 m => MCG(0); n => MCG(1);
 //~master => MCG(7);
@@ -346,33 +339,235 @@ VC(\fmb).v.trace;
 
 Library.at(WrapInstr, \osc2).keys.asArray.sort;
 WrapInstr("osc2.vosc3mapfilt").listArgs;
+WrapInstr("osc2.vosc3mapfilt").openFile;
 
 MIDIPort.autoFreeSockets = true;
+
+WrapInstr("osc2.vosc3mapfporta").listArgs;
+WrapInstr("osc2.vosc3map").listArgs;
+
+WrapInstr("osc2.vosc3mapfporta", { |freq, freqlag = 0.1, ffreq = 2000, rq = 1|
+	// I should have been able to do this, but it duplicated the freq control...???
+	// debug later
+// 	WrapInstr.wrap("osc2.vosc3mapfilt", [nil, nil, Lag.kr(freq, freqlag)])
+	RLPF.ar(WrapInstr.wrap("osc2.vosc3map", [Lag.kr(freq, freqlag)]), ffreq, rq)
+}, [NoLagControlSpec(20, 20000, \exp, 0, 440), #[0, 1, 4], \freq, \myrq]);
 
 v = WrapInstr("osc2.vosc3mapfilt").miditest(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), \ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003], target: n);
 
 // no lag arg built in
 // I like the general direction of this, needs to be smoother
-v = WrapInstr("osc2.vosc3mapfilt").miditestMono(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), \ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003], target: n);
-v.portaTime = 1.1;
+v = WrapInstr("osc2.vosc3mapfporta").miditestMono(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), \ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003], target: n);
+v.portaTime = 0.6;
+v.unmapGlobal(\freqlag);
 
-FxPatch(
-	[ 'busfx', 'chorus2' ], [ 18, 1, 2, 3, KrNumberEditor(0.01285261232269, ControlSpec(0.0001, 0.2, 'exp', 0, 0.001, "")), KrNumberEditor(0.077426358822457, ControlSpec(0.001, 10, 'exp', 0.0, 0.001, "")), KrNumberEditor(0.00860870962377, ControlSpec(0.0001, 0.25, 'exp', 0.0, 0.0001, "")), KrNumberEditor(0.87266466760906, ControlSpec(0, 6.2831853071796, 'linear', 0.0, 0, "")), KrNumberEditor(0.15647481535888, ControlSpec(0.1, 10, 'exp', 0, 1, "")) ]
-)
-
+SynthDescLib.at(v.nodes[0].defname.asSymbol).controls.do(_.postln); ""
 
 p = Pbind(
 	\type, \voicerNote,
 	\voicer, v,
 	\root, 7,
 	\degree, Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf),
-	\dur, Pwrand(#[1, 1.5], #[0.9, 0.1], inf),
+	\dur, Pwrand(#[1, 2], #[0.9, 0.1], inf),
 	\legato, 1.01,
 	\gate, 0.8
 ).play;
 
-z = n.playfx(WrapInstr("busfx.chorus2"), [0, 1, 2, 3]); z.gui;
+p.stop;
+
+v.trace;
+
+z = n.playfx(WrapInstr("busfx.chorus2"), [0, 1, 2, 3, KrNumberEditor(0.01285261232269, ControlSpec(0.0001, 0.2, 'exp', 0, 0.001, "")), KrNumberEditor(0.077426358822457, ControlSpec(0.001, 10, 'exp', 0.0, 0.001, "")), KrNumberEditor(0.00860870962377, ControlSpec(0.0001, 0.25, 'exp', 0.0, 0.0001, "")), KrNumberEditor(0.87266466760906, ControlSpec(0, 6.2831853071796, 'linear', 0.0, 0, "")), KrNumberEditor(0.15647481535888, ControlSpec(0.1, 10, 'exp', 0, 1, ""))]); z.gui;
+
+\ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003
+
+
+~maps = v.globalControls.collectAs({ |gc| if(gc.name != \detune) { [gc.name, gc.asMap] } }, Array).select(_.notNil).flat;
+
+SynthDescLib.at(v.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+SynthDescLib.at(VC(\am).v.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+
+// promising - is this really easier than MonoPortaVoicer?
+p = n.play(Ptpar([
+	(0..2),
+	{ |i|
+		PmonoArtic(VC(\am).v.nodes[0].defname.asSymbol,
+			\root, 7,
+			\degree, Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf),
+			\dur, Pwrand(#[1, 2], #[0.9, 0.1], inf),
+			\legato, 1.01,
+			\gate, 0.8,
+			\freqlag, 0.3,
+			\detune, 1.003,
+			\gate, 0.8,
+			\pan, i.wrap(-1, 1)
+		)
+	} ! 3
+].flop.flat), (protoEvent: Event.default.proto_((detunedFreq: { ~freq.value }))));
 
 p.stop;
 
-\ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003
+(1044..1046).do(s.sendMsg(\n_free, _))
+
+PeakMonitor(n);
+
+s.sendMsg(\n_trace, 1022);
+
+(
+(keys: #[master, glrvbmc],
+make: { |name|
+	var	out;
+	~wt = \makeWavetables.eval(8, s, 2048, 48, { |numharm|
+		var	array = Array.triangleAmps(numharm),
+			tweak = ((numharm div: 5) + 1 .. (numharm-1)), i;
+		min(10, numharm div: 5).do {
+			i = tweak.takeAt(tweak.size.rand);
+			if(i.notNil) {
+				array[i] = array[i] * exprand(2.5, 6.0) * (i+1);
+			};
+		};
+		array
+	});
+	~target = MixerChannel(name, s, 2, 2, completionFunc: { |chan|
+		// eq?
+		~chorus = chan.playfx(WrapInstr("busfx.chorus2"), [0, 2, 2, 3, 0.01285261232269, 0.077426358822457, 0.00860870962377, 0.87266466760906, 0.15647481535888]);
+	});
+	WrapInstr("osc2.vosc3mapfporta", { |freq, freqlag = 0.1, ffreq = 2000, rq = 1, pan|
+		var	sig = WrapInstr.wrap("osc2.vosc3map", [Lag.kr(freq, freqlag)]);
+		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan)
+	}, [NoLagControlSpec(20, 20000, \exp, 0, 440), #[0, 1, 4], \freq, \myrq]);
+	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
+	// no global maps - this is mostly to generate the synthdef
+	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+	out
+},
+free: { ~target.free },
+maps: { |self| self[\value].globalControls.collectAs({ |gc| if(gc.name != \detune) { [gc.name, gc.asMap] } }, Array).select(_.notNil).flat },
+type: \voicer) => Fact(\armsmelVC);
+)
+
+Fact(\armsmelVC) => VC(\am);
+//VC(\am).v.gui;
+
+();
+d = Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf);
+
+p = { |i|
+	Pn(Event.silent(1), i) ++
+	PmonoArtic(VC(\am).v.nodes[0].defname.asSymbol,
+		\root, 7,
+		\degree, d,
+		\dur, Pwrand(#[1, 2], #[0.9, 0.1], inf),
+		\legato, 1.01,
+		\gate, 0.8,
+		\freqlag, 0.3,
+		\detune, 1.003,
+		\gate, 0.8,
+		\pan, i.wrap(-1, 1)
+	)
+};
+
+~ev = Event.default.proto_((detunedFreq: { ~freq.value }, group: n.synthgroup, bus: n.inbus.index));
+
+~streams = { |i| p.(i).asEventStreamPlayer(~ev) } ! 3;
+~streams.do { |strm, i|
+	var	upd;
+	upd = Updater(strm, { |obj, what|
+		[i, what].debug("notify");
+		if(what == \stopped) { upd.remove };
+	});
+};
+
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click"]])
+	.action_({ ~streams.do { |strm| strm.next(TempoClock.beats) } });
+w.front;
+
+~streams.do { |strm| strm.removedFromScheduler };
+
+// ok, f*ck - why is it so hard to trigger events by hand?
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport, immediateOSC: true);
+	~alwaysReset = true;
+	~pan = 0;
+	~degree = Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf);
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf);
+	~legato = 1.01;
+	~gate = 0.8;
+	~freqlag = 0.3;
+	~detune = 1.003;
+	~gate = 0.8;
+	~recvEventNotify = { |node| ~node = node };
+	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
+	~asPattern = {
+		Pbind(
+			\instrument, VC(\am).v.nodes[0].defname.asSymbol,
+			\node, Pfunc { ~node ?? { 0 } },
+// 			\protoEvent, Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
+			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
+			\node, Pfunc { ~node ?? { 0 } },
+			\root, 7,
+			\freq, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps,
+			\delta, BPStream(\dur),
+//			\legato, BPStream(\legato),
+			\gate, BPStream(\gate),
+			\freqlag, BPStream(\freqlag),
+			\detune, BPStream(\detune),
+			\gate, BPStream(\gate),
+			\pan, BPStream(\pan),
+			\chan, VC(\am).env.target
+		).trace
+	}
+} => PR(\melody);
+)
+
+3.do { |i|
+	var name = ("ml" ++ i).asSymbol;
+	BP(name).free;
+	PR(\melody).chuck(BP(name), nil, (pan: i-1));
+	0 => BP(name)
+};
+
+s.sendMsg(\n_free, 1049);
+BP(\ml1).node
+
+BP.all.do { |bp|
+	bp.reset = {
+		var	str;
+		~collIndex.debug("reset");
+		currentEnvironment.env.keys.do { |key|
+			if(key != \eventStream and: { (str = key.asString).contains("Stream") }) {
+				~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
+			}
+		}
+	};
+};
+
+
+BP.all.reset;
+BP.all.do({ |bp| bp.v.reset });  // WHY WHY WHY WHY?????!!!
+~ct = 0;
+
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click"]])
+	.action_({
+		3.do { |i|
+			var name = ("ml" ++ i).asSymbol;
+			if(i <= ~ct) { BP(name).triggerOneEvent(0) };
+		};
+		~ct = ~ct + 1;
+	});
+w.front;
+
+BP.all.stop;
+
+BP(\ml0).triggerOneEvent(0);
+e = BP(\ml0).eventStream.next(BP(\ml0).event.copy);
+
+BP(\ml0)[\eventStream]
+BP.all.do({ |bp| bp.event.immediateOSC = true });
