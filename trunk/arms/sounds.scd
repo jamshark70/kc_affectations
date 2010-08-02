@@ -323,3 +323,56 @@ PR(\rhythmBusPool).v[\driver]
 
 VC(\fmp).v.panic;
 VC(\fmb).v.trace;
+
+
+
+
+// ok, REAL sounds now
+
+~wt.free;
+~wt = \makeWavetables.eval(8, s, 2048, 48, { |numharm|
+	var	array = Array.triangleAmps(numharm),
+		tweak = ((numharm div: 5) + 1 .. (numharm-1)), i;
+	min(10, numharm div: 5).do {
+		i = tweak.takeAt(tweak.size.rand);
+		if(i.notNil) {
+			array[i] = array[i] * exprand(2.5, 6.0) * (i+1);
+		};
+	};
+	array
+});
+
+~wt[0].plotWavetable
+
+Library.at(WrapInstr, \osc2).keys.asArray.sort;
+WrapInstr("osc2.vosc3mapfilt").listArgs;
+
+MIDIPort.autoFreeSockets = true;
+
+v = WrapInstr("osc2.vosc3mapfilt").miditest(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), \ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003], target: n);
+
+// no lag arg built in
+// I like the general direction of this, needs to be smoother
+v = WrapInstr("osc2.vosc3mapfilt").miditestMono(0, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), \ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003], target: n);
+v.portaTime = 1.1;
+
+FxPatch(
+	[ 'busfx', 'chorus2' ], [ 18, 1, 2, 3, KrNumberEditor(0.01285261232269, ControlSpec(0.0001, 0.2, 'exp', 0, 0.001, "")), KrNumberEditor(0.077426358822457, ControlSpec(0.001, 10, 'exp', 0.0, 0.001, "")), KrNumberEditor(0.00860870962377, ControlSpec(0.0001, 0.25, 'exp', 0.0, 0.0001, "")), KrNumberEditor(0.87266466760906, ControlSpec(0, 6.2831853071796, 'linear', 0.0, 0, "")), KrNumberEditor(0.15647481535888, ControlSpec(0.1, 10, 'exp', 0, 1, "")) ]
+)
+
+
+p = Pbind(
+	\type, \voicerNote,
+	\voicer, v,
+	\root, 7,
+	\degree, Pseq(#[2, 5, 4, 2, 7, 6, 4, 8, 2, 5, 6, 4], inf),
+	\dur, Pwrand(#[1, 1.5], #[0.9, 0.1], inf),
+	\legato, 1.01,
+	\gate, 0.8
+).play;
+
+z = n.playfx(WrapInstr("busfx.chorus2"), [0, 1, 2, 3]); z.gui;
+
+p.stop;
+
+\ffreq, 2423.054873855, \rq, 1, \vsens, 0.84722220897675, \detune, 1.003
