@@ -81,7 +81,61 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		FreeSelf.kr(done);
 	}).add;
 
+	{ |name, ugenFunc, metadata, rates|
+		var	findCtl = { |cname|
+			block { |break|
+				UGen.buildSynthDef.children.do { |unit|
+					if(unit.isKindOf(Control)) {
+						unit.channels.do { |out|
+							if(out.name == cname) { break.(out) }
+						}
+					}
+				};
+				nil
+			}
+		};
+		SynthDef(name, { |distance = 5, distNear = 5, distFar = 14,
+			glrvbout, lcrvbout, glrvbamt = 0.075, lcrvbamt = 0.035,
+			attNearFreq = 9000, attFarFreq = 3000,
+			attNearDb = -5, attFarDb = -18,
+			attNearRs = 2, attFarRs = 2|
+			var result = SynthDef.wrap(ugenFunc), out, pan, outctl;
+			// don't add a new \pan control if the function already made one
+			if((pan = findCtl.(\pan)).isNil) {
+				pan = NamedControl(\pan, 0);
+			};
+			if((outctl = findCtl.(\outbus)).isNil and: { (outctl = findCtl.(\out)).isNil }) {
+	//			"make out namedcontrol".debug;
+				outctl = NamedControl(\out, 0);
+			};
+			if(result.rate != \audio) {
+				// not audio rate, look for Out unit
+				// (Out.ar returns 0.0, which is scalar)
+				out = UGen.buildSynthDef.children.detect(_.writesToBus);
+				if(out.notNil) {
+					result = out.inputs[out.inputs.size - out.numAudioChannels .. ];
+					UGen.buildSynthDef.children.remove(out);
+				} {
+					Error("Result of UGen func is not audio rate and has no Out unit").throw;
+				};
+			};
+	
+			distance = distance.clip(distNear, distFar);
+			result = result * distNear;
+			Out.ar(outctl, result / distance);
+	
+	//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
+			result = BHiShelf.ar(result,
+				distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
+				distance.linlin(distNear, distFar, attNearRs, attFarRs),
+				distance.linlin(distNear, distFar, attNearDb, attFarDb)
+			);
+			distance = distance.sqrt;
+			Out.ar(glrvbout, result * glrvbamt / distance);
+			Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
+		}, rates, metadata: metadata);
+	} => Func(\addRvbOut);
 
 
 	Library.put(\affectations, \commonLoaded, true);
-};
+} { true };	// avoid stupid "found nil" warning
