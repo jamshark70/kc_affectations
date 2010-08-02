@@ -88,7 +88,7 @@ PR(\abstractProcess).clone {
 	~freqlag = 0.3;
 	~detune = 1.003;
 	~gate = 0.8;
-	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger)).trace(prefix: "level: ");
+	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger));
 	~recvEventNotify = { |node| ~node = node };
 	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
 	~asPattern = {
