@@ -1,3 +1,5 @@
+s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
+
 ChuckableBrowser.newWindow;
 SynthDescLib.global.browse;
 Object.browse;
@@ -678,3 +680,54 @@ q = Pswitch(
 q.nextN(20);
 
 p.list[0].listVars
+
+
+
+// swirling, spatialized chords
+
+Fact(\armsChordVC) => VC(\ac);
+
+// quicky spatial test
+
+w.tryPerform(\close);
+w = Window("test", Rect(Window.screenBounds.width - 405, 5, 400, 400));
+d = Slider2D(w, w.view.bounds.insetBy(2, 2));
+w.front;
+
+
+(
+p = Pchain(
+	Ppar([
+		Pbind(
+			\type, \setProperties,
+			\receiver, d,
+			\args, #[x, y],
+			\x, Pkey(\pan).linlin(-1, 1, 0, 1),
+			\y, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 0, 1)
+		),
+		Pbind(
+			\type, \voicerNote,
+			\voicer, VC(\ac).v,
+			\degree, Pseq([9, 6, 4, 2, -1, -3], inf),
+			\legato, 0.7,
+			\gate, 0.2,
+			\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1)
+		)
+	]),
+	Pstutter(2, Pbind(
+		\distNear, 5,
+		\distFar, 20,
+		\angle, (Ptime() * 2pi / 2).wrap(0, 2pi),
+		\radius, sin(Ptime() * 2pi / 6.3746263543) * 0.45 + 0.55,
+		\pan, Pkey(\angle).cos * Pkey(\radius),
+		\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+		\glrvbout, ~glrvbmc.inbus,
+		\lcrvbout, ~lcrvbmc.inbus,
+		\dur, 0.1
+	))
+).play;
+)
+
+p.stop;
+
+VC(\ac).v.trace;
