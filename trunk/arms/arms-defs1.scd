@@ -155,7 +155,7 @@ WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_
 
 (keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
-	~target = MixerChannel(name, s, 2, 2, level: -17.dbamp, outbus: ~master);
+	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master);
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
 	};
