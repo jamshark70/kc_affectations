@@ -8,6 +8,11 @@ s.queryAllNodes;
 MIDIPort.init([1]);
 MIDIPort.resetAll;
 
+s.waitForBoot {
+	(thisProcess.nowExecutingPath.dirname.dirname +/+ "feet/feet-defs.scd").loadPath;
+	(thisProcess.nowExecutingPath.dirname +/+ "arms-defs1.scd").loadPath;
+};
+
 (
 \makeEmptyMixer8.eval;
 
@@ -24,6 +29,13 @@ MixingBoard.at(0).refresh;
 
 // in case I forgot to init midi first
 8.do { |i| MixerMIDIControl(\omni, nil, MCG(i).v); };
+
+
+[~glrvb, ~lcrvb].do { |patch| patch.run(false) };
+[~glrvb, ~lcrvb].do { |patch| patch.run(true) };
+
+[~glrvbmc, ~lcrvbmc, ~master].do { |mc, i| mc => MCG(i+5) };
+
 
 // sound for vertical curve trigger
 ~cb = Buffer.alloc(s, 1024, 1);
@@ -731,3 +743,139 @@ p = Pchain(
 p.stop;
 
 VC(\ac).v.trace;
+
+
+MBM(0)[\waterch].midiNotes.collect { |n| n.asInteger.asMIDINote };
+
+a = [48, 55, 57, 64, 66, 74, 81, 83];
+b = (a +.x #[-12, 0, 12]).removeDups.sort;	// for ordering
+c = (#[-12, 0, 12] +.t a);	// for hierarchy
+e = c.collect { |row, i|
+	row.collect { |item| [item, i] }
+}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } };
+
+c.do { |row|
+	var	lastI = 0, i;
+	row.do { |item|
+		i = b.indexOf(item);
+		Post << (i - lastI).reptChar($\t) << item.asMIDINote;
+		lastI = i;
+	};
+	Post << Char.nl;
+};
+
+// maybe choose the row based on height?
+// no, octave xposition will be too obvious
+C2	G2	A2		E3	F#3				D4				A4	B4
+			C3			G3	A3			E4	F#4				D5			A5	B5
+								C4				G4	A4			E5	F#5			D6	A6	B6
+
+
+~angle = GenericGlobalControl(\angle, 3997.asBus(server: Server.default), 0, [0, 2pi]);
+~rotSpeed = GenericGlobalControl(\rotSpeed, 4000.asBus(server: Server.default), 0, [0, 2]);
+
+~angle.dependants
+
+~win = ResizeFlowWindow("", Rect(10, 10, 200, 100));
+~angle.gui(~win);
+~win.startRow;
+~rotSpeed.gui(~win);
+~win.recursiveResize.front;
+
+[~angle, ~rotSpeed].do(_.watch);
+KrBusWatcher.newFrom(s).updateFreq = 8;
+
+s.makeBundle(nil, {
+	~angle.automate { Sweep.kr(1, LFNoise1.kr(0.25).exprange(0.1, 1.8)).wrap(0.0, 1.0) * 2pi };
+	~rotSpeed.automate {
+		var a = ~angle.kr,
+			last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+		a = a.wrap(last - pi, last + pi);
+		LocalOut.kr(a);
+		Slope.kr(a) / 2pi
+	};
+	~rotSpeed.autoSynth.moveAfter(~angle.autoSynth);
+});
+
+[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching };
+
+
+~guiUpdate = { |ev|
+	defer {
+		d.setXY(ev[\pan].linlin(-1, 1, 0, 1), ev[\distance].linlin(ev[\distNear], ev[\distFar], 0, 1))
+	};
+	ev
+};
+
+(
+p = Pfset(e {
+		[~angle, ~rotSpeed].do(_.watch);
+		KrBusWatcher.newFrom(s).updateFreq = 8;
+		s.makeBundle(nil, {
+			~angle.automate { Sweep.kr(1, LFNoise1.kr(0.25).exprange(0.1, 1.8)).wrap(0.0, 1.0) * 2pi };
+			~rotSpeed.automate {
+				var a = ~angle.kr,
+					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+				a = a.wrap(last - pi, last + pi);
+				LocalOut.kr(a);
+				Slope.kr(a) / 2pi
+			};
+			~rotSpeed.autoSynth.moveAfter(~angle.autoSynth);
+		});
+	},
+	Pbind(
+		\type, \voicerNote,
+		\voicer, VC(\ac).v,
+		\angle, ~angle, // (Ptime() * 2pi / 8).wrap(0, 2pi) + (Pkey(\row) * (2pi/3)),
+		\rotSpeed, ~rotSpeed.asPattern * 0.5,
+		\radius, sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed)),
+		\row, Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger),
+// 		#[midinote, row], Pxrand(e, inf),
+		\midinote, Pnsym1(Pkey(\row).collect(_.asSymbol),
+			c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
+		),
+		\gate, 0.2,
+		\distNear, 5,
+		\distFar, 20,
+		\pan, Pkey(\angle).cos * Pkey(\radius),
+		\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+		\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1),
+		\glrvbout, ~glrvbmc.inbus,
+		\lcrvbout, ~lcrvbmc.inbus,
+		\dur, Pkey(\rotSpeed).reciprocal / 40,
+		\sustain, Pkey(\dur) * (3 - Pkey(\row))  // hmm... not quite
+	).collect(~guiUpdate), //.trace(#[row, midinote]),
+	e { [~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching } }
+).play;
+)
+
+p.stop;
+
+p.isPlaying;
+
+PeakMonitor(~master)
+PeakMonitor(0)
+
+TempoClock.clear
+
+(1003..1004).do(s.sendMsg(\n_free, _))
+~angle.autoSynth
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+z = c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary);
+x = Pnsym1(0, z);
+y = x.asStream;
+
+x.lookUp(0);
+x.getPattern(0.asSymbol);
+
+x.inspect
+
+Pnsym1(0,
+			c.collectAs({ |row, i| i -> Pxrand(row, inf) }, IdentityDictionary)
+		).asStream.next
+
+
+c.collectAs({ |row, i| i -> Pxrand(row, inf) }, IdentityDictionary)[0].asStream.next
