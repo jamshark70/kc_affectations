@@ -127,3 +127,63 @@ PR(\abstractProcess).clone {
 } => PR(\melody);
 
 
+// chords (locomotive theme)
+// reuse spatialization from feet
+
+WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_env,
+		mod_lev, mod_ratio, detune, car_detune,
+		car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, attackTimeScale = 1, decayTimeScale = 1;
+	var sig, mod, car_amp, mod_amp, timeScale, car_eg, hit1;
+
+	car_eg = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]);
+		// once envelope starts going down, attack phase is over
+	hit1 = PulseCount.kr(HPZ1.kr(car_eg) < 0) > 0;
+	timeScale = Select.kr(hit1, [attackTimeScale, decayTimeScale]);
+	car_amp = Latch.kr(Sensitivity.kr(1, gate, car_vs), gate);
+	mod_amp = Latch.kr(Sensitivity.kr(1, gate, mod_vs), gate)
+		* EnvGen.kr(mod_env, gate, timeScale: timeScale);
+	mod_lev = mod_lev * basefreq / ((keyscale * freq) + (basefreq * (1 - keyscale)));
+	mod = Osc.ar(mod_buf, freq.madd(mod_ratio * [1, car_detune], detune * [1, -1]), 0, mod_amp * mod_lev);
+	freq = freq * [1, car_detune];
+	car_eg = EnvGen.kr(car_env, gate, timeScale: timeScale, doneAction:2);
+	LocalOut.kr(car_eg);
+	sig = Mix(Osc.ar(car_buf, freq + (mod * freq), 0, car_amp))
+		* car_eg;
+	Pan2.ar(sig, physicalPan);
+}, [\freq, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), [0.01, 300, \exponential], [1, 12, \linear, 0, 1], [-5, 5, \linear, 0, 0], \mydetune, \mybuf, \mybuf, nil, nil, \freq, [0.001, 1.0, \exp], #[0.1, 10, \exp, 0, 1]]);
+
+
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	~target = MixerChannel(name, s, 2, 2, level: -17.dbamp, outbus: ~master);
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\receivesSignalFrom, ~target);
+	};
+	~cb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1, 2, 3].reciprocal) });
+	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1]) });
+
+	~def = \addRvbOut.eval(\armsSpinChord, { |pan, freq = 440, gate = 1,
+			mod_lev = 0.01, mod_ratio = 1,
+			attackTimeScale = 1, decayTimeScale = 1|
+		WrapInstr("osc2.fm2car_stereo").valueArray([
+			pan, freq, gate,
+			Env.adsr(0.5, 0.8, 0.75, 1.0),	// car_env
+			Env.adsr(0.01, 1, 1, 1),	// mod_env
+			mod_lev, mod_ratio,
+			0 /* detune */, 0.99798261661993 /* car_detune */,
+			~cb.bufnum, ~mb.bufnum, 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
+			440, 0.28621534453893, /* basefreq, keyScale */
+			attackTimeScale, decayTimeScale
+		])
+	}).add;
+	SynthDescLib.at(~def.name.asSymbol).msgFuncKeepGate = true;
+
+	Voicer(20, ~def.name, target: ~target);
+},
+free: {
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\stopsReceivingFrom, ~target);
+	};
+	[~cb, ~mb, ~target].free
+}, type: \voicer) => Fact(\armsChordVC);
+
