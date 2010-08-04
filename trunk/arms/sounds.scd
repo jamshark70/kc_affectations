@@ -872,6 +872,17 @@ PR(\abstractProcess).clone {
 		c_ish: #[48, 55, 57, 64, 66, 74, 81, 83]
 	);
 
+	~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+	~midinote = Pnsym1(Pkey(\row).collect(_.asSymbol),
+		c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
+	);
+	~gate = 0.2;
+
+	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
+
+	~dur = Pkey(\rotSpeed).reciprocal / 40;
+	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
+
 	~maxRotSpeed = 2;
 	~maxRotSpeed_ = { |speed = 1|
 		if(speed != ~maxRotSpeed) {
@@ -934,36 +945,31 @@ PR(\abstractProcess).clone {
 				0
 			},
 			Pbind(
-				\angle, ~angle, // (Ptime() * 2pi / 8).wrap(0, 2pi) + (Pkey(\row) * (2pi/3)),
+				\angle, ~angle,
 				\rotSpeed, ~rotSpeed,
 				\radius, sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed)),
 				\pan, Pkey(\angle).cos * Pkey(\radius),
 				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
-
-// try: (\\[a-z_]*), .*,
-// --> \0, BPStream(\0),
-
-				\row, Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger),
-				\midinote, Pnsym1(Pkey(\row).collect(_.asSymbol),
-					c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
-				),
-				\gate, 0.2,
-				\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1),
-				\dur, Pkey(\rotSpeed).reciprocal / 40,
-				\sustain, Pkey(\dur) * (3 - Pkey(\row))  // hmm... not quite
-			).collect(~guiUpdate), //.trace(#[row, midinote]),
+				\row, BPStream(\row),
+				\midinote, BPStream(\midinote),
+				\gate, BPStream(\gate),
+				\mod_lev, BPStream(\mod_lev),
+				\dur, BPStream(\dur),
+				\sustain, BPStream(\dur)
+			)
 		])
 	};
 
 };
 
+
+
+
 				\row, Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger),
 				\midinote, Pnsym1(Pkey(\row).collect(_.asSymbol),
 					c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
 				),
 				\gate, 0.2,
-
 				\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1),
-
 				\dur, Pkey(\rotSpeed).reciprocal / 40,
 				\sustain, Pkey(\dur) * (3 - Pkey(\row))  // hmm... not quite
