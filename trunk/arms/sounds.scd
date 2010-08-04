@@ -1,4 +1,5 @@
 s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
+BP.loadGui;
 
 ChuckableBrowser.newWindow;
 SynthDescLib.global.browse;
@@ -813,14 +814,13 @@ p = Pfset(e {
 		KrBusWatcher.newFrom(s).updateFreq = 8;
 		s.makeBundle(nil, {
 			~angle.automate { Sweep.kr(1, LFNoise1.kr(0.25).exprange(0.1, 1.8)).wrap(0.0, 1.0) * 2pi };
-			~rotSpeed.automate {
+			~rotSpeed.automate({
 				var a = ~angle.kr,
 					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
 				a = a.wrap(last - pi, last + pi);
 				LocalOut.kr(a);
 				Slope.kr(a) / 2pi
-			};
-			~rotSpeed.autoSynth.moveAfter(~angle.autoSynth);
+			}, ~angle.autoSynth, \addAfter);
 		});
 	},
 	Pbind(
@@ -864,18 +864,106 @@ TempoClock.clear
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
 
-z = c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary);
-x = Pnsym1(0, z);
-y = x.asStream;
 
-x.lookUp(0);
-x.getPattern(0.asSymbol);
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote, distNear: 5, distFar: 20);
 
-x.inspect
+	~chords = (
+		c_ish: #[48, 55, 57, 64, 66, 74, 81, 83]
+	);
 
-Pnsym1(0,
-			c.collectAs({ |row, i| i -> Pxrand(row, inf) }, IdentityDictionary)
-		).asStream.next
+	~maxRotSpeed = 2;
+	~maxRotSpeed_ = { |speed = 1|
+		if(speed != ~maxRotSpeed) {
+			~maxRotSpeed = speed;
+			~rotSpeed.spec = [0, speed];  // asSpec is automatic
+		};
+		KrBusWatcher.newFrom(s).updateFreq = 8;
+		currentEnvironment
+	};
 
+	~prep = {
+		// maybe not ideal...?
+		~event.put(\glrvbout, ~glrvbmc.inbus).put(\lcrvbout, ~lcrvbmc.inbus);
 
-c.collectAs({ |row, i| i -> Pxrand(row, inf) }, IdentityDictionary)[0].asStream.next
+		~angle = GenericGlobalControl(\angle, 3997.asBus, 0, [0, 2pi]);
+		~rotSpeed = GenericGlobalControl(\rotSpeed, 4000.asBus, 0, [0, ~maxRotSpeed]);
+		~fullCh = IdentityDictionary.new;
+		~chords.tryPerform(\keysValuesDo, { |key, value|
+			~addChord.(key, value)
+		});
+	};
+
+	~addChord = { |key, value|
+		~fullCh.put(key, ~expandChord.(value))
+	};
+
+	~expandChord = { |array, adds = #[-12, 0, 12]|
+		var	result = (orig: array, allSort: (array +.x adds).removeDups.sort,
+			hierarchy: adds +.t array);
+		result.put(\sortWithLevels, result[\hierarchy].collect { |row, i|
+			row.collect { |item| [item, i] }
+		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
+	};
+
+	~startAuto = {
+		s.makeBundle(nil, {
+			~angle.automate {
+				Sweep.kr(1, LFNoise1.kr(0.25).exprange(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
+			};
+			~rotSpeed.automate({ |maxRotSpeed = 1|
+				var a = ~angle.kr,
+					last = Delay1.kr(a), //Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+				a = a.wrap(last - pi, last + pi);
+				//LocalOut.kr(a);
+				Slope.kr(a) / (2pi * maxRotSpeed)
+			}, ~angle.autoSynth, \addAfter);
+		});
+	};
+
+	~stopCleanup = {
+		[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching }
+	};
+
+	~asPattern = {
+		Pseq([
+			// workaround scel indent bug
+			'Pfuncn'.asClass.new {
+				[~angle, ~rotSpeed].do(_.watch);
+				~startAuto.();
+				0
+			},
+			Pbind(
+				\angle, ~angle, // (Ptime() * 2pi / 8).wrap(0, 2pi) + (Pkey(\row) * (2pi/3)),
+				\rotSpeed, ~rotSpeed,
+				\radius, sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed)),
+				\pan, Pkey(\angle).cos * Pkey(\radius),
+				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+
+// try: (\\[a-z_]*), .*,
+// --> \0, BPStream(\0),
+
+				\row, Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger),
+				\midinote, Pnsym1(Pkey(\row).collect(_.asSymbol),
+					c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
+				),
+				\gate, 0.2,
+				\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1),
+				\dur, Pkey(\rotSpeed).reciprocal / 40,
+				\sustain, Pkey(\dur) * (3 - Pkey(\row))  // hmm... not quite
+			).collect(~guiUpdate), //.trace(#[row, midinote]),
+		])
+	};
+
+};
+
+				\row, Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger),
+				\midinote, Pnsym1(Pkey(\row).collect(_.asSymbol),
+					c.collectAs({ |row, i| i.asSymbol -> Pxrand(row, inf) }, IdentityDictionary)
+				),
+				\gate, 0.2,
+
+				\mod_lev, Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1),
+
+				\dur, Pkey(\rotSpeed).reciprocal / 40,
+				\sustain, Pkey(\dur) * (3 - Pkey(\row))  // hmm... not quite
