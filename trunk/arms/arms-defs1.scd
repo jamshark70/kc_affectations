@@ -155,6 +155,7 @@ WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_
 
 (keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
+	var	args;
 	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master);
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
@@ -168,7 +169,7 @@ make: { |name|
 		WrapInstr("osc2.fm2car_stereo").valueArray([
 			pan, freq, gate,
 			Env.adsr(0.5, 0.8, 0.75, 1.0),	// car_env
-			Env.adsr(0.01, 1, 1, 1),	// mod_env
+			Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),	// mod_env
 			mod_lev, mod_ratio,
 			0 /* detune */, 0.99798261661993 /* car_detune */,
 			~cb.bufnum, ~mb.bufnum, 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
@@ -178,7 +179,13 @@ make: { |name|
 	}).add;
 	SynthDescLib.at(~def.name.asSymbol).msgFuncKeepGate = true;
 
-	Voicer(20, ~def.name, target: ~target);
+	// default args for voicer: supply reverb targets automatically
+	if(~glrvbmc.isKindOf(MixerChannel)) {
+		args = [glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus];
+	} {
+		"VC(%): Spatialization reverbs not found.".format(name.asCompileString).warn;
+	};
+	Voicer(20, ~def.name, args, target: ~target);
 },
 free: {
 	[~glrvbmc, ~lcrvbmc].do { |mc|
