@@ -154,8 +154,10 @@ WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_
 
 
 (keys: #[master, glrvbmc, lcrvbmc],
+defaultCarDetune: 1.005716,
+defaultDetune: 1.25,
 make: { |name|
-	var	args;
+	var	args, out;
 	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master);
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
@@ -164,14 +166,14 @@ make: { |name|
 	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1]) });
 
 	~def = \addRvbOut.eval(\armsSpinChord, { |pan, freq = 440, gate = 1,
-			mod_lev = 0.01, mod_ratio = 1,
+			mod_lev = 0.01, mod_ratio = 1, detune = 0, car_detune = 0.99798261661993,
 			attackTimeScale = 1, decayTimeScale = 1|
 		WrapInstr("osc2.fm2car_stereo").valueArray([
 			pan, freq, gate,
 			Env.adsr(0.5, 0.8, 0.75, 1.0),	// car_env
 			Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),	// mod_env
 			mod_lev, mod_ratio,
-			0 /* detune */, 0.99798261661993 /* car_detune */,
+			detune, car_detune,
 			~cb.bufnum, ~mb.bufnum, 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
 			440, 0.28621534453893, /* basefreq, keyScale */
 			attackTimeScale, decayTimeScale
@@ -185,7 +187,10 @@ make: { |name|
 	} {
 		"VC(%): Spatialization reverbs not found.".format(name.asCompileString).warn;
 	};
-	Voicer(20, ~def.name, args, target: ~target);
+	out = Voicer(20, ~def.name, args, target: ~target);
+	out.mapGlobal(\detune, nil, ~defaultDetune, #[-5, 5]);
+	out.mapGlobal(\car_detune, nil, ~defaultCarDetune, \mydetune);
+	out
 },
 free: {
 	[~glrvbmc, ~lcrvbmc].do { |mc|
