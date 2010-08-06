@@ -138,3 +138,18 @@ SynthDescLib.at(\repeatingRhythmBus)
 	return
 } ! ~rhybus.numChannels;
 )
+
+
+
+p.midinote = /*\patRejectLastN.eval(*/Plazy { |ev|
+	var	arpeg = (~arpegStream ?? { ~makeStreamForKey.(\arpeg); ~arpegStream }).next(ev),
+		debugpats;
+	Pnsym1(Pkey(\row).collect(_.asSymbol), debugpats = ev[\chordItem][\hierarchyDict].collect { |row|
+		ArpegPat(arpeg).asPattern(row)
+	}.postcs).collect { |n| if(Mode(\g).cps(n) < 30) {
+		[n, ev[\row].asCompileString, ev[\row].asSymbol.asCompileString, debugpats[ev[\row].asSymbol]].debug("oh shit");
+		debugpats.keysDo { |k| [k, ev[\row].asSymbol, k === ev[\row].asSymbol, k.asSymbol, ev[\row].asSymbol, k.asSymbol === ev[\row].asSymbol].asCompileString.debug("test") };
+	}; n }
+}/*, 2)*/;
+
+
