@@ -940,13 +940,13 @@ PR(\abstractProcess).clone {
 	~startAuto = {
 		s.makeBundle(nil, {
 			~angle.automate {
-				Sweep.kr(1, LFNoise1.kr(0.25).exprange(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
+				Sweep.kr(1, LFNoise1.kr(0.25).range(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
 			};
 			~rotSpeed.automate({ |maxRotSpeed = 1|
 				var a = ~angle.kr,
-					last = Delay1.kr(a); //Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
 				a = a.wrap(last - pi, last + pi);
-				//LocalOut.kr(a);
+				LocalOut.kr(a);
 				Slope.kr(a) / (2pi * maxRotSpeed)
 			}, target: ~angle.autoSynth, addAction: \addAfter);
 		});
@@ -965,7 +965,7 @@ PR(\abstractProcess).clone {
 	};
 
 
-	~asPattern = {
+	~asPattern = { |envir, angle, rotSpeed|
 		Pseq([
 			// workaround scel indent bug
 			'Pfuncn'.asClass.new {
@@ -973,23 +973,23 @@ PR(\abstractProcess).clone {
 				~startAuto.();
 				0
 			},
-			Pbind(
-				\angle, ~angle,
-				\rotSpeed, ~rotSpeed,
-				\radius, BPStream(\radius),
+			DebugPbind(
+				\angle, angle ? ~angle,
+				\rotSpeed, rotSpeed ? ~rotSpeed,
+				\radius, BPStream(\radius, envir: envir),
 				\pan, Pkey(\angle).cos * Pkey(\radius),
 				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
-				\chord, BPStream(\chord),
-				\chordItem, BPStream(\chordItem),
-				\row, BPStream(\row),
-				\freq, BPStream(\midinote),
+				\chord, BPStream(\chord, envir: envir),
+				\chordItem, BPStream(\chordItem, envir: envir),
+				\row, BPStream(\row, envir: envir),
+				\freq, BPStream(\midinote, envir: envir),
 				\mode, Pfunc { |ev| ev[\chordItem][\mode] },
-				\gate, BPStream(\gate),
-				\mod_lev, BPStream(\mod_lev),
-				\dur, BPStream(\dur),
-				\length, BPStream(\sustain),
-				\attackTimeScale, BPStream(\attScale),
-				\decayTimeScale, BPStream(\decScale)
+				\gate, BPStream(\gate, envir: envir),
+				\mod_lev, BPStream(\mod_lev, envir: envir),
+				\dur, BPStream(\dur, envir: envir),
+				\length, BPStream(\sustain, envir: envir),
+				\attackTimeScale, BPStream(\attScale, envir: envir),
+				\decayTimeScale, BPStream(\decScale, envir: envir)
 			) //.trace
 		])
 	};
@@ -1006,27 +1006,28 @@ BP(\ac) =>.72 MT(1);
 
 
 p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.22, 0.08);
-p.sustain = (Pkey(\dur) * (12 / (Pkey(\row) + 1)));  // hmm... not quite
-p.sustain = Pkey(\dur) * Pswitch1([Pwhite(1.8, 3.5, inf), Pwhite(3.0, 6.0, inf), Pwhite(6.0, 14.0, inf)], Pkey(\row));
+// p.sustain = (Pkey(\dur) * (12 / (Pkey(\row) + 1)));  // hmm... not quite
+// p.sustain = Pkey(\dur) * Pswitch1([Pwhite(1.8, 3.5, inf), Pwhite(3.0, 6.0, inf), Pwhite(6.0, 14.0, inf)], Pkey(\row));
 p.sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
 
 p.attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.5, 1);
 
 p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 1, 4);
 
-p.rotSpeed.autoSynth.trace
-
 p.radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
 
 p.arpeg = \armsCh;
 
-{ |notes| Pwalk(notes, Pwrand([
-	Pn(1, { rrand(2, 4) }),
-	Pn(-1, { rrand(2, 4) }),
-	-2, 2,
-], #[0.4, 0.1, 0.1, 0.4], inf), Pseq(#[1, -1], inf), 0) } => ArpegPat(\armsCh);
-
-
+{ |notes| 
+	Penvir((),
+		Pwalk(notes, Pwrand([
+			Pseq([Pn(1, { ~n = rrand(2, 4) }), Pfuncn { 1 - ~n }], 1),  // 1-n == (n-1).neg
+			Pseq([Pn(-1, { ~n = rrand(2, 4) }), Pfuncn { ~n - 1 }], 1),
+// 			Pn(-1, { rrand(2, 4) }),
+			-2, 2,
+		], #[0.4, 0.1, 0.1, 0.4], inf), Pseq(#[1, -1], inf), 0)
+	)
+} => ArpegPat(\armsCh);
 
 p.midinote = \patRejectLastN.eval(Plazy { |ev|
 	var	arpeg = (~arpegStream ?? { ~makeStreamForKey.(\arpeg); ~arpegStream }).next(ev);
@@ -1034,3 +1035,34 @@ p.midinote = \patRejectLastN.eval(Plazy { |ev|
 		ArpegPat(arpeg).asPattern(row)
 	}, Pkey(\row))
 }, 1);
+
+
+// triggerable by rotSpeed threshold
+
+p.makeOneArpeg = {
+	var	self = currentEnvironment, envir = (), pat;
+	~patKeys.do { |key| envir[key] = key.envirGet };
+	envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
+	envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
+	Penvir(envir,
+		Plazy {
+			pat = self.asPattern(envir, ~angle, ~rotSpeed);
+			defer { pat.inspect };
+			CleanupStream(pat.asStream, {
+				#[angle, rotSpeed].do { |key| key.envirGet.debug("freeing").free }
+			})
+		}
+	)
+};
+
+p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeeds];
+
+// \distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+// \mode, Pfunc { |ev| ev[\chordItem][\mode] },
+// \pan, Pkey(\angle).cos * Pkey(\radius),
+
+q = p.makeOneArpeg;
+q.inspect
+q.envir[\radiusStream].inspect
+
+r = q.play(protoEvent: p.event.copy);
