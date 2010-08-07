@@ -1030,9 +1030,9 @@ p.arpeg = \armsCh;
 } => ArpegPat(\armsCh);
 
 p.midinote = \patRejectLastN.eval(Plazy { |ev|
-	var	arpeg = (~arpegStream ?? { ~makeStreamForKey.(\arpeg); ~arpegStream }).next(ev);
-	Pswitch1(ev[\chordItem][\hierarchy].collect { |row|
-		ArpegPat(arpeg).asPattern(row)
+	var	arpeg = ~arpegStream.next(ev).debug("arpeg");
+	Pswitch1(ev[\chordItem][\hierarchy].debug("hierarchy").collect { |row|
+		ArpegPat(arpeg).asPattern(row).debug("pattern")
 	}, Pkey(\row))
 }, 1);
 
@@ -1041,21 +1041,24 @@ p.midinote = \patRejectLastN.eval(Plazy { |ev|
 
 p.makeOneArpeg = {
 	var	self = currentEnvironment, envir = (), pat;
+	~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
 	~patKeys.do { |key| envir[key] = key.envirGet };
 	envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
 	envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
 	Penvir(envir,
 		Plazy {
 			pat = self.asPattern(envir, ~angle, ~rotSpeed);
+			pat = Pfset(nil, pat, {
+				"\n\n\nIN CLEANUP".debug;
+				#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
+			});
 			defer { pat.inspect };
-			CleanupStream(pat.asStream, {
-				#[angle, rotSpeed].do { |key| key.envirGet.debug("freeing").free }
-			})
+			pat
 		}
 	)
 };
 
-p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeeds];
+p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeed, fullCh, arpeg, arpegStream];
 
 // \distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
 // \mode, Pfunc { |ev| ev[\chordItem][\mode] },
@@ -1066,3 +1069,8 @@ q.inspect
 q.envir[\radiusStream].inspect
 
 r = q.play(protoEvent: p.event.copy);
+r.stop;
+
+q.envir[\arpeg]
+q.envir[\arpegStream]
+p.arpegStream
