@@ -153,3 +153,183 @@ p.midinote = /*\patRejectLastN.eval(*/Plazy { |ev|
 }/*, 2)*/;
 
 
+
+
+// keeping for posterity, but the 'makeOnePlayer' approach has failed utterly
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote, distNear: 5, distFar: 20, midi: false);
+	~alwaysReset = true;
+
+	~chords = (
+		// each is mode name (symbol), then midinotes
+		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83]
+	);
+
+	~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+	~chord = Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
+	~chordItem = Pfunc { |ev|
+		if(ev[\chord] != ~lastChord) {
+			~lastChord = ev[\chord];
+			// force reset - this makes Plazy reevaluate and grab other chord item
+			~makeStreamForKey.(\midinote);
+		};
+		~fullCh[~lastChord]
+	};
+	~midinote = \patRejectLastN.eval(Plazy { |ev|
+		var	arpeg = ~arpegStream.next(ev);
+		Pswitch1(ev[\chordItem][\hierarchy].collect { |row|
+			ArpegPat(arpeg).asPattern(row)
+		}, Pkey(\row))
+	}, 1);
+	~arpeg = \armsCh;
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 1, 4);
+// 	~gate = 0.2;
+
+	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
+	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
+// 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
+
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.22, 0.08);
+	~sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
+// 	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
+// 	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
+	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.5, 1);
+// 	~attScale = max(0.1, Pkey(\rotSpeed)).reciprocal * 0.2;
+	~decScale = Pkey(\attackTimeScale);
+
+	~maxRotSpeed = 2;
+	~maxRotSpeed_ = { |speed = 1|
+		if(speed != ~maxRotSpeed) {
+			~maxRotSpeed = speed;
+			~rotSpeed.spec = [0, speed];  // asSpec is automatic
+		};
+		currentEnvironment
+	};
+
+	~prep = {
+		~angle = GenericGlobalControl(\angle, 3997.asBus, 0, [0, 2pi]);
+		~rotSpeed = GenericGlobalControl(\rotSpeed, 4000.asBus, 0, [0, ~maxRotSpeed]);
+		KrBusWatcher.newFrom(s).updateFreq = 8;
+		~fullCh = IdentityDictionary.new;
+		~chords.tryPerform(\keysValuesDo, { |key, value|
+			~addChord.(key, value)
+		});
+	};
+
+	~addChord = { |key, value|
+		~fullCh.put(key, ~expandChord.(value))
+	};
+
+	~expandChord = { |array, adds = #[-7, 0, 7]|
+		var	mapped = array[1..].mapMode(array[0]),
+			result = (mode: array[0], orig: mapped, allSort: (mapped +.x adds).removeDups.sort,
+			hierarchy: adds +.t mapped);
+		result.put(\hierarchyDict,
+			result[\hierarchy].collectAs({ |row, i| i.asSymbol -> row },
+				IdentityDictionary)
+		)
+		.put(\sortWithLevels, result[\hierarchy].collect { |row, i|
+			row.collect { |item| [item, i] }
+		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
+	};
+
+	~startAuto = { |ev, envir, angle(~angle), rotSpeed(~rotSpeed)|
+		s.makeBundle(nil, {
+			angle.automate {
+				Sweep.kr(1, LFNoise1.kr(0.25).range(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
+			};
+			rotSpeed.automate({ |maxRotSpeed = 1|
+				var a = ~angle.kr,
+					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+				a = a.wrap(last - pi, last + pi);
+				LocalOut.kr(a);
+				Slope.kr(a) / (2pi * maxRotSpeed)
+			}, target: angle.autoSynth, addAction: \addAfter);
+		});
+	};
+
+	~stopCleanup = {
+		[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching }
+	};
+
+	~freeCleanup = {
+		[~angle, ~rotSpeed].free;
+	};
+
+	~useGui = { |vpi|
+		[~angle, ~rotSpeed].do { |gc| gc => VP(vpi) };
+	};
+
+
+	~asPattern = { |envir, angle, rotSpeed|
+		Pseq([
+			// workaround scel indent bug
+			'Pfuncn'.asClass.new { |ev|
+				[angle ? ~angle, rotSpeed ? ~rotSpeed].do(_.watch);
+				// this is a bit of a hack, but so is the rest of it!
+				BP(envir[\collIndex]).startAuto.(ev, envir, angle, rotSpeed);
+				Event.silent(0)
+			},
+			Pbind(
+				\angle, angle ? ~angle,
+				\rotSpeed, rotSpeed ? ~rotSpeed,
+				\radius, BPStream(\radius, envir: envir),
+				\pan, Pkey(\angle).cos * Pkey(\radius),
+				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+				\chord, BPStream(\chord, envir: envir),
+				\chordItem, BPStream(\chordItem, envir: envir),
+				\row, BPStream(\row, envir: envir),
+				\freq, BPStream(\midinote, envir: envir),
+				\mode, Pfunc { |ev| ev[\chordItem][\mode] },
+				\gate, BPStream(\gate, envir: envir),
+				\mod_lev, BPStream(\mod_lev, envir: envir),
+				\dur, BPStream(\dur, envir: envir),
+				\length, BPStream(\sustain, envir: envir),
+				\attackTimeScale, BPStream(\attScale, envir: envir),
+				\decayTimeScale, BPStream(\decScale, envir: envir)
+			) //.trace
+		])
+	};
+
+	~speedThresh = 0.15;
+	~patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeed, fullCh, arpeg, arpegStream, collIndex];
+
+	~makeOneArpeg = { |envir, angle, rotSpeed|
+		var	speedRising = true, thresh = ~speedThresh;
+		Pwhile1(
+			{	|inevent, next|
+				(speedRising or: { (next[\rotSpeed] ? 0) >= thresh })
+			},
+			~asPattern.(envir, angle, rotSpeed).collect { |ev|
+				if((ev[\rotSpeed] ? 0) >= thresh)
+					{ speedRising = false };
+				ev
+			}
+		)
+	};
+
+	~makeOnePlayer = {
+		// envir is to isolate BPStreams
+		var	self = currentEnvironment, envir = (), pat, upd;
+		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
+		~patKeys.do { |key| envir[key] = key.envirGet };
+		envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
+		envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
+		pat = Penvir(envir,
+			// force pattern to be made in context of the local envir
+			Plazy { self.makeOneArpeg(envir, ~angle, ~rotSpeed) }
+		).asEventStreamPlayer(BP(~collIndex).prepareEvent);
+		// for some stupid reason, Pfset's cleanup func did not fire
+		// so I have to use a notification to remove the global controls created locally
+		upd = Updater(pat, { |obj, what|
+			if(what == \stopped) {
+				upd.remove;
+				#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
+			};
+		});
+		pat
+	};
+
+} => PR(\armsChord);
+)
