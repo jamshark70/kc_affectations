@@ -971,7 +971,7 @@ PR(\abstractProcess).clone {
 			'Pfuncn'.asClass.new {
 				[~angle, ~rotSpeed].do(_.watch);
 				~startAuto.();
-				0
+				Event.silent(0)
 			},
 			Pbind(
 				\angle, angle ? ~angle,
@@ -993,6 +993,45 @@ PR(\abstractProcess).clone {
 			) //.trace
 		])
 	};
+
+	~speedThresh = 0.15;
+
+	~makeOneArpeg = { |envir, angle, rotSpeed|
+		var	speedRising = true, thresh = ~speedThresh;
+		Pwhile1(
+			{	|inevent, next|
+				speedRising or: { (next[\rotSpeed] ? 0) >= ~thresh }
+			},
+			~asPattern.(envir, angle, rotSpeed).collect { |ev|
+				if(speedRising.not or: { (ev[\rotSpeed] ? 0) >= ~thresh })
+					{ speedRising = false };
+				ev
+			}
+		)
+	};
+
+	~makeOnePlayer = {
+		// envir is to isolate BPStreams
+		var	self = currentEnvironment, envir = (), pat, upd;
+		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
+		~patKeys.do { |key| envir[key] = key.envirGet };
+		envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
+		envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
+		pat = Penvir(envir,
+			// force pattern to be made in context of the local envir
+			Plazy { self.makeOneArpeg(envir, ~angle, ~rotSpeed) }
+		).asEventStreamPlayer(BP(~collIndex).prepareEvent);
+		// for some stupid reason, Pfset's cleanup func did not fire
+		// so I have to use a notification to remove the global controls created locally
+		upd = Updater(pat, { |obj, what|
+			if(what == \stopped) {
+				upd.remove;
+				#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
+			};
+		});
+		pat
+	};
+
 } => PR(\armsChord);
 )
 
@@ -1048,10 +1087,10 @@ p.makeOneArpeg = {
 	envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
 	pat = Penvir(envir,
 		// force pattern to be made in context of the local envir
-		Plazy {
+		'Plazy'.asClass.new {
 			self.asPattern(envir, ~angle, ~rotSpeed);
 		}
-	).asEventStreamPlayer(~event.copy);
+	).asEventStreamPlayer(BP(~collIndex).prepareEvent);
 	// for some stupid reason, Pfset's cleanup func did not fire
 	// so I have to use a notification to remove the global controls created locally
 	upd = Updater(pat, { |obj, what|
@@ -1069,15 +1108,16 @@ p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, susta
 // \mode, Pfunc { |ev| ev[\chordItem][\mode] },
 // \pan, Pkey(\angle).cos * Pkey(\radius),
 
-q = p.makeOneArpeg;
+q = p.makeOnePlayer;
 q.inspect
 q.envir[\radiusStream].inspect
 
-r = q.play(protoEvent: p.event.copy);
+r = q.play;
 r.stop;
 
 #[angle, rotSpeed].do { |key| q.envir[key].debug("freeing").free }
 
-q.envir[\arpeg]
-q.envir[\arpegStream]
-p.arpegStream
+
+VC(\ac).v.playingNodes[0].trace;
+293.665.cpsmidi
+BP.browse
