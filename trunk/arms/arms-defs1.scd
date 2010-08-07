@@ -199,3 +199,15 @@ free: {
 	[~cb, ~mb, ~target].free
 }, type: \voicer) => Fact(\armsChordVC);
 
+
+{ |notes| 
+	Penvir((),
+		Pwalk(notes, Pwrand([
+			Pseq([Pn(1, { ~n = rrand(2, 4) }), Pfuncn { 1 - ~n }], 1),  // 1-n == (n-1).neg
+			Pseq([Pn(-1, { ~n = rrand(2, 4) }), Pfuncn { ~n - 1 }], 1),
+// 			Pn(-1, { rrand(2, 4) }),
+			-2, 2,
+		], #[0.4, 0.1, 0.1, 0.4], inf), Pseq(#[1, -1], inf), 0)
+	)
+} => ArpegPat(\armsCh);
+
