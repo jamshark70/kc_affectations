@@ -973,7 +973,7 @@ PR(\abstractProcess).clone {
 				~startAuto.();
 				0
 			},
-			DebugPbind(
+			Pbind(
 				\angle, angle ? ~angle,
 				\rotSpeed, rotSpeed ? ~rotSpeed,
 				\radius, BPStream(\radius, envir: envir),
@@ -1040,22 +1040,27 @@ p.midinote = \patRejectLastN.eval(Plazy { |ev|
 // triggerable by rotSpeed threshold
 
 p.makeOneArpeg = {
-	var	self = currentEnvironment, envir = (), pat;
+	// envir is to isolate BPStreams
+	var	self = currentEnvironment, envir = (), pat, upd;
 	~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
 	~patKeys.do { |key| envir[key] = key.envirGet };
 	envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
 	envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
-	Penvir(envir,
+	pat = Penvir(envir,
+		// force pattern to be made in context of the local envir
 		Plazy {
-			pat = self.asPattern(envir, ~angle, ~rotSpeed);
-			pat = Pfset(nil, pat, {
-				"\n\n\nIN CLEANUP".debug;
-				#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
-			});
-			defer { pat.inspect };
-			pat
+			self.asPattern(envir, ~angle, ~rotSpeed);
 		}
-	)
+	).asEventStreamPlayer(~event.copy);
+	// for some stupid reason, Pfset's cleanup func did not fire
+	// so I have to use a notification to remove the global controls created locally
+	upd = Updater(pat, { |obj, what|
+		if(what == \stopped) {
+			upd.remove;
+			#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
+		};
+	});
+	pat
 };
 
 p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeed, fullCh, arpeg, arpegStream];
@@ -1070,6 +1075,8 @@ q.envir[\radiusStream].inspect
 
 r = q.play(protoEvent: p.event.copy);
 r.stop;
+
+#[angle, rotSpeed].do { |key| q.envir[key].debug("freeing").free }
 
 q.envir[\arpeg]
 q.envir[\arpegStream]
