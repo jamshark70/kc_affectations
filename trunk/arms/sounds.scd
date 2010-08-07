@@ -884,21 +884,26 @@ PR(\abstractProcess).clone {
 		};
 		~fullCh[~lastChord]
 	};
-	~midinote = Plazy { |ev|
-		var	arpeg = (~arpegStream ?? { ~makeStreamForKey.(\arpeg); ~arpegStream }).next(ev);
+	~midinote = \patRejectLastN.eval(Plazy { |ev|
+		var	arpeg = ~arpegStream.next(ev);
 		Pswitch1(ev[\chordItem][\hierarchy].collect { |row|
 			ArpegPat(arpeg).asPattern(row)
 		}, Pkey(\row))
-	};
-	~arpeg = \xrand;
-	~gate = 0.2;
+	}, 1);
+	~arpeg = \armsCh;
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 1, 4);
+// 	~gate = 0.2;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
-	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
+	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
+// 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
 
-	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
-	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
-	~attScale = max(0.1, Pkey(\rotSpeed)).reciprocal * 0.2;
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.22, 0.08);
+	~sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
+// 	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
+// 	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
+	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.5, 1);
+// 	~attScale = max(0.1, Pkey(\rotSpeed)).reciprocal * 0.2;
 	~decScale = Pkey(\attackTimeScale);
 
 	~maxRotSpeed = 2;
@@ -909,11 +914,53 @@ PR(\abstractProcess).clone {
 		};
 		currentEnvironment
 	};
+	~speedThresh = 0.15;
+	~angleBus = 3997;
+	~rotSpeedBus = 4000;
 
 	~prep = {
-		~angle = GenericGlobalControl(\angle, 3997.asBus, 0, [0, 2pi]);
-		~rotSpeed = GenericGlobalControl(\rotSpeed, 4000.asBus, 0, [0, ~maxRotSpeed]);
+		~angle = GenericGlobalControl(\angle, ~angleBus.debug("anglebus").asBus(\control).debug("result"), 0, [0, 2pi]);
+		~rotSpeed = GenericGlobalControl(\rotSpeed, ~rotSpeedBus.asBus(\control), 0, [0, ~maxRotSpeed]);
 		KrBusWatcher.newFrom(s).updateFreq = 8;
+		~initChords.();
+	};
+
+	~copyProc = { |name ((~collIndex ++ UniqueID.next).asSymbol)|
+		var	self = currentEnvironment, parms;
+		BP(name).free;
+		parms = (
+			angleBus: BusDict.control(s, 1, name + "angle"),
+			rotSpeedBus: BusDict.control(s, 1, name + "rotSpeed"),
+			shouldFreeGCs: true,
+			initChords: {
+				~fullCh = self[\fullCh];
+			}
+		);
+		// this is so I can change patterns in the dispatcher
+		// and they get spawned thru to the children
+		~bpsKeys.do { |key| parms[key] = key.envirGet };
+		PR(\armsChord).chuck(BP(name), nil, parms);
+		~event[\voicer] => BP(name)	// should return BP
+	};
+
+	~spawnChild = { |quant = 0|
+		var bp = ~copyProc.(),
+		upd = Updater(bp, { |obj, what, more|
+			if(more == \stopped) {
+				upd.remove;
+				if(BP.exists(bp.collIndex)) {
+					bp.free;
+				};
+			}
+		});
+		bp.play(quant);
+	};
+
+	~bpsKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
+
+	// dispatcher will override this to pull prepared fullCh dictionary,
+	// rather than rebuilding every time
+	~initChords = {
 		~fullCh = IdentityDictionary.new;
 		~chords.tryPerform(\keysValuesDo, { |key, value|
 			~addChord.(key, value)
@@ -937,27 +984,51 @@ PR(\abstractProcess).clone {
 		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
 	};
 
+// 	~startAuto = { |ev, envir, angle(~angle), rotSpeed(~rotSpeed)|
+// 		s.makeBundle(nil, {
+// 			angle.automate {
+// 				Sweep.kr(1, LFNoise1.kr(0.25).range(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
+// 			};
+// 			rotSpeed.automate({ |maxRotSpeed = 1|
+// 				var a = ~angle.kr,
+// 					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
+// 				a = a.wrap(last - pi, last + pi);
+// 				LocalOut.kr(a);
+// 				Slope.kr(a) / (2pi * maxRotSpeed)
+// 			}, target: angle.autoSynth, addAction: \addAfter);
+// 		});
+// 	};
+
 	~startAuto = {
+		var	proportion = rrand(0.2, 0.7);;
 		s.makeBundle(nil, {
-			~angle.automate {
-				Sweep.kr(1, LFNoise1.kr(0.25).range(0.1, 1.8)).wrap(0.0, 1.0) * 2pi
-			};
-			~rotSpeed.automate({ |maxRotSpeed = 1|
-				var a = ~angle.kr,
-					last = Select.kr(Impulse.kr(0), [LocalIn.kr(1), a]);
-				a = a.wrap(last - pi, last + pi);
-				LocalOut.kr(a);
-				Slope.kr(a) / (2pi * maxRotSpeed)
-			}, target: ~angle.autoSynth, addAction: \addAfter);
+			~rotSpeed.automate({
+				EnvGen.kr(Env(#[0.1, 1.9, 0.14], [proportion, 1 - proportion], \sin),
+					timeScale: rrand(3.5, 8.0), doneAction: 2)
+			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
+			~angle.automate({
+				// leaky integrator is not leaky if coef == 1
+				Integrator.kr(~rotSpeed.kr, 1).wrap(0, 2pi);
+			}, nil, ~rotSpeed.autoSynth, \addAfter);
 		});
+		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+			resp.remove;
+			if(BP.exists(~collIndex)) {
+				BP(~collIndex).stop(0);
+			};
+		}).add;
 	};
 
 	~stopCleanup = {
-		[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching }
+		s.makeBundle(0.1, {
+			[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching }
+		});
 	};
 
 	~freeCleanup = {
-		[~angle, ~rotSpeed].free;
+		if(~shouldFreeGCs.debug("freeCleanup: should free") ? true) {
+			[~angle, ~rotSpeed].debug("freeing").free;
+		};
 	};
 
 	~useGui = { |vpi|
@@ -965,73 +1036,35 @@ PR(\abstractProcess).clone {
 	};
 
 
-	~asPattern = { |envir, angle, rotSpeed|
+	~asPattern = {
+		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
 		Pseq([
 			// workaround scel indent bug
-			'Pfuncn'.asClass.new {
+			'Pfuncn'.asClass.new { |ev|
 				[~angle, ~rotSpeed].do(_.watch);
 				~startAuto.();
 				Event.silent(0)
 			},
 			Pbind(
-				\angle, angle ? ~angle,
-				\rotSpeed, rotSpeed ? ~rotSpeed,
-				\radius, BPStream(\radius, envir: envir),
+				\angle, ~angle,
+				\rotSpeed, ~rotSpeed,
+				\radius, BPStream(\radius),
 				\pan, Pkey(\angle).cos * Pkey(\radius),
 				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
-				\chord, BPStream(\chord, envir: envir),
-				\chordItem, BPStream(\chordItem, envir: envir),
-				\row, BPStream(\row, envir: envir),
-				\freq, BPStream(\midinote, envir: envir),
+				\chord, BPStream(\chord),
+				\chordItem, BPStream(\chordItem),
+				\row, BPStream(\row),
+				\freq, BPStream(\midinote),
 				\mode, Pfunc { |ev| ev[\chordItem][\mode] },
-				\gate, BPStream(\gate, envir: envir),
-				\mod_lev, BPStream(\mod_lev, envir: envir),
-				\dur, BPStream(\dur, envir: envir),
-				\length, BPStream(\sustain, envir: envir),
-				\attackTimeScale, BPStream(\attScale, envir: envir),
-				\decayTimeScale, BPStream(\decScale, envir: envir)
+				\gate, BPStream(\gate),
+				\mod_lev, BPStream(\mod_lev),
+				\dur, BPStream(\dur),
+				\length, BPStream(\sustain),
+				\attackTimeScale, BPStream(\attScale),
+				\decayTimeScale, BPStream(\decScale)
 			) //.trace
 		])
 	};
-
-	~speedThresh = 0.15;
-
-	~makeOneArpeg = { |envir, angle, rotSpeed|
-		var	speedRising = true, thresh = ~speedThresh;
-		Pwhile1(
-			{	|inevent, next|
-				speedRising or: { (next[\rotSpeed] ? 0) >= ~thresh }
-			},
-			~asPattern.(envir, angle, rotSpeed).collect { |ev|
-				if(speedRising.not or: { (ev[\rotSpeed] ? 0) >= ~thresh })
-					{ speedRising = false };
-				ev
-			}
-		)
-	};
-
-	~makeOnePlayer = {
-		// envir is to isolate BPStreams
-		var	self = currentEnvironment, envir = (), pat, upd;
-		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
-		~patKeys.do { |key| envir[key] = key.envirGet };
-		envir.angle = GenericGlobalControl(\angle, nil, 0, [0, 2pi]);
-		envir.rotSpeed = GenericGlobalControl(\rotSpeed, nil, 0, [0, ~maxRotSpeed]);
-		pat = Penvir(envir,
-			// force pattern to be made in context of the local envir
-			Plazy { self.makeOneArpeg(envir, ~angle, ~rotSpeed) }
-		).asEventStreamPlayer(BP(~collIndex).prepareEvent);
-		// for some stupid reason, Pfset's cleanup func did not fire
-		// so I have to use a notification to remove the global controls created locally
-		upd = Updater(pat, { |obj, what|
-			if(what == \stopped) {
-				upd.remove;
-				#[angle, rotSpeed].do { |key| envir[key].debug("freeing").free }
-			};
-		});
-		pat
-	};
-
 } => PR(\armsChord);
 )
 
@@ -1070,8 +1103,8 @@ p.arpeg = \armsCh;
 
 p.midinote = \patRejectLastN.eval(Plazy { |ev|
 	var	arpeg = ~arpegStream.next(ev).debug("arpeg");
-	Pswitch1(ev[\chordItem][\hierarchy].debug("hierarchy").collect { |row|
-		ArpegPat(arpeg).asPattern(row).debug("pattern")
+	Pswitch1(ev[\chordItem][\hierarchy].collect { |row|
+		ArpegPat(arpeg).asPattern(row)
 	}, Pkey(\row))
 }, 1);
 
@@ -1104,20 +1137,50 @@ p.makeOneArpeg = {
 
 p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, maxRotSpeed, fullCh, arpeg, arpegStream];
 
-// \distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
-// \mode, Pfunc { |ev| ev[\chordItem][\mode] },
-// \pan, Pkey(\angle).cos * Pkey(\radius),
+();
+PR(\armsChord).startAuto = {
+		var	proportion = rrand(0.2, 0.7);
+		s.makeBundle(nil, {
+			~rotSpeed.automate({
+				EnvGen.kr(Env(#[0.1, 1.9, 0.14], [proportion, 1 - proportion], \sin),
+					timeScale: rrand(7.0, 16.0), doneAction: 2)
+			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
+			~angle.automate({
+				// leaky integrator is not leaky if coef == 1
+				Integrator.kr(~rotSpeed.kr * ControlDur.ir, 1).wrap(0, 2pi);
+			}, nil, ~rotSpeed.autoSynth, \addAfter);
+		});
+		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+			resp.remove;
+			if(BP.exists(~collIndex)) {
+				BP(~collIndex).stop(0);
+			};
+		}).add;
+	};
 
-q = p.makeOnePlayer;
-q.inspect
-q.envir[\radiusStream].inspect
-
-r = q.play;
-r.stop;
-
-#[angle, rotSpeed].do { |key| q.envir[key].debug("freeing").free }
 
 
-VC(\ac).v.playingNodes[0].trace;
-293.665.cpsmidi
-BP.browse
+BP(\acDisp).free;
+PR(\armsChord) => BP(\acDisp);
+BP(\acDisp) => VC(\ac);
+0 => BP(\acDisp);
+p = BP(\acDisp);
+
+BP(\acDisp) =>.72 MT(1);
+
+
+BP(\acDisp).dur = PR(\armsChord).dur;
+BP(\acDisp).dur = BP(\acDisp).dur + 0.2;
+BP(\acDisp).dur = BP(\acDisp).dur.trace(prefix: "dur: ");
+
+BP(\acDisp).spawnChild => VP(0);
+
+s.sendMsg(\n_trace, 1177);
+s.sendMsg(\n_free, 1005);
+
+fork {
+	5.do { |i|
+		BP(\acDisp).spawnChild => VP(i);
+		rrand(1.5, 3.5).wait;
+	}
+};
