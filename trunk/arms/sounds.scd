@@ -919,7 +919,7 @@ PR(\abstractProcess).clone {
 	~rotSpeedBus = 4000;
 
 	~prep = {
-		~angle = GenericGlobalControl(\angle, ~angleBus.debug("anglebus").asBus(\control).debug("result"), 0, [0, 2pi]);
+		~angle = GenericGlobalControl(\angle, ~angleBus.asBus(\control), 0, [0, 2pi]);
 		~rotSpeed = GenericGlobalControl(\rotSpeed, ~rotSpeedBus.asBus(\control), 0, [0, ~maxRotSpeed]);
 		KrBusWatcher.newFrom(s).updateFreq = 8;
 		~initChords.();
@@ -929,8 +929,8 @@ PR(\abstractProcess).clone {
 		var	self = currentEnvironment, parms;
 		BP(name).free;
 		parms = (
-			angleBus: BusDict.control(s, 1, name + "angle"),
-			rotSpeedBus: BusDict.control(s, 1, name + "rotSpeed"),
+			angleBus: Bus.control(s, 1 /*, name + "angle"*/),
+			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
 			shouldFreeGCs: true,
 			initChords: {
 				~fullCh = self[\fullCh];
@@ -1000,7 +1000,7 @@ PR(\abstractProcess).clone {
 // 	};
 
 	~startAuto = {
-		var	proportion = rrand(0.2, 0.7);;
+		var	proportion = rrand(0.2, 0.7);
 		s.makeBundle(nil, {
 			~rotSpeed.automate({
 				EnvGen.kr(Env(#[0.1, 1.9, 0.14], [proportion, 1 - proportion], \sin),
@@ -1008,7 +1008,7 @@ PR(\abstractProcess).clone {
 			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
 			~angle.automate({
 				// leaky integrator is not leaky if coef == 1
-				Integrator.kr(~rotSpeed.kr, 1).wrap(0, 2pi);
+				Integrator.kr(~rotSpeed.kr * ControlDur.ir, 1).wrap(0, 2pi);
 			}, nil, ~rotSpeed.autoSynth, \addAfter);
 		});
 		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
@@ -1026,8 +1026,8 @@ PR(\abstractProcess).clone {
 	};
 
 	~freeCleanup = {
-		if(~shouldFreeGCs.debug("freeCleanup: should free") ? true) {
-			[~angle, ~rotSpeed].debug("freeing").free;
+		if(~shouldFreeGCs ? true) {
+			[~angle, ~rotSpeed].free;
 		};
 	};
 
