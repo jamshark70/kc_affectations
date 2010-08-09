@@ -945,16 +945,29 @@ PR(\abstractProcess).clone {
 
 	~spawnChild = { |quant = 0|
 		var bp = ~copyProc.(),
-		upd = Updater(bp, { |obj, what, more|
-			if(more == \stopped) {
-				upd.remove;
-				if(BP.exists(bp.collIndex)) {
-					bp.free;
-				};
-			}
-		});
+			lastSpawned = ~lastSpawned,
+			upd = Updater(bp, e { |obj, what, more|
+				if(more == \stopped) {
+					upd.remove;
+					if(~lastSpawned == bp.collIndex) { ~lastSpawned = nil };
+					if(BP.exists(bp.collIndex)) {
+						bp.free;
+					};
+				}
+			});
+		// this is a moderately obscene hack
+		if(lastSpawned.notNil) {
+			// ctlPoint uses replaceOut, will overwrite "real" autoSynth
+			Synth(\ctlPoint, [outbus: BP(lastSpawned).rotSpeed.bus, value: 0, time: ~killOldProcTime],
+				BP(lastSpawned).rotSpeed.autoSynth, \addAfter);
+			thisThread.clock.sched(~killOldProcTime - 0.01, {
+				BP(lastSpawned).rotSpeed.stopAuto; nil
+			});
+		};
+		~lastSpawned = bp.collIndex;
 		bp.play(quant);
 	};
+	~killOldProcTime = 1.4;
 
 	~bpsKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
 
@@ -1142,8 +1155,8 @@ PR(\armsChord).startAuto = {
 		var	proportion = rrand(0.2, 0.7);
 		s.makeBundle(nil, {
 			~rotSpeed.automate({
-				EnvGen.kr(Env(#[0.1, 1.9, 0.14], [proportion, 1 - proportion], \sin),
-					timeScale: rrand(7.0, 16.0), doneAction: 2)
+				EnvGen.kr(Env(#[0.04, 1.9, 0.02], [proportion, 1 - proportion], \sin),
+					timeScale: rrand(14.0, 32.0), doneAction: 2)
 			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
 			~angle.automate({
 				// leaky integrator is not leaky if coef == 1
@@ -1175,6 +1188,28 @@ BP(\acDisp).dur = BP(\acDisp).dur.trace(prefix: "dur: ");
 
 BP(\acDisp).spawnChild => VP(0);
 
+(
+Proto {
+	~quant = NilTimeSpec.new;
+	~doAction = {
+		var i = VP.collection.detectIndex { |vp|
+			vp.v.controlProxies.every { |gcp| gcp.gc.isNil }
+		};
+		if(i.isNil) {
+			BP(\acDisp).spawnChild
+		} {
+			BP(\acDisp).spawnChild => VP(i)
+		};
+	};
+} => BP(\test);
+)
+
+p.row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.2, 4);
+p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
+
+
+
 s.sendMsg(\n_trace, 1177);
 s.sendMsg(\n_free, 1005);
 
@@ -1184,3 +1219,14 @@ fork {
 		rrand(1.5, 3.5).wait;
 	}
 };
+
+();
+z = Pbind(
+	\type, \voicerNote,
+	\voicer, VC(\ac).v,
+	\degree, Pwhite(0, 7, inf),
+	\dur, 0.5,
+	\gate, Pif(Ptime() < 8, Env(#[0.1, 1, 0.1], #[0.5, 0.5] * 8, \sin))
+).play;
+
+z.stop;
