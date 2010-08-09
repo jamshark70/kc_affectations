@@ -167,6 +167,7 @@ make: { |name|
 
 	~def = \addRvbOut.eval(\armsSpinChord, { |pan, freq = 440, gate = 1,
 			mod_lev = 0.01, mod_ratio = 1, detune = 0, car_detune = 0.99798261661993,
+			car_vs = 0, mod_vs = 0,
 			attackTimeScale = 1, decayTimeScale = 1|
 		WrapInstr("osc2.fm2car_stereo").valueArray([
 			pan, freq, gate,
@@ -174,7 +175,7 @@ make: { |name|
 			Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),	// mod_env
 			mod_lev, mod_ratio,
 			detune, car_detune,
-			~cb.bufnum, ~mb.bufnum, 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
+			~cb.bufnum, ~mb.bufnum, car_vs, mod_vs, // 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
 			440, 0.28621534453893, /* basefreq, keyScale */
 			attackTimeScale, decayTimeScale
 		])
@@ -187,9 +188,11 @@ make: { |name|
 	} {
 		"VC(%): Spatialization reverbs not found.".format(name.asCompileString).warn;
 	};
-	out = Voicer(20, ~def.name, args, target: ~target);
+	out = Voicer(45, ~def.name, args, target: ~target);
 	out.mapGlobal(\detune, nil, ~defaultDetune, #[-5, 5]);
 	out.mapGlobal(\car_detune, nil, ~defaultCarDetune, \mydetune);
+	out.mapGlobal(\car_vs, nil, 0.833);
+	out.mapGlobal(\mod_vs, nil, 0.819);
 	out
 },
 free: {
