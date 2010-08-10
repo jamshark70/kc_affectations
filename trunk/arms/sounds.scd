@@ -1,3 +1,11 @@
+// to do for showing:
+// refine arms melody
+	// spatialize - introduce further back in the space
+	// change ffreq, rq patterns
+// make sure character of chords comes through
+// rework feet opening for responsiveness
+// (if Lorne will be putting up graphics with each step, I can sync sound to that too)
+
 s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
 BP.loadGui;
 
@@ -640,6 +648,21 @@ Button(w, w.view.bounds.insetBy(2, 2))
 	});
 w.front;
 
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click"]])
+	.action_({
+		fork {
+			(0..2).scramble.do { |i|
+				var name = ("ml" ++ i).asSymbol;
+				BP(name).triggerOneEvent(0);
+				rrand(0.2, 0.6).wait;
+			};
+		};
+	});
+w.front;
+
 BP.all.stop;
 
 BP(\ml0).triggerOneEvent(0);
@@ -1016,7 +1039,11 @@ PR(\abstractProcess).clone {
 	~startAuto = {
 		var	proportion = rrand(0.2, 0.7);
 		s.makeBundle(nil, {
-			~rotSpeed.automate({
+			~rotSpeed.automate({ |outbus|
+				// eventually:
+// 				Line.kr(0, 1, rrand(3.5, 8.0))
+// 				In.kr(~rotSpeedInBus ? outbus)
+// 					* LFDNoise1.kr(LFNoise1.kr(1.2).range(0.4, 2.5)).exprange(0.8, 1.25)
 				EnvGen.kr(Env(#[0.1, 1.9, 0.14], [proportion, 1 - proportion], \sin),
 					timeScale: rrand(3.5, 8.0), doneAction: 2)
 			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
