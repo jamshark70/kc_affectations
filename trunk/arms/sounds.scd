@@ -875,7 +875,7 @@ PR(\abstractProcess).clone {
 	);
 
 	~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
-	~chord = Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
+	~chord =Pn(Pshuf(p.fullCh.keys.asArray, 1), inf); // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
 	~chordItem = Pfunc { |ev|
 		if(ev[\chord] != ~lastChord) {
 			~lastChord = ev[\chord];
@@ -891,14 +891,14 @@ PR(\abstractProcess).clone {
 		}, Pkey(\row))
 	}, 1);
 	~arpeg = \armsCh;
-	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 1, 4);
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 0.6, 4);
 // 	~gate = 0.2;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
 // 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
 
-	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.22, 0.08);
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
 	~sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
 // 	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
 // 	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
@@ -934,7 +934,8 @@ PR(\abstractProcess).clone {
 			shouldFreeGCs: true,
 			initChords: {
 				~fullCh = self[\fullCh];
-			}
+			},
+			chord: (~chordStream ?? { ~makeStreamForKey.(\chord) }).next
 		);
 		// this is so I can change patterns in the dispatcher
 		// and they get spawned thru to the children
@@ -969,7 +970,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time
@@ -1064,7 +1065,7 @@ PR(\abstractProcess).clone {
 				\radius, BPStream(\radius),
 				\pan, Pkey(\angle).cos * Pkey(\radius),
 				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
-				\chord, BPStream(\chord),
+				\chord, if(~chord.isSymbol) { ~chord } { BPStream(\chord) },
 				\chordItem, BPStream(\chordItem),
 				\row, BPStream(\row),
 				\freq, BPStream(\midinote),
@@ -1208,7 +1209,35 @@ p.row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
 p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.2, 4);
 p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
 
+p.fullCh.keys
 
+p.chords[\c_ish][1..].collect(_.asMIDINote)
+p.addChord(\em, #[g, 52, 59, 60, 67, 69, 74, 78, 79, 83, 93]);
+p.addChord(\am, #[g, 45, 54, 55, 62, 64, 72, 76, 83]);
+p.addChord(\g, #[g, 43, 52, 57, 59, 66, 67, 74, 76, 84]);
+
+p.chord = Pn(Pshuf(p.fullCh.keys.asArray, 1), inf).trace(prefix: "chord: ");
+p.copyProc = { |name ((~collIndex ++ UniqueID.next).asSymbol)|
+		var	self = currentEnvironment, parms;
+		BP(name).free;
+		parms = (
+			angleBus: Bus.control(s, 1 /*, name + "angle"*/),
+			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
+			shouldFreeGCs: true,
+			initChords: {
+				~fullCh = self[\fullCh];
+			},
+			chord: (~chordStream ?? { ~makeStreamForKey.(\chord) }).next
+		);
+		// this is so I can change patterns in the dispatcher
+		// and they get spawned thru to the children
+		~bpsKeys.do { |key| parms[key] = key.envirGet };
+		PR(\armsChord).chuck(BP(name), nil, parms);
+		~event[\voicer] => BP(name)	// should return BP
+	};
+p.bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
+
+#[43, 52, 57, 59, 66, 67, 74, 76, 84].collect(_.asMIDINote)
 
 s.sendMsg(\n_trace, 1177);
 s.sendMsg(\n_free, 1005);
