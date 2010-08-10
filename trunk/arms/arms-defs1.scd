@@ -29,9 +29,47 @@ make: { |name|
 		var	sig = WrapInstr.wrap("osc2.vosc3map", [Lag.kr(freq, freqlag)]);
 		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan)
 	}, [NoLagControlSpec(20, 20000, \exp, 0, 440), #[0, 1, 4], \freq, \myrq]);
-	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
+
+// freq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
+// bufbase -> ControlSpec(0, 1000, 'linear', 1, 0, "")
+// numbufs -> ControlSpec(0, 20, 'linear', 1, 0, "")
+// basefreq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
+// topfreq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
+// gate -> ControlSpec(0, 1, 'amp', 0, 0, "")
+// env -> EnvSpec(Env([ 0.0, 1.0, 0.5, 0.0 ], [ 0.01, 0.3, 1.0 ], -4.0, 2, nil))
+// bufenv -> EnvSpec(Env([ 0, 0 ], [ 1 ], 'lin', nil, nil))
+// vsens -> ControlSpec(0, 1, 'linear', 0.0, 0, "")
+// detune -> ControlSpec(0.9, 1.1, 'linear', 0, 1, "")
+
+// copy/past
+WrapInstr([\osc2, \vosc3], { arg freq, gate, bufbase, bufmod, env,
+bufenv, vsens, detune;
+	var sig, amp, buf;
+	amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate);
+	buf = bufbase + bufmod + EnvGen.kr(bufenv, gate);
+	sig = VOsc3.ar(buf, freq/detune, freq, freq*detune, amp)
+		* EnvGen.kr(env, gate, doneAction:2);
+}, [\freq, \amp, [0, 1000, \linear, 1, 0], [0, 20], EnvSpec(Env.adsr),
+EnvSpec(Env(#[0, 0], #[1])), [0, 1], [0.9, 1.1, \linear, 0, 1]]);
+
+	out = \addRvbOut.eval(name ++ "Def", { |freq, freqlag = 0.1, ffreq = 2423, rq = 1, pan, gate = 1|
+		var	sig = WrapInstr("osc2.vosc3map").valueArray([Lag.kr(freq, freqlag),
+			/*bufbase:*/ ~wt.first.bufnum,
+			/*numbufs:*/ ~wt.size,
+			/*basefreq:*/ 48.midicps,
+			/*topfreq:*/ 132.midicps,
+			gate,
+			/*env:*/ Env.adsr(0.4, 0, 1, 1.2), /*bufenv:*/ Env.zero,
+			/*vsens:*/ 0.84722220897675, /*detune:*/ 1.003
+		]);
+		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan)
+	}).add;
+	SynthDescLib.at(out.name.asSymbol).msgFuncKeepGate = true;
+
+// 	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
+	out = MonoPortaVoicer(1, out.name, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
 	// no global maps - this is mostly to generate the synthdef
-	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+// 	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 	out
 },
 free: { ~target.free },
@@ -51,6 +89,8 @@ PR(\abstractProcess).clone {
 			"VC(%) doesn't exist. Please create it before using BP(%)."
 				.format(~vcKey.asCompileString, ~collIndex.asCompileString).warn;
 		};
+// 		~event.putAll((
+// 		));
 		~makeStreamForKey.(\level);
 		currentEnvironment
 	};
@@ -89,6 +129,9 @@ PR(\abstractProcess).clone {
 	~detune = 1.003;
 	~gate = 0.8;
 	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger));
+	~ffreq = Pexprand(2300, 8000, inf);
+	~rq = Pexprand(0.1, 1.0, inf);
+
 	~recvEventNotify = { |node| ~node = node };
 	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
 	~asPattern = {
@@ -106,6 +149,8 @@ PR(\abstractProcess).clone {
 			\freqlag, BPStream(\freqlag),
 			\detune, BPStream(\detune),
 			\gate, BPStream(\gate),
+			\ffreq, BPStream(\ffreq),
+			\rq, BPStream(\rq),
 			\pan, BPStream(\pan),
 			\chan, VC(\am).env.target
 		)
