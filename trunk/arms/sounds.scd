@@ -1,7 +1,8 @@
 // to do for showing:
 // refine arms melody
-	// spatialize - introduce further back in the space
+	// spatialize - introduce further back in the space - done
 	// change ffreq, rq patterns
+	// L/R/Mid patterns lagging at separate times, pretty nice, what is context for it?
 // make sure character of chords comes through
 // rework feet opening for responsiveness
 // (if Lorne will be putting up graphics with each step, I can sync sound to that too)
@@ -630,6 +631,8 @@ Button(w, w.view.bounds.insetBy(2, 2))
 	});
 w.front;
 
+BP(\ml1).node.trace;
+BP(#[ml0, ml1, ml2]).do { |bp| bp.freqlag = 0.8 };
 
 BP.all.reset;
 BP.all.do({ |bp| bp.v.reset });  // WHY WHY WHY WHY?????!!!
