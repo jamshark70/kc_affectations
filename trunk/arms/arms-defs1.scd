@@ -7,7 +7,9 @@
 
 // melody (axial)
 
-(keys: #[master, glrvbmc],
+(keys: #[master, glrvbmc, lcrvbmc],
+env: Env.adsr(0.4, 0, 1, 1.2),
+bufenv: Env.zero,
 make: { |name|
 	var	out;
 	~wt = \makeWavetables.eval(8, s, 2048, 48, { |numharm|
@@ -21,58 +23,41 @@ make: { |name|
 		};
 		array
 	});
-	~target = MixerChannel(name, s, 2, 2, completionFunc: { |chan|
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
 		// eq?
 		~chorus = chan.playfx(WrapInstr("busfx.chorus2"), [0, 2, 2, 3, 0.01285261232269, 0.077426358822457, 0.00860870962377, 0.87266466760906, 0.15647481535888]);
 	});
-	WrapInstr("osc2.vosc3mapfporta", { |freq, freqlag = 0.1, ffreq = 2000, rq = 1, pan|
-		var	sig = WrapInstr.wrap("osc2.vosc3map", [Lag.kr(freq, freqlag)]);
-		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan)
-	}, [NoLagControlSpec(20, 20000, \exp, 0, 440), #[0, 1, 4], \freq, \myrq]);
+	[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\receivesSignalFrom, ~target) };
 
-// freq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
-// bufbase -> ControlSpec(0, 1000, 'linear', 1, 0, "")
-// numbufs -> ControlSpec(0, 20, 'linear', 1, 0, "")
-// basefreq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
-// topfreq -> ControlSpec(20, 20000, 'exp', 0, 440, " Hz")
-// gate -> ControlSpec(0, 1, 'amp', 0, 0, "")
-// env -> EnvSpec(Env([ 0.0, 1.0, 0.5, 0.0 ], [ 0.01, 0.3, 1.0 ], -4.0, 2, nil))
-// bufenv -> EnvSpec(Env([ 0, 0 ], [ 1 ], 'lin', nil, nil))
-// vsens -> ControlSpec(0, 1, 'linear', 0.0, 0, "")
-// detune -> ControlSpec(0.9, 1.1, 'linear', 0, 1, "")
-
-// copy/past
-WrapInstr([\osc2, \vosc3], { arg freq, gate, bufbase, bufmod, env,
-bufenv, vsens, detune;
-	var sig, amp, buf;
-	amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate);
-	buf = bufbase + bufmod + EnvGen.kr(bufenv, gate);
-	sig = VOsc3.ar(buf, freq/detune, freq, freq*detune, amp)
-		* EnvGen.kr(env, gate, doneAction:2);
-}, [\freq, \amp, [0, 1000, \linear, 1, 0], [0, 20], EnvSpec(Env.adsr),
-EnvSpec(Env(#[0, 0], #[1])), [0, 1], [0.9, 1.1, \linear, 0, 1]]);
-
-	out = \addRvbOut.eval(name ++ "Def", { |freq, freqlag = 0.1, ffreq = 2423, rq = 1, pan, gate = 1|
-		var	sig = WrapInstr("osc2.vosc3map").valueArray([Lag.kr(freq, freqlag),
-			/*bufbase:*/ ~wt.first.bufnum,
-			/*numbufs:*/ ~wt.size,
-			/*basefreq:*/ 48.midicps,
-			/*topfreq:*/ 132.midicps,
-			gate,
-			/*env:*/ Env.adsr(0.4, 0, 1, 1.2), /*bufenv:*/ Env.zero,
-			/*vsens:*/ 0.84722220897675, /*detune:*/ 1.003
-		]);
-		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan)
+	out = \addRvbOut.eval(name ++ "Def", { |freq, freqlag = 0.1,
+		vsens = 0.84722220897675, detune = 1.003,// bufmod = 0,
+		ffreq = 2423, rq = 1, pan, gate = 1, ampMul = 1|
+		var	laggedfreq = Lag.kr(freq, freqlag),
+			bufbase = ~wt.first.bufnum,
+			numbufs = ~wt.size,
+			basefreq = 48.midicps,
+			topfreq = 132.midicps,
+			baselog = log2(basefreq),
+			freqmap = ((log2(laggedfreq) - baselog) / (log2(topfreq) - baselog)
+				* (numbufs - 1)).clip(0, numbufs - 1.001),
+			amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate),
+			buf = bufbase + freqmap + EnvGen.kr(~bufenv, gate),
+			sig = VOsc3.ar(buf, laggedfreq/detune, laggedfreq, laggedfreq*detune, amp)
+				* EnvGen.kr(~env, gate, doneAction:2);
+		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan, ampMul)
 	}).add;
 	SynthDescLib.at(out.name.asSymbol).msgFuncKeepGate = true;
 
 // 	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
-	out = MonoPortaVoicer(1, out.name, [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
+	out = MonoPortaVoicer(1, out.name, [ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
 	// no global maps - this is mostly to generate the synthdef
 // 	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 	out
 },
-free: { ~target.free },
+free: {
+	[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\stopsReceivingFrom, ~target) };
+	~target.free
+},
 maps: { |self| self[\value].globalControls.collectAs({ |gc| if(gc.name != \detune) { [gc.name, gc.asMap] } }, Array).select(_.notNil).flat },
 type: \voicer) => Fact(\armsmelVC);
 
@@ -87,15 +72,19 @@ PR(\abstractProcess).clone {
 	~prep = {
 		if(VC.exists(~vcKey).not) {
 			"VC(%) doesn't exist. Please create it before using BP(%)."
-				.format(~vcKey.asCompileString, ~collIndex.asCompileString).warn;
+				.format(~vcKey.asCompileString, ~collIndex.asCompileString).die;
 		};
-// 		~event.putAll((
-// 		));
+		~event.putAll((
+			glrvbout: VC(~vcKey).env[\glrvbmc].tryPerform(\inbus),
+			lcrvbout: VC(~vcKey).env[\lcrvbmc].tryPerform(\inbus),
+			distNear: 5, distFar: 20
+		));
 		~makeStreamForKey.(\level);
 		currentEnvironment
 	};
 	~alwaysReset = true;
 	~pan = 0;
+	~distance = 17;
 
 	~rewriteProb = 0.3;
 	~phrases = [
@@ -152,6 +141,7 @@ PR(\abstractProcess).clone {
 			\ffreq, BPStream(\ffreq),
 			\rq, BPStream(\rq),
 			\pan, BPStream(\pan),
+			\distance, BPStream(\distance),
 			\chan, VC(\am).env.target
 		)
 		// now this is a problem - you don't know when the next trigger is,
