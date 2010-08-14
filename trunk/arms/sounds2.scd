@@ -394,12 +394,70 @@ p.isPlaying
 // replace pdefns with bpstreams
 (
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayer);
+	~event = (eventKey: \singleSynthPlayer, distNear: 5, distFar: 20);
 
 	~prep = {
-		// get rvb mixers
-		// noise buffer, synthdefs
+		// get rvb mixers - use factory
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		if(~glrvbmc.notNil) {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+				~event.put((key.asString.drop(-2) ++ "out").asSymbol, key.envirGet.inbus);
+			};
+		} {
+			"BP(%): Spatialization reverbs not found.".format(~collIndex.asCompileString).warn;
+		};
+		~event[\chan] = ~chan;
+
+		// noise buffer -- synthdefs?
+		~buf = Buffer.alloc(s, 2048, 1);
+		~buf.sendCollection((Signal.fill(1024, { 1.0.rand2 }) * Signal.hammingWindow(1024))
+			.asWavetable);
+
+		~timeMulCtl = GenericGlobalControl(\timeMul, nil, 1.6, #[0.5, 3.5]);
 	};
+	~useGui = { |vpi| ~timeMulCtl => VP(vpi) };
+
+	~freeCleanup = {
+		[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\stopsReceivingFrom, ~chan) };
+		[~buf, ~chan, ~timeMulCtl].free;
+	};
+
+	~nfreq = Pexprand(40.0, 1800.0, inf);
+	~rdecay = 1;
+	~delta = Pwhite(0.4, 1.5, inf);
+	~sustain = Pkey(\delta) * Pwhite(3.0, 6.0, inf);
+//	~timeMul = g.asMap;
+	~loTime = Pexprand(0.12, 0.22, inf);
+	~hiTime = Pkey(\loTime);
+
+	~rewriteProb = 0.3;
+	~phrases = [
+		#[2, 5, 4],
+		#[2, 7, 6, 4, 8],
+		#[2, 5, 6, 4],
+		#[9, 8, 3],
+		#[8, 11, 10, 5, 2, 3, 4],
+		#[-2, -5, 0, 1, 0, 4]
+	];
+	~degree = Plazy {
+		var	self = currentEnvironment;
+		Pswitch(
+			~phrases.collect { |row|
+				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn({ rrand(1, 3) }, 1), [
+					(_.notNil) -> { |item, level, inval|
+						if(self[\rewriteProb].coin) {
+							item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+						} { [item] }
+					}
+				])
+			},
+			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+		)
+	};
+	~hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 35) };
+	~loffreq = Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf);
+	~mode = \g;
 
 	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
 	~pan2 = Pkey(\x1).neg;
@@ -442,25 +500,35 @@ PR(\abstractProcess).clone {
 		<>
 		Pbind(
 			\instrument, \skidtest,
-			\noisebuf, b,
-			\nfreq, Pdefn(\nfreq),
-			\delta, Pdefn(\delta),
-			\sustain, Pdefn(\sustain),
-			\loTime, Pexprand(0.12, 0.22, inf),
-			\hiTime, Pkey(\loTime),
-			\timeMul, Pdefn(\timeMul),
-			\hiffreq, Pfunc { (z.next.degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps },
-			\loffreq, Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf),
-			\rdecay, Pdefn(\rdecay),
+			\noisebuf, ~buf,
+			\nfreq, BPStream(\nfreq),
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain),
+			\loTime, BPStream(\loTime),
+			\hiTime, BPStream(\hiTime),
+			\timeMul, ~timeMulCtl,
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree),
+			\hiffreq, BPStream(\hiffreq),
+			\loffreq, BPStream(\loffreq),
+			\rdecay, BPStream(\rdecay),
 			\xylock, Pfunc { PR(\busLock).copy.prep((numCh: 2, rate: \control)) },
 			#[pan, distance], Pfunc { |ev|
 				(ev[\xylock].bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol }
 			},
-			\distNear, 5, \distFar, 20,
-			\glrvbout, ~glrvbmc.inbus,
-			\lcrvbout, ~lcrvbmc.inbus,
-			\amp, 8.dbamp
+			\amp, BPStream(\amp)
 		)
 	};
 } => PR(\armsSkidMel);
 )
+
+BP(\am).free;
+PR(\armsSkidMel).chuck(BP(\am), nil, (
+	glrvbmc: ~glrvbmc,
+	lcrvbmc: ~lcrvbmc,
+	master: ~master
+));
+
+BP(\am).useGui = { |vpi| ~timeMulCtl => VP(vpi) };
+
+BP(\am).amp = 8.dbamp;
