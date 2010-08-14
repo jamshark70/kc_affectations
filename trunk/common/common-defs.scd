@@ -99,7 +99,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			attNearFreq = 9000, attFarFreq = 3000,
 			attNearDb = -5, attFarDb = -18,
 			attNearRs = 2, attFarRs = 2|
-			var result = SynthDef.wrap(ugenFunc), out, pan, outctl;
+			var result = SynthDef.wrap(ugenFunc, rates), out, pan, outctl;
 			// don't add a new \pan control if the function already made one
 			if((pan = findCtl.(\pan)).isNil) {
 				pan = NamedControl(\pan, 0);
@@ -133,8 +133,152 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			distance = distance.sqrt;
 			Out.ar(glrvbout, result * glrvbamt / distance);
 			Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
-		}, rates, metadata: metadata);
+		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
 	} => Func(\addRvbOut);
+
+	Proto {
+		~prep = { |args|
+			if(args.respondsTo(\keysValuesDo)) {
+				currentEnvironment.putAll(args);
+			};
+			~locks = IdentitySet.new;
+			// this way, makeStuff can have whatever args it needs
+			// and it will pull them from the environment (after being put there by putAll)
+			currentEnvironment.env.use { ~makeStuff.valueEnvir };
+			currentEnvironment
+		};
+	
+		~numCh = 1;
+		~rate = \audio;
+		~server = { Server.default };
+	
+		// user overrides
+		~makeStuff = { |numCh, rate, server|
+			~server = server.value;
+			if((~bus = Bus.perform(rate, ~server, numCh)).isNil) {
+				Error("couldn't get % bus".format(rate)).throw;
+			};
+			~bus //.debug("made");
+		};
+	
+		~freeStuff = {
+			~bus /*.debug("freed")*/ .free;
+			~killNodes.do(_.free);
+		};
+	
+		~addNode = { |node|
+			var	endFunc = e { |obj, what|
+				if(what == \n_end) {
+					node.removeDependant(endFunc);
+					~removeLock.(node);
+				};
+			};
+			~locks.add(node);
+			NodeWatcher.register(node);
+			node.addDependant(endFunc);
+		};
+	
+		~removeLock = { |obj|
+			~locks.remove(obj);
+			if(~locks.isEmpty) {
+				~freeStuff.();
+			};
+		};
+	} => PR(\busLock);
+	
+	PR(\busLock).clone {
+		~busFreeDelay = 1;
+		~freeStuff = {
+			~stopThings.do(_.stop);
+			~killNodes.do(_.free);
+			AppClock.sched(~busFreeDelay, e { ~bus.free });
+		};
+	} => PR(\busFxPatLock);
+	
+	(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
+		lockKey: \busLock,
+		superPlay: ProtoEvent(\polySynthPlayer).v[\play],
+		play: {
+			var	chan = ~chan;
+			~numCh ?? { ~numCh = ~chan.inChannels };
+			~lock = PR(~lockKey).copy.prep((
+				numCh: ~numCh, server: ~chan.server
+			));
+			~bus = ~lock.bus;
+			~target = ~chan.synthgroup;
+			~chan = nil;
+			~superPlay.();
+	
+			if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
+				~playExtraProcess.(chan);
+				~node.do { |node| ~lock.addNode(node) };
+			} {
+				~lock.freeStuff;
+			};
+			if(~tempo.isNumber) { thisThread.clock.tempo = ~tempo }
+		},
+		playExtraProcess: { |chan|
+			if(~lpcEv.size > 0) {
+				~lpcEv.putAll((
+					bus: chan.inbus,
+					target: chan.effectgroup,
+					chan: nil,
+					inbus: ~lock.bus,
+					collIndex: ~collIndex,
+						// effectgroup might have post-lpc effect nodes (chorus etc.)
+						// so put lpc's up front
+					addAction: ~lpcEv[\addAction] ?? { \addToHead }
+				))
+				// cuz parent: don't work in putAll #@$*$&*$&@#312
+				.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
+				.play;
+				~lpcEv[\node].do { |node| ~lock.addNode(node) };
+			} {
+				~sendNode = Synth("mixers/Send" ++ ~numCh,
+					[busin: ~lock.bus, busout: chan.inbus, level: 1],
+					chan.effectgroup
+				);
+				~lock.killNodes = ~sendNode;
+			};
+		} //,
+	// 	notifyDependents: {
+	// 		~node.do { |node| ~lock.addNode(node) };
+	// 	}
+	))) => ProtoEvent(\polySynthBusLock);
+	
+	(parent: ProtoEvent(\polySynthBusLock).v.parent.copy.putAll((
+		lockKey: \busFxPatLock,
+		playExtraProcess: { |chan|
+			~lock.busFreeDelay = ~busFreeDelay ? 1;
+			if(~fxPatEv.size > 0 and: { ~fxPatEv[\pat].notNil }) {
+				~fxPatEv[\streamPlayer] = ~fxPatEv[\pat].play(
+					thisThread.clock,
+					Event(
+						proto: (
+							bus: chan.inbus,
+							target: chan.effectgroup,
+							chan: nil,
+							inbus: ~lock.bus,
+							lock: ~lock,
+							collIndex: ~collIndex,
+								// effectgroup might have post-lpc effect nodes (chorus etc.)
+								// so put lpc's up front
+							addAction: ~fxPatEv[\addAction] ?? { \addToHead }
+						),
+						parent: ProtoEvent(~fxProto ?? { \singleSynthPlayer }).v.parent.copy
+					),
+					~fxPatEv[\quant]
+				);
+				~lock.stopThings = [~fxPatEv[\streamPlayer]];
+			} {
+				~sendNode = Synth("mixers/Send" ++ ~numCh,
+					[busin: ~lock.bus, busout: chan.inbus, level: 1],
+					chan.effectgroup
+				);
+				~lock.killNodes = ~sendNode;
+			};
+		}
+	))) => ProtoEvent(\polySynthFxPatLock);
 
 
 	Library.put(\affectations, \commonLoaded, true);

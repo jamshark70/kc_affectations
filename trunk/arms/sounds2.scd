@@ -389,3 +389,78 @@ p = n.play(
 p.stop;
 
 p.isPlaying
+
+
+// replace pdefns with bpstreams
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer);
+
+	~prep = {
+		// get rvb mixers
+		// noise buffer, synthdefs
+	};
+
+	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
+	~pan2 = Pkey(\x1).neg;
+	~yNear = 5;
+	~yFar = 20;
+
+	~xyPat = Pbind(
+		\instrument, \xy,
+		\sustain, Pkey(\sustain),
+		\x1, BPStream(\pan1),
+		\x2, BPStream(\pan2),
+		\y1, BPStream(\yNear),
+		\y2, BPStream(\yFar)
+	);
+
+	~streamKeys = #[xyPat];
+	~makeStreams = {
+		~streamKeys.do { |key|
+			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
+		}
+	};
+
+	~asPattern = {
+		~makeStreams.();
+		Pfunc { |ev|
+			var xyEv = ~xyPatStream.next(ev);
+			xyEv !? {  // DON'T YIELD NIL!!!
+				xyEv.put(\delta, 0).put(\chan, nil).put(\bus, ev[\xylock].bus)
+				.yield
+			};
+			// why? event must .play before ev[\id] is available
+			thisThread.clock.sched(0, {
+				// ev[\xylock].addNode(Synth.basicNew(\dummy, s, ev[\id][0]));
+				ev[\xylock].addNode(ev[\node]);
+				//ev[\xylock].listVars;
+				nil
+			});
+			ev
+		}
+		<>
+		Pbind(
+			\instrument, \skidtest,
+			\noisebuf, b,
+			\nfreq, Pdefn(\nfreq),
+			\delta, Pdefn(\delta),
+			\sustain, Pdefn(\sustain),
+			\loTime, Pexprand(0.12, 0.22, inf),
+			\hiTime, Pkey(\loTime),
+			\timeMul, Pdefn(\timeMul),
+			\hiffreq, Pfunc { (z.next.degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps },
+			\loffreq, Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf),
+			\rdecay, Pdefn(\rdecay),
+			\xylock, Pfunc { PR(\busLock).copy.prep((numCh: 2, rate: \control)) },
+			#[pan, distance], Pfunc { |ev|
+				(ev[\xylock].bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol }
+			},
+			\distNear, 5, \distFar, 20,
+			\glrvbout, ~glrvbmc.inbus,
+			\lcrvbout, ~lcrvbmc.inbus,
+			\amp, 8.dbamp
+		)
+	};
+} => PR(\armsSkidMel);
+)
