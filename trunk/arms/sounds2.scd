@@ -430,8 +430,10 @@ PR(\abstractProcess).clone {
 //	~timeMul = g.asMap;
 	~loTime = Pexprand(0.12, 0.22, inf);
 	~hiTime = Pkey(\loTime);
+	~amp = 8.dbamp;
 
 	~rewriteProb = 0.3;
+	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
 	~phrases = [
 		#[2, 5, 4],
 		#[2, 7, 6, 4, 8],
@@ -444,8 +446,9 @@ PR(\abstractProcess).clone {
 		var	self = currentEnvironment;
 		Pswitch(
 			~phrases.collect { |row|
-				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn({ rrand(1, 3) }, 1), [
+				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
 					(_.notNil) -> { |item, level, inval|
+						// self: this runs inside the rewriter Proto object
 						if(self[\rewriteProb].coin) {
 							item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
 						} { [item] }
@@ -473,11 +476,14 @@ PR(\abstractProcess).clone {
 		\y2, BPStream(\yFar)
 	);
 
-	~streamKeys = #[xyPat];
+	~streamKeys = #[xyPat, rewriteLevel];
 	~makeStreams = {
 		~streamKeys.do { |key|
 			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
 		}
+	};
+	~reset = {
+		#[degree, rewriteLevel].do { |key| ~makeStreamForKey.(key) };
 	};
 
 	~asPattern = {
@@ -532,3 +538,19 @@ PR(\armsSkidMel).chuck(BP(\am), nil, (
 BP(\am).useGui = { |vpi| ~timeMulCtl => VP(vpi) };
 
 BP(\am).amp = 8.dbamp;
+
+
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 29, 145, 50));
+Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click", Color.new255(255, 200, 200), Color.black]])
+	// need to do twice b/c of xy automation event
+	.action_({ 2.do { BP(\am).triggerOneEvent(0) } });
+w.front;
+w.onClose = { w = nil };
+
+BP(\am).prepareForPlay;
+
+BP(\am).reset = {
+	#[degree, rewriteLevel].do { |key| ~makeStreamForKey.(key) };
+};
