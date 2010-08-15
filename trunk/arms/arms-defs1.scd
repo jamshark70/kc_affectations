@@ -7,6 +7,7 @@
 
 // melody (axial)
 
+// this voicer is more synth-y, use later in the section
 (keys: #[master, glrvbmc, lcrvbmc],
 env: Env.adsr(0.4, 0, 1, 1.2),
 bufenv: Env.zero,
@@ -60,6 +61,205 @@ free: {
 },
 maps: { |self| self[\value].globalControls.collectAs({ |gc| if(gc.name != \detune) { [gc.name, gc.asMap] } }, Array).select(_.notNil).flat },
 type: \voicer) => Fact(\armsmelVC);
+
+
+// this is the more airy synth for the start of this section
+WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
+	trig = 1, chDepth = 0.003, chSpeed = 0.1, chPre = 0.01,
+	fenv, rdecay = 0.01, time = 0.1,
+	amp = 0.1, aenv, numOverlaps = 3|
+	var	sig, chSig, rfreq, overlapTrigs/*, time*/;
+
+	sig = COsc.ar(noisebuf, nfreq, beats);
+	chSig = sig;
+	2.do {
+		chSig = DelayL.ar(chSig, 0.1, SinOsc.kr(chSpeed, Rand(0.0, 0.8pi), chDepth, chPre));
+		sig = sig + chSig;
+	};
+	fenv = fenv.dereference.value(trig, time);
+	overlapTrigs = PulseDivider.kr(trig, numOverlaps, (0 .. numOverlaps-1));
+	rfreq = EnvGen.kr(fenv, gate: overlapTrigs);
+	sig = Ringz.ar(sig, rfreq, rdecay);
+	sig = Limiter.ar(sig);
+	aenv = aenv.dereference.value(trig, time);
+	Mix(sig * amp * EnvGen.kr(aenv, gate: overlapTrigs, timeScale: time, doneAction: 0))
+}, [\mybuf, \freq, #[0.1, 10, \exp],
+	TrigSpec.new, #[0.001, 0.5, \exp], #[0.001, 0.5, \exp], #[0.001, 0.5, \exp],
+	ObjectSpec(`{ |trig, decay|
+		var	proportion = TRand.kr(0.02, 0.9, trig),
+			low = TRand.kr(300, 600, trig);
+		Env([low, TRand.kr(1200, 2000, trig), low],
+			[proportion, 1 - proportion] * decay, \exp)
+	}), #[0.01, 1.0, \exp], #[0.01, 1.0, \exp], #[0.1, 10, \exp], EnvSpec(Env.perc(0.01, 0.99)),
+	StaticSpec(1, 6, \lin, 1)
+]);
+
+
+\addRvbOut.eval(\airskid, { |noisebuf, nfreq = 440, beats = 4.64,
+	chDepth = 0.05, chSpeed = 1.2, chPre = 0.06,
+	loffreq = 440, hiffreq = 440, rdecay = 0.01,
+	loTime = 0.12, hiTime = 0.22, timeMul = 1,
+	amp = 1, pan, sustain = 1|
+	var	sig,
+		ddelta = Dstutter(2, Dwhite(0.0, 1.0, inf).linexp(0, 1, loTime, hiTime)),
+		trig = TDuty.kr(ddelta, 0, ddelta),
+		time = Latch.kr(trig, trig) * timeMul;
+	sig = WrapInstr("arms.airskid").valueArray([
+		noisebuf, nfreq, beats, trig, chDepth, chSpeed, chPre,
+		{ |trig, decay|
+			var	proportion = TRand.kr(0.02, 0.9, trig); //,
+			Env([loffreq, hiffreq, loffreq],
+				[proportion, 1 - proportion] * decay, \exp)
+		}, rdecay, time, amp,
+		{ |trig, decay|
+			var	proportion = TRand.kr(0.02, 0.9, trig);
+			Env([0, 1, 0], [proportion, 1 - proportion] * decay, #[3, -3])
+		},
+		/*numOverlaps:*/ 3
+	]);
+	sig = sig * EnvGen.kr(Env.linen(0.1, sustain, 0.1, curve: -2), doneAction: 2);
+	Pan2.ar(sig, pan);
+}).add;
+
+SynthDef(\xylin, { |x1, x2, y1, y2, sustain = 1, out|
+	Out.kr(out, [
+		Line.kr(x1, x2, sustain, doneAction: 2),
+		Line.kr(y1, y2, sustain)
+	]);
+}).add;
+
+
+// airy melody
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer, distNear: 5, distFar: 20);
+	~xyDef = \xylin;
+	~def = \airskid;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		if(~glrvbmc.notNil) {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+				~event.put((key.asString.drop(-2) ++ "out").asSymbol, key.envirGet.inbus);
+			};
+		} {
+			"BP(%): Spatialization reverbs not found.".format(~collIndex.asCompileString).warn;
+		};
+		~event[\chan] = ~chan;
+
+		~buf = Buffer.alloc(s, 2048, 1);
+		~buf.sendCollection((Signal.fill(1024, { 1.0.rand2 }) * Signal.hammingWindow(1024))
+			.asWavetable);
+
+		~timeMulCtl = GenericGlobalControl(\timeMul, nil, 1.6, #[0.5, 3.5]);
+	};
+	~useGui = { |vpi| ~timeMulCtl => VP(vpi) };
+
+	~freeCleanup = {
+		[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\stopsReceivingFrom, ~chan) };
+		[~buf, ~chan, ~timeMulCtl].free;
+	};
+
+	~nfreq = Pexprand(40.0, 1800.0, inf);
+	~rdecay = 1;
+	~delta = Pwhite(0.4, 1.5, inf);
+	~sustain = Pkey(\delta) * Pwhite(3.0, 6.0, inf);
+	~loTime = Pexprand(0.12, 0.22, inf);
+	~hiTime = Pkey(\loTime);
+	~amp = 8.dbamp;
+
+	~rewriteProb = 0.3;
+	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	~phrases = [
+		#[2, 5, 4],
+		#[2, 7, 6, 4, 8],
+		#[2, 5, 6, 4],
+		#[9, 8, 3],
+		#[8, 11, 10, 5, 2, 3, 4],
+		#[-2, -5, 0, 1, 0, 4]
+	];
+	~degree = Plazy {
+		var	self = currentEnvironment;
+		Pswitch(
+			~phrases.collect { |row|
+				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
+					(_.notNil) -> { |item, level, inval|
+						// self: this runs inside the rewriter Proto object
+						if(self[\rewriteProb].coin) {
+							item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+						} { [item] }
+					}
+				])
+			},
+			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+		)
+	};
+	~hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 35) };
+	~loffreq = Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf);
+	~mode = \g;
+
+	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
+	~pan2 = Pkey(\x1).neg;
+	~yNear = 5;
+	~yFar = 20;
+
+	~xyPat = Pbind(
+		\instrument, BPStream(\xyDef),
+		\sustain, Pkey(\sustain),
+		\x1, BPStream(\pan1),
+		\x2, BPStream(\pan2),
+		\y1, BPStream(\yNear),
+		\y2, BPStream(\yFar)
+	);
+
+	~streamKeys = #[xyPat, rewriteLevel];
+	~makeStreams = {
+		~streamKeys.do { |key|
+			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
+		}
+	};
+	~reset = {
+		#[degree, rewriteLevel].do { |key| ~makeStreamForKey.(key) };
+	};
+
+	~asPattern = {
+		~makeStreams.();
+		Pfunc { |ev|
+			var xyEv = ~xyPatStream.next(ev);
+			xyEv !? {  // DON'T YIELD NIL!!!
+				xyEv.put(\delta, 0).put(\chan, nil).put(\bus, ev[\xylock].bus)
+				.yield
+			};
+			// why? event must .play before ev[\id] is available
+			thisThread.clock.sched(0, {
+				ev[\xylock].addNode(ev[\node]);
+				nil
+			});
+			ev
+		}
+		<>
+		Pbind(
+			\instrument, BPStream(\def),
+			\noisebuf, ~buf,
+			\nfreq, BPStream(\nfreq),
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain),
+			\loTime, BPStream(\loTime),
+			\hiTime, BPStream(\hiTime),
+			\timeMul, ~timeMulCtl,
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree),
+			\hiffreq, BPStream(\hiffreq),
+			\loffreq, BPStream(\loffreq),
+			\rdecay, BPStream(\rdecay),
+			\xylock, Pfunc { PR(\busLock).copy.prep((numCh: 2, rate: \control)) },
+			#[pan, distance], Pfunc { |ev|
+				(ev[\xylock].bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol }
+			},
+			\amp, BPStream(\amp)
+		)
+	};
+} => PR(\armsSkidMel);
 
 
 // now this really is a bit of silliness, but Pmono[Artic] patterns don't work
