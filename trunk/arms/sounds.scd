@@ -505,7 +505,7 @@ p = { |i|
 w.tryPerform(\close);
 w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
 Button(w, w.view.bounds.insetBy(2, 2))
-	.states_([["click"]])
+	.states_([["click", Color.new255(255, 200, 200), Color.black]])
 	.action_({ ~streams.do { |strm| strm.next(TempoClock.beats) } });
 w.front;
 
