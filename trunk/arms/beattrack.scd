@@ -3,6 +3,7 @@
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
 
+m.free;
 m = MixerChannel(\test, s, 1, 2);
 m => MCG(0);
 
@@ -35,6 +36,8 @@ a.free; z.free;
 // simplify!
 // tolerance as proportion of beat duration
 
+PeakMonitor(m, 10);
+
 k = Bus.control(s, 1);
 
 w.tryPerform(\close);
@@ -42,59 +45,85 @@ w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
 b = Button(w, w.view.bounds.insetBy(2, 2))
 	.states_([["click"]])
 	.action_({ |view, modifiers|
-		z.set(\t_trig, 1);
-		if(modifiers & 1 > 0) { z.trace };
+		if(z.isNil) { z = f.() } {
+			z.set(\t_trig, 1);
+			if(modifiers & 1 > 0) { z.trace };
+		};
 	});
-w.front;
+w.onClose_({
+	a.free; z.free;
+	r.stop;
+	w = nil;
+}).front;
 
 (
 a = m.play({ |t_trig = 0|
 	SinOsc.ar(TExpRand.kr(200, 800, t_trig)) * Decay2.kr(t_trig, 0.01, 0.08)
 }, [t_trig: k.asMap]);
 
-z = { |initTempo = 84, t_trig = 0, tolerance = 0.05, movingAvgSize = 8|
-	var	//initTrig = Impulse.kr(0),
-		i = PulseCount.kr(t_trig),
-		isNotFirstTrig = i > 1,
-		localIn = LocalIn.kr(3),
-		fbAvg = Select.kr(isNotFirstTrig, [60 / initTempo, localIn[0]]),
-		timer = Timer.kr(t_trig),
-		// multiples are allowed (permits missed triggers)
-		roundedDownTime = max(timer.trunc(fbAvg) - fbAvg, 0),
-		reducedTime = timer - roundedDownTime,
-		// moving avg
-		rotatingBuf = LocalBuf(movingAvgSize + 1, 1).clear,
-//		trigMinusInit = (t_trig > 0) - (isNotFirstTrig > 0),
-		iWrap = i, //.wrap(0, movingAvgSize),
-		writer = BufWr.kr(reducedTime, rotatingBuf, iWrap, loop: 1),
-		sum, sumDly, movingsum,
-		avg, toleranceAmt, goodTrig, trigout;
+f = {
+	var synth = { |initTempo = 84, t_trig = 0, tolerance = 0.05, movingAvgSize = 8, thresh = 0.05|
+		var	//initTrig = Impulse.kr(0),
+			sTime = Sweep.kr(1, 1),
+			filtTimer = Timer.kr(t_trig),
+			filtTrig = t_trig * (filtTimer > thresh),
+			i = PulseCount.kr(filtTrig),
+			isNotFirstTrig = i > 1,
+			localIn = LocalIn.kr(3),
+			fbAvg = Select.kr(isNotFirstTrig, [60 / initTempo, localIn[0]]),
+			timer = Timer.kr(filtTrig),
+			// multiples are allowed (permits missed triggers)
+			roundedDownTime = max(timer.trunc(fbAvg) - fbAvg, 0),
+			reducedTime = timer - roundedDownTime,
+			// moving avg
+			rotatingBuf = LocalBuf(movingAvgSize + 1, 1).clear,
+	//		trigMinusInit = (filtTrig > 0) - (isNotFirstTrig > 0),
+			iWrap = i, //.wrap(0, movingAvgSize),
+			writer = BufWr.kr(reducedTime, rotatingBuf, iWrap, loop: 1),
+			sum, sumDly, movingsum,
+			avg, toleranceAmt, goodTrig, trigout;
+	
+//reducedTime.poll(filtTrig, "\nwriting to buf");
+	
+		#sum, sumDly = Select.kr(Impulse.kr(0), [localIn[1..], 0 ! 2]);
+// sum.poll(filtTrig, "previous sum");
+// sumDly.poll(filtTrig, "previous sumDly");
+		sum = Latch.kr(sum + BufRd.kr(1, rotatingBuf, i, loop: 1), filtTrig);
+		sumDly = Latch.kr(sumDly + BufRd.kr(1, rotatingBuf, i+1, loop: 1), filtTrig);
+		movingsum = sum - sumDly;
+// sum.poll(filtTrig, "updated sum");
+// sumDly.poll(filtTrig, "updated sumDly");
+	
+		avg = (movingsum) / i.clip(1, movingAvgSize);
+// avg.poll(filtTrig, "-----> avg");
+		// check trigger within tolerance since last trig
+		toleranceAmt = tolerance * avg;
+		goodTrig = InRange.kr(timer, timer - toleranceAmt, timer + toleranceAmt);
+	
+		LocalOut.kr([avg, sum, sumDly]);
+		// movingsum.poll(filtTrig);
+		// output trigger at expected next beat	
+	//	trigout = TDuty.kr(avg, 0, 1) * (i > 0);
+		trigout = Impulse.kr(max(avg, 0.02).reciprocal) * isNotFirstTrig;
+		sTime.poll(filtTrig, "trigger", 0);
+		sTime.poll(trigout, "***** BANG *****", 1);
+		trigout
+	}.play(outbus: k, args: [t_trig: 1]);
 
-reducedTime.poll(t_trig, "\nwriting to buf");
-
-	#sum, sumDly = Select.kr(Impulse.kr(0), [localIn[1..], 0 ! 2]);
-sum.poll(t_trig, "previous sum");
-sumDly.poll(t_trig, "previous sumDly");
-	sum = Latch.kr(sum + BufRd.kr(1, rotatingBuf, i, loop: 1), t_trig);
-	sumDly = Latch.kr(sumDly + BufRd.kr(1, rotatingBuf, i+1, loop: 1), t_trig);
-	movingsum = sum - sumDly;
-sum.poll(t_trig, "updated sum");
-sumDly.poll(t_trig, "updated sumDly");
-
-	avg = (movingsum) / i.clip(1, movingAvgSize);
-avg.poll(t_trig, "-----> avg");
-	// check trigger within tolerance since last trig
-	toleranceAmt = tolerance * avg;
-	goodTrig = InRange.kr(timer, timer - toleranceAmt, timer + toleranceAmt);
-
-	LocalOut.kr([avg, sum, sumDly]);
-	// movingsum.poll(t_trig);
-	// output trigger at expected next beat	
-//	trigout = TDuty.kr(avg, 0, 1) * (i > 0);
-	trigout = Impulse.kr(max(avg, 0.001).reciprocal) * isNotFirstTrig;
-	trigout.poll(trigout, "***** BANG *****");
-	trigout
-}.play(outbus: k);
+	o = OSCpathResponder(s.addr, ['/n_end', synth.nodeID], { |t, r, m|
+		"z(%) ended".format(m[1]).debug;
+		z = nil;
+		p.remove;
+		r.remove;
+	}).add;
+	t = List.new;
+	u = List.new;
+	p = OSCresponderNode(s.addr, '/tr', { |time, r, m|
+		[t, u][m[2]].add(m[3]);
+	}).add;
+	synth
+};
+)
 
 r = fork {
 	loop {
@@ -102,7 +131,6 @@ r = fork {
 		if(0.9.coin) { z.set(\t_trig, 1) };
 	}
 };
-)
 
 z.trace
 
@@ -190,3 +218,16 @@ o.remove;
 a.free;
 
 a.trace;
+
+
+t = t.drop(1);
+t = t.differentiate;
+u = u.differentiate;
+
+[t.mean, u.mean]
+[t.size, u.size]
+
+t = t.drop(1);
+u = u.drop(1);
+
+[t, u, abs(t-u)].lace(t.size * 3).plot(numChannels: 3, minval: 0.0, maxval: 1.0);
