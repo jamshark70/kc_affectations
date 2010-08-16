@@ -232,6 +232,7 @@ u = u.drop(1);
 
 [t, u, abs(t-u)].lace(t.size * 3).plot(numChannels: 3, minval: 0.0, maxval: 1.0);
 
+Pgeom.fromEndpoints(1, 0.01, 25).postcs
 
 // Nick's agent-based approach
 (
@@ -241,18 +242,25 @@ Proto {
 	~phase = 0;
 	~lastWinTime = 0;
 	~downScoreFactor = 2.5;
+	~scoreDamping = 0.8254;  // reduces score by a factor of 100 over 25 iterations
 	~prep = { |phase = 0, ioi = 1|
 		~phase = phase;
 		~ioi = ioi;
 		currentEnvironment
 	};
-	~rescore = { |now|
-		var	nearest = ~phase + (now - ~phase).round(~ioi),
-			nearHalf = ~phase + (now - ~phase).round(~ioi * 0.5);
+	~rescore = { |now, inputIoi|
 		case
-			{ now absdif: nearest < 0.03 } { ~score = ~score + ~scoreAdd.(now) }
-			{ now absdif: nearHalf < 0.03 } { ~score = ~score + (0.1 * ~scoreAdd.(now)) }
+			// { now absdif: (~phase + (now - ~phase).round(~ioi * 2)) < 0.03 }
+			// 	{ ~score = ~score - 1 }
+			// now is within 30ms of prediction
+			{ (now absdif: (~phase + (now - ~phase).round(~ioi))) < 0.03
+				// and my ioi is not too much bigger than input
+				and: { ~ioi < (inputIoi * 1.2) } }
+				{ ~score = ~score + ~scoreAdd.(now) }
+			{ now absdif: (~phase + (now - ~phase).round(~ioi * 0.5)) < 0.03 }
+				{ ~score = ~score + (0.1 * ~scoreAdd.(now)) }
 			{ ~score = ~score - ((now - ~phase) * ~downScoreFactor) };
+		~score = ~score * ~scoreDamping;
 	};
 	~scoreAdd = { |now|
 		// if interval vs now is a (near)multiple of ioi, reduce influence on score
@@ -271,7 +279,7 @@ Proto {
 
 	~rejectThresh = 0.08;
 	~newAgentThresh = 0.25;
-	~cullActiveTimeAfter = 2;
+	~cullActiveTimeAfter = { (~bestInterval ? 0.5) * 2 };
 	~clock = { TempoClock.default };
 
 	~recvTrig = { |now|
@@ -284,7 +292,7 @@ Proto {
 		if(ioi >= ~rejectThresh) {
 			// Nick: 4-8
 			~agents.copy.do { |agent|
-				agent.rescore(now);
+				agent.rescore(now, ioi);
 //agent.score.debug("new score (%)".format(agent.id));
 				case
 					{ agent.shouldBeRemoved(now)/*.debug("remove")*/ } { ~agents.remove(agent) }
@@ -297,7 +305,7 @@ Proto {
 //"\nbest".debug; bestAgent.listVars;
 			};
 			// Nick: 9
-			culltime = now - ~cullActiveTimeAfter;
+			culltime = now - ~cullActiveTimeAfter.(now, ioi);
 			~activeTimes = ~activeTimes.reject { |time| time < culltime };
 			// Nick: 10-15
 			~activeTimes.do { |then|
@@ -336,9 +344,29 @@ p.listVars;
 
 p.agents.do { |ag| "".postln; ag.listVars };
 
+
 0.585648771929 / 0.29968354995071
 
 
 // problem:
 // sometimes near-multiple of yield is chosen -- why?
 //		Could be more than one agent with very close ioi's but different phases?
+
+
+(
+a = m.play({ |t_trig = 0|
+	SinOsc.ar(TExpRand.kr(200, 800, t_trig)) * Decay2.kr(t_trig, 0.01, 0.08)
+}, [t_trig: k.asMap]);
+
+o = OSCpathResponder(s.addr, ['/n_end', synth.nodeID], { |t, r, m|
+	"z(%) ended".format(m[1]).debug;
+	z = nil;
+	p.remove;
+	r.remove;
+}).add;
+t = List.new;
+u = List.new;
+p = OSCresponderNode(s.addr, '/tr', { |time, r, m|
+	[t, u][m[2]].add(m[3]);
+}).add;
+)
