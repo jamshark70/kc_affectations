@@ -231,3 +231,114 @@ t = t.drop(1);
 u = u.drop(1);
 
 [t, u, abs(t-u)].lace(t.size * 3).plot(numChannels: 3, minval: 0.0, maxval: 1.0);
+
+
+// Nick's agent-based approach
+(
+Proto {
+	~score = 0;
+	~ioi = 1;	// inter-onset interval
+	~phase = 0;
+	~lastWinTime = 0;
+	~downScoreFactor = 2.5;
+	~prep = { |phase = 0, ioi = 1|
+		~phase = phase;
+		~ioi = ioi;
+		currentEnvironment
+	};
+	~rescore = { |now|
+		var	nearest = ~phase + (now - ~phase).round(~ioi),
+			nearHalf = ~phase + (now - ~phase).round(~ioi * 0.5);
+		case
+			{ now absdif: nearest < 0.03 } { ~score = ~score + ~scoreAdd.(now) }
+			{ now absdif: nearHalf < 0.03 } { ~score = ~score + (0.1 * ~scoreAdd.(now)) }
+			{ ~score = ~score - ((now - ~phase) * ~downScoreFactor) };
+	};
+	~scoreAdd = { |now|
+		// if interval vs now is a (near)multiple of ioi, reduce influence on score
+		~ioi / (now - ~phase)
+	};
+	~shouldBeRemoved = { |now|
+		~score < -3 and: { now - ~lastWinTime > 4 }
+	};
+} => PR(\tempoAgent);
+
+Proto {
+	~agents = LinkedList.new;
+	~activeTimes = LinkedList.new.add(0);
+	~agentProto = \tempoAgent;
+	~nextID = 0;
+
+	~rejectThresh = 0.08;
+	~newAgentThresh = 0.25;
+	~cullActiveTimeAfter = 2;
+	~clock = { TempoClock.default };
+
+	~recvTrig = { |now|
+		var	ioi, bestAgent = ~agents.first, culltime;
+		if(~clock.isFunction) { ~clock = ~clock.value };
+		now ?? { now = ~clock.beats };
+		ioi = now - ~lastTrig;
+
+		// Nick: 1-3
+		if(ioi >= ~rejectThresh) {
+			// Nick: 4-8
+			~agents.copy.do { |agent|
+				agent.rescore(now);
+//agent.score.debug("new score (%)".format(agent.id));
+				case
+					{ agent.shouldBeRemoved(now)/*.debug("remove")*/ } { ~agents.remove(agent) }
+					{ agent.score > (bestAgent.tryPerform(\score) ? 0) } {
+						bestAgent = agent;
+					};
+			};
+			if(bestAgent.notNil) {
+				bestAgent.lastWinTime = now;
+//"\nbest".debug; bestAgent.listVars;
+			};
+			// Nick: 9
+			culltime = now - ~cullActiveTimeAfter;
+			~activeTimes = ~activeTimes.reject { |time| time < culltime };
+			// Nick: 10-15
+			~activeTimes.do { |then|
+				var	ioi = now - then;
+				if(ioi >= ~newAgentThresh) {
+					~agents.add(PR(~agentProto).copy.prep(now, ioi).put(\id, ~nextID));
+					~nextID = ~nextID + 1;
+				};
+			};
+			~activeTimes.add(now);
+			~lastTrig = now;
+			bestAgent !? { ~bestInterval = bestAgent.ioi };
+		};
+		~bestInterval
+	};
+
+	~lastTrig = 0;
+} => PR(\estimateTempo);
+)
+
+();
+e = Env(#[0.3, 0.3, 1.2, 1.2, 0.5], #[5, 5, 3, 3] * 3, \exp);
+
+p = PR(\estimateTempo).copy;
+r = fork {
+	var	curve = e.asStream;
+	loop {
+		p.recvTrig(thisThread.beats).debug("best interval");
+		(curve.next * exprand(0.95, 1.05)).debug("\nyield").yield;
+	}
+};
+
+r.stop;
+
+p.listVars;
+
+p.agents.do { |ag| "".postln; ag.listVars };
+
+0.585648771929 / 0.29968354995071
+
+
+// problem:
+// sometimes near-multiple of yield is chosen -- why?
+//		Could be more than one agent with very close ioi's but different phases?
