@@ -39,7 +39,7 @@ k = Bus.control(s, 1);
 
 w.tryPerform(\close);
 w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
-Button(w, w.view.bounds.insetBy(2, 2))
+b = Button(w, w.view.bounds.insetBy(2, 2))
 	.states_([["click"]])
 	.action_({ |view, modifiers|
 		z.set(\t_trig, 1);
@@ -47,6 +47,7 @@ Button(w, w.view.bounds.insetBy(2, 2))
 	});
 w.front;
 
+(
 a = m.play({ |t_trig = 0|
 	SinOsc.ar(TExpRand.kr(200, 800, t_trig)) * Decay2.kr(t_trig, 0.01, 0.08)
 }, [t_trig: k.asMap]);
@@ -64,10 +65,10 @@ z = { |initTempo = 84, t_trig = 0, tolerance = 0.05, movingAvgSize = 8|
 		// moving avg
 		rotatingBuf = LocalBuf(movingAvgSize + 1, 1).clear,
 //		trigMinusInit = (t_trig > 0) - (isNotFirstTrig > 0),
-		iWrap = i.wrap(0, movingAvgSize-1),
+		iWrap = i, //.wrap(0, movingAvgSize),
 		writer = BufWr.kr(reducedTime, rotatingBuf, iWrap, loop: 1),
 		sum, sumDly, movingsum,
-		avg, toleranceAmt, goodTrig;
+		avg, toleranceAmt, goodTrig, trigout;
 
 reducedTime.poll(t_trig, "\nwriting to buf");
 
@@ -80,8 +81,8 @@ sumDly.poll(t_trig, "previous sumDly");
 sum.poll(t_trig, "updated sum");
 sumDly.poll(t_trig, "updated sumDly");
 
-	avg = (movingsum) / min(i, movingAvgSize);
-avg.poll(t_trig, "avg");
+	avg = (movingsum) / i.clip(1, movingAvgSize);
+avg.poll(t_trig, "-----> avg");
 	// check trigger within tolerance since last trig
 	toleranceAmt = tolerance * avg;
 	goodTrig = InRange.kr(timer, timer - toleranceAmt, timer + toleranceAmt);
@@ -89,12 +90,35 @@ avg.poll(t_trig, "avg");
 	LocalOut.kr([avg, sum, sumDly]);
 	// movingsum.poll(t_trig);
 	// output trigger at expected next beat	
-	TDuty.kr(avg, 0, 1) * (i > 0)
+//	trigout = TDuty.kr(avg, 0, 1) * (i > 0);
+	trigout = Impulse.kr(max(avg, 0.001).reciprocal) * isNotFirstTrig;
+	trigout.poll(trigout, "***** BANG *****");
+	trigout
 }.play(outbus: k);
+
+r = fork {
+	loop {
+		rrand(0.23, 0.28).wait;
+		if(0.9.coin) { z.set(\t_trig, 1) };
+	}
+};
+)
 
 z.trace
 
 a.free; z.free;
+r.stop;
+
+
+// so this is fine: kr unit for demand-rate input
+a = {
+	var time = LFNoise1.kr(1.0).range(0.1, 0.4),
+		trig = TDuty.kr(time, 0, 1);
+	time.poll(trig);
+	Silent.ar(1)
+}.play;
+
+a.free;
 
 
 m.synth.trace
