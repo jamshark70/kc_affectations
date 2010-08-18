@@ -7,6 +7,12 @@ m.free;
 m = MixerChannel(\test, s, 1, 2);
 m => MCG(0);
 
+n = MixerChannel(\test, s, 2, 2);
+n => MCG(1);
+
+m = MCG(0).v.mixer;
+n = MCG(1).v.mixer;
+
 b = Bus.audio(s, 1);
 k = Bus.control(s, 1);
 
@@ -237,7 +243,7 @@ Pgeom.fromEndpoints(1, 0.01, 25).postcs
 // Nick's agent-based approach
 (
 Proto {
-	~score = 0;
+	~score = 3;
 	~ioi = 1;	// inter-onset interval
 	~phase = 0;
 	~lastWinTime = 0;
@@ -267,7 +273,7 @@ Proto {
 		~ioi / (now - ~phase)
 	};
 	~shouldBeRemoved = { |now|
-		~score < -3 and: { now - ~lastWinTime > 4 }
+		~score <= 0.05 and: { now - ~lastWinTime > 4 }
 	};
 } => PR(\tempoAgent);
 
@@ -278,7 +284,8 @@ Proto {
 	~nextID = 0;
 
 	~rejectThresh = 0.08;
-	~newAgentThresh = 0.25;
+	~newAgentLow = 0.3;
+	~newAgentHigh = 0.7;
 	~cullActiveTimeAfter = { (~bestInterval ? 0.5) * 2 };
 	~clock = { TempoClock.default };
 
@@ -310,7 +317,7 @@ Proto {
 			// Nick: 10-15
 			~activeTimes.do { |then|
 				var	ioi = now - then;
-				if(ioi >= ~newAgentThresh) {
+				if(ioi.inclusivelyBetween(~newAgentLow, ~newAgentHigh)) {
 					~agents.add(PR(~agentProto).copy.prep(now, ioi).put(\id, ~nextID));
 					~nextID = ~nextID + 1;
 				};
@@ -328,13 +335,30 @@ Proto {
 
 ();
 e = Env(#[0.3, 0.3, 1.2, 1.2, 0.5], #[5, 5, 3, 3] * 3, \exp);
+e = 0.5;
+
+SynthDef(\singrain, { |outbus, freq = 440, amp = 1, time = 1, pan = 0|
+	Out.ar(outbus, Pan2.ar(SinOsc.ar(freq, 0, amp) * EnvGen.kr(Env.perc(0.01, time), doneAction: 2), pan));
+}).add;
+
 
 p = PR(\estimateTempo).copy;
 r = fork {
-	var	curve = e.asStream;
+	var	curve = e.asStream, prediction,
+		seed = Date.seed,
+		freq = Pseed(seed, Pexprand(200.0, 800.0, inf)),
+		fgen = freq.asStream,
+		fdelay = Pdelay(freq, 1, 1).asStream;
 	loop {
-		p.recvTrig(thisThread.beats).debug("best interval");
-		(curve.next * exprand(0.95, 1.05)).debug("\nyield").yield;
+		n.play((instrument: \singrain, freq: fdelay.next, time: 0.1, pan: -1, amp: 1));
+		prediction = p.recvTrig(thisThread.beats).debug("best interval");
+		if(prediction.notNil) {
+			thisThread.clock.sched(prediction, {
+				n.play((instrument: \singrain, freq: fgen.next, time: 0.1, pan: 1, amp: 1));
+				nil
+			});
+		} { fgen.next };  // keep freq streams in sync
+		(curve.next * exprand(0.9, 1.1)).debug("\nyield").yield;
 	}
 };
 
@@ -346,6 +370,47 @@ p.agents.do { |ag| "".postln; ag.listVars };
 
 
 0.585648771929 / 0.29968354995071
+
+
+// whoa... that is seriously close!
+
+e = #[-1, 1].collect { |pan|
+	(instrument: \singrain, time: 0.1, pan: pan, amp: 1, immediateOSC: true)
+	.parent_(ProtoEvent(\singleSynthPlayer).v.parent)
+};
+
+p = PR(\estimateTempo).copy;
+r = Routine {
+	var	//curve = e.asStream,
+		prediction,
+		seed = Date.seed,
+		freq = Pseed(seed, Pexprand(200.0, 800.0, inf)),
+		fgen = freq.asStream,
+		fdelay = Pdelay(freq, 1, 1).asStream;
+	loop {
+		n.play(e[0].copy.put(\freq, fdelay.next));
+		prediction = p.recvTrig(thisThread.beats);
+		if(prediction.notNil) {
+			thisThread.clock.sched(prediction, {
+				n.play(e[1].copy.put(\freq, fgen.next));
+				nil
+			});
+		} { fgen.next };  // keep freq streams in sync
+		true.yield;
+	}
+};
+
+w.tryPerform(\close);
+w = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+b = Button(w, w.view.bounds.insetBy(2, 2))
+	.states_([["click", Color.new255(255, 200, 200), Color.black]])
+	.action_({ |view, modifiers|
+		TempoClock.sched(0, { r.next; nil });
+	});
+w.onClose_({
+	w = nil;
+}).front;
+
 
 
 // problem:
