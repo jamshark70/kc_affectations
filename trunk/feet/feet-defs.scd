@@ -1783,3 +1783,342 @@ make: { |name|
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\stopturn);
+
+
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+
+	PR(\basicBufferPlayer).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthPlayer, instrument: \bufGrainPanFiltDist),
+		alwaysReset: true,
+	
+		bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
+		pvSource: \op,
+	
+		inChannels: 2,
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+	
+		autoRun: true,
+	
+		gest: Pfunc { ~gestures.keys.choose },
+		defaultParms: nil,
+		initAmp: 0.3,
+	
+		early: 0.1,
+		buf: 0,
+		ptIndex: Plazy { Pwhite(0, ~pt.size-2, inf) },
+		start: Pfunc { |ev|
+			(~pt[ev[\pt]] - ((ev[\early] ?? { ev[\parms][\early] ?? { ~early } }) * ev[\rate]))
+				* ~buffers[ev[\bufIndex]].sampleRate
+		},
+		time: 0.4,
+		rate: Pexprand(0.9, 1.7, inf),
+		ffreq: 18000,
+		fastDelta: Pexprand(0.08, 0.3, inf),
+		amp: Pindex(Pfunc { |ev|
+			var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
+			~peaks[(early <= 0).binaryValue]
+		}, Pfin(1, Pkey(\pt)), inf).reciprocal, //.trace(prefix: "amp: "),
+		numEv: Pwhite(5, 12, inf),
+		gDelta: Pwhite(0.5, 2.5, inf),
+		distNear: 5,
+		distFar: 20,
+	
+		slowDelta: Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf),
+		slowRate: Pwhite(0.5, 0.8, inf),
+		slowShift: Pexprand(1, 15, inf) - 3,
+	
+		rewriteEmbedder: { |int, in, level|
+			if(int.every(_.inclusivelyBetween(-16, 16))) {
+				Ptuple([
+					Pseq(int, 1),
+					Pseq([in[1], Pn(level+1, inf)], 1)
+				], 1)
+			} {
+				Pn([0, 0], 0)	// <-- drop this branch totally
+			}
+		},
+			// w/o Plazy, rewriteEmbedder would come from the wrong environment
+		kfreq: Plazy {
+			PR(\rewriter).copy.prep(Ptuple([Pseq([4, 7, 6], 1), 1], 1), Pseries(0, 1, inf), [
+				{ |in| in[0] < 0 } -> { |in, level|
+					var int = if(0.5.coin) { #[3, -1] /*.debug(">>> add motive")*/ }
+						{ { #[-1, 1, 2, 3].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				},
+				{ |in| in[0] > 10 } -> { |in, level|
+					var int = if(0.5.coin) { #[-3, 1] /*.debug(">>> add motive")*/ }
+						{ { #[-3, -2, -1, 1].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				},
+				{ true } -> { |in, level|
+					var int = if(0.45.coin) { #[[-3, 1], [3, -1]].choose/*.debug(">>> add motive")*/ }
+						{ { #[-2, -1, 1, 2].choose } ! rrand(1, 3) };
+					~rewriteEmbedder.(([in[0]] ++ int).integrate, in, level);
+				}
+			]).keepLowerLevels_(true).rewriteEmbedder_(~rewriteEmbedder)
+		},
+		nextLowerInt: Pseries({ rrand(1, 3) }, Prand(#[-2, -1, 1, 2], inf), inf)
+			.fold(-10, 10).reject { |x, ev| x >= ev[\filtDegree] } - Pkey(\filtDegree),
+		chordInt: Pwhite(-3, -1, inf),
+		chordN: 0,
+		kdecay: Pexprand(0.011, 0.1, inf),
+		kamp: 1,
+		defaultKlankHarm: (1..5),
+		defaultKlankAmps: (1..5).reciprocal,
+		defaultKlankDecays: 1 ! 5,
+		defaultChorusAmps: (1..3).reciprocal * 0.3,
+	
+		postMCCreation: { |chan|
+			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
+	
+			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
+			~event.putAll((
+				// just in case reverb channels don't exist,
+				// push them to hw input buses (to suppress output)
+				glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+				chan: ~chan,
+				ampMap: ~ampCtl.asMap
+			));
+			~readLabels.();
+	
+			if(BP.exists(~pvSource)) {
+				#[pvbuf, fftSize, hop, numPvFrames].do { |key|
+					key.envirPut(BP(~pvSource)[key]);
+				}
+			} {
+				"BP(%) not found; can't use any pv gestures.".format(~pvSource.asCompileString).warn
+			};
+		},
+		useGui: { |vpi| ~ampCtl => VP(vpi) },
+		free: {
+			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
+			~ampCtl.free;
+		},
+		stopCleanup: {
+			~spawner = nil
+		},
+	
+		// external hook to drop a gesture in!
+		runGesture: { |parms|
+			if(~isPlaying) {
+				parms ?? { parms = () };
+				parms[\gest] ?? { parms[\gest] = ~gestStream.next };
+				if(parms[\gest].notNil) {
+					parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
+					~spawner.par(~makeGesture.(parms))
+				} {
+					"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
+					.postf(~collIndex.asCompileString);
+				};
+			} {
+				"BP(%) is not playing, can't run a gesture".format(~collIndex.asCompileString).warn;
+			};
+		},
+	
+		makeGesture: { |parms|
+			Pchain(
+				~gestures[parms[\gest]].value(parms),
+				~baseValuePat.value(parms),
+				(parms: parms)
+			)
+		},
+	
+		xyPat: { |parms|
+			Ptuple([
+				if(parms[\xEnds].notNil) {
+					Pseries.fromEndpoints(*(parms[\xEnds] ++ parms[\numEv]))
+				} {
+					Pseries.fromEndpoints(
+						rrand(-1.0, 0.2), rrand(0.2, 1.0), parms[\numEv]
+					) * #[-1, 1].choose
+				},
+				if(parms[\yEnds].notNil) {
+					Pseries.fromEndpoints(*(parms[\yEnds] ++ parms[\numEv]))
+				} {
+					Pseries.fromEndpoints(rrand(~distNear, ~distFar), rrand(~distNear, ~distFar),
+						parms[\numEv]
+					)
+				}
+			])
+		},
+	
+		gestures: (
+			clatter: { |parms|
+				Pbind(
+					#[pan, distance], ~xyPat.(parms),
+					\delta, BPStream(\fastDelta),
+					\amp, BPStream(\amp)
+				)
+			},
+			oneKlank: { |parms|
+				Pbind(
+					\instrument, Pn(\bufGrainPanKlankDist, 1),
+					\delta, 0.5,
+					\amp, BPStream(\amp),
+					#[filtDegree, level], BPStream(\kfreq),
+					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
+					\filtAttack, 0.01,
+					\filtDecay, BPStream(\kdecay),
+					\filtAmp, BPStream(\kamp),
+					\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+					\chorusAmt, parms[\chorusAmt] ?? { 0.02 },
+					\chorusDelay, parms[\chorusDelay] ?? { 0.03 },
+					\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+					\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+					\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+					\decays, parms[\decays] ?? { [~defaultKlankDecays] },
+					\pan, rrand(-1.0, 1.0),
+					\distance, Pkey(\level).linlin(1, 6, ~distNear, ~distFar)
+				)
+			},
+			klankHarmonize: { |parms|
+				Pbind(
+					\nextLower, BPStream(\nextLowerInt),
+					\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
+					\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLower), Pkey(\chord)], inf)
+						.collect { |item| Mode(\g).cps(item.flat.integrate + 35) }
+				)
+				<> ~gestures[\oneKlank].(parms)
+			},
+			oneKlankSteps: { |parms|
+				Pseq(
+					#[oneKlank, clatter].collect { |key| ~gestures[key].(parms) },
+					1
+				)
+			},
+			klankHrmSteps: { |parms|
+				Pseq(
+					#[klankHarmonize, clatter].collect { |key| ~gestures[key].(parms) },
+					1
+				)
+			},
+			decay: { |parms|
+				parms[\numEv] = rrand(18, 28);
+				parms[\yEnds] = [rrand(0.3, 0.4), rrand(0.75, 1.0)].linlin(0, 1, ~distNear, ~distFar);
+				Pbind(
+					#[pan, distance], ~xyPat.(parms),
+					\early, 0,
+					\pt, Pstutter(inf, BPStream(\ptIndex).reject(#[3, 10, 14].includes(_))),
+					\start, Pstutter(inf, BPStream(\start)),
+					\delta, rrand(0.06, 0.09),//.debug("decay delta"),
+					\time, Pkey(\delta) * rrand(1.75, 2.2), //rrand(0.6, 0.8),
+					\rate, Pstutter(inf, Pkey(\rate)),
+					\amp, Pstutter(inf, BPStream(\amp)) / Pindex(~ampCorrections, Pkey(\pt), inf)
+						* Pgeom.fromEndpoints(1, -25.dbamp, parms[\numEv]) * -6.dbamp,
+					\ffreq, Pstutter(inf, Pkey(\ffreq))
+						* Pgeom.fromEndpoints(1, rrand(0.005, 0.012), parms[\numEv])
+				);
+			},
+			slowSteps: { |parms|
+				Pbind(
+					\instrument, \pvplayPanDist,
+					\pvbuf, ~pvbuf,
+					\pt, BPStream(\ptIndex).clump(3),
+					\start, ~start,
+					\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+					#[pan, distance], ~xyPat.(parms),
+					\delta, BPStream(\slowDelta),
+					\rate, BPStream(\slowRate).clump(3),
+					\time, Pkey(\delta),
+					\amp, BPStream(\amp) * (-4.dbamp),
+					\shiftS, BPStream(\slowShift).clump(3),
+					\shiftE, Pkey(\shiftS)
+				)
+			},
+			slowStepStretch: { |parms|
+				parms[\xEnds] ?? {
+					parms[\xEnds] = [rrand(0.5, 1.0) * #[-1, 1].choose, 0]
+				};
+				parms[\yEnds] ?? {
+					parms[\yEnds] = [rrand(0.5, 1.0).linlin(0.0, 1.0, ~distNear, ~distFar), ~distNear]
+				};
+				Pbind(
+					\instrument, \pvplayPanDist,
+					\early, 0,
+					\pvbuf, ~pvbuf,
+					\pt, BPStream(\ptIndex).clump(3),
+					\start, ~start,
+					\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+					#[pan, distance], Pseq([
+						Pfin(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
+						[#[-1, 0, 1], ~distNear]
+					]),
+					\delta, (BPStream(\slowDelta) * Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7),
+						parms[\numEv])) ++ 0.4,
+					\rate, Pseq([
+						Pfin(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
+						Pwhite(0.04, 0.1, 1)
+					]),
+					\time, Pseq([
+						Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
+						Pkey(\delta) / Pkey(\rate)
+					]),
+					\amp, BPStream(\amp) * -4.dbamp,
+					\origShiftS, BPStream(\slowShift).clump(3),
+					\shiftS, Pkey(\origShiftS) + Pseq([
+						Pfin(parms[\numEv] /* - 1 */, 0),
+						Pwhite(3, 9, 1)
+					]),
+					\shiftE, Pkey(\origShiftS)
+				) //.collect { |ev| if(ev[\shiftS][0] > ev[\origShiftS][0]) { ev.postcs } { ev } }
+			},
+			clatterDecay: { |parms|
+				Pseq(#[clatter, decay].collect { |key| ~gestures[key].(parms) }, 1)
+			},
+			klankDecay: { |parms|
+				Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
+			}
+		),
+	
+		asPattern: {
+			~numEvStream ?? { ~makeStreamForKey.(\numEv) };
+			~gDeltaStream ?? { ~makeStreamForKey.(\gDelta) };
+			~gestStream ?? { ~makeStreamForKey.(\gest) };
+			Pspawner { |sp|
+				~spawner = sp;
+				if(~autoRun) {
+					"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
+					loop {
+						~runGesture.(~defaultParms.().copy);
+						sp.wait(~gDeltaStream.next());
+					}
+				} {
+					loop {
+						sp.wait(0.1);
+					}
+				}
+			}
+		},
+		baseValuePat: {
+			Pbind(
+				\distNear, Pfunc { ~distNear },
+				\distFar, Pfunc { ~distFar },
+				\bufIndex, Plazy { BPStream(\buf) },
+				\bufnum, Pfunc { |ev| ~buffers[ev[\bufIndex]].bufnum },
+				\pt, Plazy { BPStream(\ptIndex) },
+				\rate, Plazy { BPStream(\rate) },
+				\start, Plazy { BPStream(\start) },
+				\time, Plazy { BPStream(\time) },
+				\ffreq, Plazy { BPStream(\ffreq) } //,
+			)
+		},
+		processLabels: PR(\steps1).v[\processLabels],
+		readLabels: PR(\steps1).v[\readLabels],
+		labelPath: {
+			~bufPaths[0].dirname
+				+/+ ~bufPaths[0].basename[.. ~bufPaths[0].basename.indexOf($_)]
+				++ "labels3.txt"
+		},
+	
+		// oh earth mother, this is a damnably wretched hack but I had to do SOMETHING!!
+		ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613],
+		listGest: { ~gestures.keys.asArray.sort.do(_.postln); "" }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\openingSteps);
