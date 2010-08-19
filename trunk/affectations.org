@@ -1,0 +1,13 @@
+* For showing
+  DEADLINE: <2010-08-31 Tue>
+** Feet [%]
+*** TODO [#A] more "oomph" at beginning
+*** TODO [#B] improve sound for axial chords
+*** TODO [#B] better chords
+*** TODO [#C] Differentiate locomotive themes
+** Arms
+*** Axial
+*** Locomotive
+** Head [%]
+*** TODO [#A] combine harmonics, vocalization and drums
+*** TODO [#B] LPC for face/section start
