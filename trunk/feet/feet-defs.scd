@@ -1875,7 +1875,9 @@ make: { |name|
 	
 		postMCCreation: { |chan|
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
-	
+
+			~chan.playfx(Instr("busfx.limiter"), [0, 2, 0.99, 0.05]);
+
 			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
 			~event.putAll((
 				// just in case reverb channels don't exist,
