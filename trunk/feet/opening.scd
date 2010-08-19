@@ -1289,6 +1289,13 @@ p.stop;
 x.next;
 
 // sequence
+Fact(\opening) => BP(\op);
+Fact(\openingSteps) => BP(\st);
+Fact(\waterch) => BP(\waterch);
+Fact(\waterpad) => VC(\waterpad);
+BP(\waterch) => VC(\waterpad);
+
+
 PR(\trajectories) => BP(\traj);
 d = DDWTimer.new;
 
