@@ -1649,7 +1649,7 @@ PR(\arpeg1).clone {
 			~lastEv.use { ~releaseNote.() };
 			~lastEv = nil;
 		};
-		~superAsPattern.(inEvent).postcs.collect { |ev|
+		~superAsPattern.(inEvent).collect { |ev|
 			var	synths, count;
 			if(ev[\length] == inf) {
 				~lastEv = ev.put(\immediateOSC, true);
