@@ -1,6 +1,9 @@
 
 var	temp, temp2;
 
+// just in case... (won't load twice if already loaded)
+(thisProcess.nowExecutingPath.dirname.dirname +/+ "common/common-defs.scd").loadPath;
+
 ~clock108 ?? {
 	~clock108 = TempoClock(108/60).permanent_(true);
 	~clock108.schedAbs(~clock108.nextBar, { ~clock108.beatsPerBar = 3 });
@@ -1099,7 +1102,7 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 }).add;
 
 
-(keys: #[master, rvbmc],
+(keys: #[master, glrvbmc],
 copyKeys: #[buffers, chan, postMCCreation, calcBar, bar, amps],  // you can override this
 sourceFreesMe: true,
 bp: \drum1,
@@ -1123,14 +1126,14 @@ make: { |name|
 
 
 (
-keys: #[master, rvbmc, clock108],
+keys: #[master, glrvbmc, clock108],
 make: { |name|
 	BP(name).free;
 	PR(\bufPerc).chuck(BP(name), nil, (
-		master: ~master, rvbmc: ~rvbmc,
+		master: ~master, rvbmc: ~glrvbmc,
 		alwaysReset: true,
 		reset: { ~pbindPreAction.reset },
-		bufPaths: ["~/sounds/drums/Udu/uduSLAP1.wav".standardizePath],
+		bufPaths: [topEnvironment[\sampleDir] +/+ "head/uduSLAP1.wav".standardizePath],
 		baseIndices: #[0, 8],
 		baseAmp: 1,
 		postMCCreation: {
@@ -1193,7 +1196,7 @@ make: { |name|
 }, type: \bp) => Fact(\drum1);
 
 (
-keys: #[master, rvbmc, clock108],
+keys: #[master, glrvbmc, clock108],
 source: \drum1,
 make: { |name|
 	BP(name).free;
@@ -1236,7 +1239,7 @@ makeBP: { |name|
 }, type: \bp) => Fact(\drum2);
 
 (
-keys: #[master, rvbmc, clock108],
+keys: #[master, glrvbmc, clock108],
 source: \drum1,
 make: Fact(\drum2).v[\make],
 makeBP: { |name|
@@ -1245,7 +1248,7 @@ makeBP: { |name|
 	parms = (
 		alwaysReset: true,
 		master: ~master,
-		rvbmc: ~rvbmc,
+		rvbmc: ~glrvbmc,
 		reset: { ~pbindPreAction.reset },
 		postBufferLoad: {
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
@@ -1254,7 +1257,7 @@ makeBP: { |name|
 		},
 		useGui: { |vpi| ~ffreqCtl => VP(vpi) },
 		free: { ~ffreqCtl.free },
-		bufPaths: "~/sounds/drums/Udu/*eq-FING*".pathMatch,
+		bufPaths: (topEnvironment[\sampleDir] +/+ "head/*eq-FING*").pathMatch,
 		amps: 0,
 		barHook: {
 			~bufs = { ~buffers.size.rand } ! ~amps.count(_ > 0);
@@ -1264,6 +1267,9 @@ makeBP: { |name|
 		def: \bufGrainRLPFPan
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
+
+"\n\ndrum3 chuck parms".postln;
+parms.postcs;
 	
 	PR(\bufPerc).chuck(BP(name), nil, parms);
 	~clock108 => BP(name);
@@ -1271,7 +1277,7 @@ makeBP: { |name|
 
 
 // drum4-6
-(keys: #[master, rvbmc, clock108],
+(keys: #[master, glrvbmc, clock108],
 source: #[drum1, drum3],
 make: { |name|
 	BP(name).free;
@@ -1304,7 +1310,7 @@ makeBP: { |name|
 		postBufferLoad: BP(\drum1).v[\postBufferLoad],
 // 		free: {},
 		master: ~master,
-		rvbmc: ~rvbmc,
+		rvbmc: ~glrvbmc,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
 		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
@@ -1337,7 +1343,7 @@ makeBP: { |name|
 	BP(name).free;
 	PR(\drumSubdiv).chuck(BP(name), nil, (
 		master: ~master,
-		rvbmc: ~rvbmc,
+		rvbmc: ~glrvbmc,
 		gest: \ostFilt2,
 		source: ~source,
 		ctlSource: ~ctlSource	// use same controls as ctlSource
