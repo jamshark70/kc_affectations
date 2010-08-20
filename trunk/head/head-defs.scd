@@ -1268,9 +1268,6 @@ makeBP: { |name|
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
 
-"\n\ndrum3 chuck parms".postln;
-parms.postcs;
-	
 	PR(\bufPerc).chuck(BP(name), nil, parms);
 	~clock108 => BP(name);
 }, type: \bp) => Fact(\drum3);
@@ -1800,3 +1797,117 @@ PR(\abstractProcess).clone {
 		);
 	}
 } => PR(\drumSubdiv);
+
+
+
+(
+keys: #[master, glrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		master: ~master, rvbmc: ~glrvbmc,
+		dir: topEnvironment[\dir] ?? { Document.current.path.dirname.dirname +/+ "samples/feet" },
+		lpcPath: "words-ana3.lpc.aif",
+		labelPath: "words-labels.txt",
+		audioPath: "words-mono.aiff",
+		event: (eventKey: \polySynthBusLock),
+		tun: PR(\counterpoint).tun,
+	
+		userprep: {
+			~wt = Buffer.allocConsecutive(8, s, 2048, 1, { |buf, i|
+				var	amps = 1 ! 18,	// c. 800 Hz top freq, just for test
+					indices = (1..17).scramble.keep(rrand(9, 12));
+				indices.do { |i| amps[i] = rrand(0.0, 0.1) };
+				buf.sine1Msg(amps)
+			});
+	
+			~lpcb = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
+			~pt = TabFileReader.read(~dir +/+ ~labelPath);
+			~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
+			SoundFile.use(~dir +/+ ~audioPath, { |file| ~voxdur = file.duration });
+		},
+		userfree: { [~wt, ~lpcb].free },
+	
+		degree: Pwhite(36, 44, inf) -.x Pseries(0, Pwhite(1, 7, 2), inf).clump(2),
+		mode: \ab,
+		bufmod: Pwhite(0, Pfunc { ~wt.size - 1.001 }, inf),
+		amp: Pexprand(0.5, 1, inf),
+	
+		degToCps: Pfunc { |ev|  // ev[\degree] should be a 2-item array
+			var	deg = ev[\degree].unmapMode(ev[\mode]),
+				fr = ~tun.cps(deg), ratio;
+			if(fr.size > 1) {
+				ratio = fr.reduce('/');
+				if(ratio < 1.0) { ratio = ratio.reciprocal };
+				// if interval is not tuned close to pure, switch to alternate scale
+				if(ratio.asFraction[1] > 16) {
+					fr = ~tun.cps(deg + 0.01)
+				} { fr };
+			} {
+				fr
+			}
+		},
+	
+		lpcDef: \simpleLPCfxPan,
+		lpcStart: Pkey(\ptstart), // Pwhite(Pkey(\ptstart), Pkey(\ptend) - Pkey(\time), inf),
+		lpcEnd: Pkey(\ptend), // Pkey(\start) + Pkey(\time),
+		lpcPan: Pwhite(-1.0, 1.0, inf),
+		lpcAtt: 0.05,
+		lpcDec: 0.05,
+	
+		lpcEvPat: Plazy {
+			/*Debug*/Pbind(
+				\instrument, BPStream(\lpcDef),
+				\lpcbuf, ~lpcb,
+				\voxdur, ~voxdur,
+				\pt, Pxrand(~pt, inf),
+				#[ptstart, ptend], Pkey(\pt),
+				\start, BPStream(\lpcStart),
+				\end, BPStream(\lpcEnd),
+				// \time should be populated by sanitizeEvent
+				\amp, 1,
+				\pan, BPStream(\lpcPan),
+				\attack, BPStream(\lpcAtt),
+				\decay, BPStream(\lpcDec)
+			) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) ?? { ev } }
+		},
+		objects: { (
+			wtblip: (
+				def: (  // this looks funny but is legal! expression sequence returns last result
+					WrapInstr("osc2.vosc3percEnv", { |egAtk = 0.01, egDcy = 0.2|
+						WrapInstr("osc2.vosc3").wrap((nil ! 4) ++ Env.adsr(egAtk, egDcy, 0, 0.01));
+					}, nil ! 2);
+					WrapPatch("osc2.vosc3percEnv", [nil, nil, nil, KrNumberEditor(1, #[0, 1]).lag_(nil),
+						~wt.first.bufnum, nil, nil, nil, `1.003])
+				),
+				args: [
+					degree: BPStream(\degree),
+					mode: BPStream(\mode),
+					freq: BPStream(\degToCps),
+					bufmod: BPStream(\bufmod),
+					vsens: 1,
+					gate: BPStream(\amp),
+					egAtk: 0.01,
+					egDcy: Pkey(\sustain)
+				]
+			)
+		) },
+	
+		superPattern: PR(\basicSynthChooser).v[\asPattern],
+		asPattern: {
+			/*Debug*/Pbind(\lpcEv, ~lpcEvPat) <> ~superPattern.()
+	// 		Pbindf(~superPattern.(),
+	// //			\lpcProto, \singleSynthPlayer,
+	// 			\lpcEv, ~lpcEvPat
+	// 		)
+		},
+		sanitizeEvent4lpc: { |ev, keys((time: \sustain))|
+			var	newEv = ();
+			keys.keysValuesDo { |k, v|
+				newEv[k] = ev[v];
+			};
+			newEv
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\int);
