@@ -1,13 +1,17 @@
 * For showing
   DEADLINE: <2010-08-31 Tue>
-** Feet [%]
-*** TODO [#A] more "oomph" at beginning
+** Feet [1/4]
+*** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** TODO [#B] improve sound for axial chords
 *** TODO [#B] better chords
 *** TODO [#C] Differentiate locomotive themes
 ** Arms
 *** Axial
 *** Locomotive
-** Head [%]
-*** TODO [#A] combine harmonics, vocalization and drums
-*** TODO [#B] LPC for face/section start
+** Head [0/2]
+*** TODO [#A] [0/4] combine harmonics, vocalization and drums
+**** TODO Pull all the init stuff together
+**** TODO Why are notes so quiet compared to drone?
+**** TODO Merge formants into drone
+**** TODO When/how to add drums?
+*** TODO [#C] LPC for face/section start
