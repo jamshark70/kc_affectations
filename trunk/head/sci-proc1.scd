@@ -1,5 +1,9 @@
 // harmonic series processes
 
+Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
+#[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
+s.waitForBoot(e { (Document.current.path.dirname +/+ "head-defs.scd").debug("loading").loadPath });
+
 
 SynthDescLib.global.browse;
 Object.browse;
@@ -594,6 +598,10 @@ PR(\cadences).chuck(BP(\cd), nil, (parentBP: \cpt));
 
 Fact(\int) => BP(\int);
 // what clock should int use?
+~clock60 ?? { ~clock60 = TempoClock(tempo: 1, queueSize: 1024) };
+~clock60 => BP(\int);
+
+BP(#[cd, cpt, fmt, hs, hsd, hstrig, hswp, int, mstClock]).do { |bp| bp.printStopMsg = false };
 )
 
 (
@@ -684,33 +692,18 @@ t = TLSequenceIterator([
 ]).play(argClock: SystemClock);
 )
 
-t.stop
-BP(\mstClock).chan.stopRecord;
-
-t.isPlaying
-
-BP(\hstrig).delta = Pexprand(0.04, 0.2, inf) * Plazy { Env(#[32, 1], #[120], \exp).asStream };
-
-BP(\mstClock).fund * 32
-FormantTable.keys.select { |k| k.asString.contains("tenor") }.do { |k| FormantTable.at(k).postln }; ""
-
-BP(\fmt).delta = Pexprand(0.1, 0.9, inf);
-BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
-
-
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-chorus.aiff");
-
-BP.all.do { |bp| bp.printStopMsg = false };
-
-~clock60 = TempoClock(tempo: 1, queueSize: 1024);
-~clock60 => BP(\int);
-
-p = BP(\cpt);
 
 // choral with drone
 (
 t = TLSequenceIterator([
 	[0.5, bpCmd: (name: #[mstClock, fmt, hsd])],
+	// this returns an array, which will spawn a sub-iterator
+	#[chan, chan2].collect { |key|
+		PR(\mixerAutoSynthCmd).copy.putAll((
+			mixer: BP(\mstClock)[key], name: \ctlPoint, outName: \outbus,
+			value: -20.dbamp, time: 12, curve: -2.1
+		))
+	},
 	gcAutoSynthCmd: (gc: BP(\hsd).tophCtl, name: \ctlEnv, outName: \outbus,
 		connect: 0, env: Env(#[2, 32], #[12], 2)),
 	\cmdSync,
@@ -788,7 +781,7 @@ t = TLSequenceIterator([
 				{	var	up = rrand(0.1, 0.3);
 					PR(\mixerAutoSynthCmd).copy.putAll((
 						mixer: BP(\int).chan, name: \ctlEnv, outName: \outbus,
-						connect: 0, time: ~bpDur, env: Env(#[0.1, 0.7, 0.1], [up, 1-up], \exp)
+						connect: 0, time: ~bpDur, env: Env(#[-24, -8.5, -24].dbamp, [up, 1-up], \exp)
 					))
 				},
 				{	(if((~count = ~count + 1) < ~repeats) { ~bpDur }
@@ -800,7 +793,7 @@ t = TLSequenceIterator([
 		bpCmd: (name: \int),
 		mixerAutoSynthCmd: (
 			mixer: BP(\int).chan, name: \ctlPoint, outName: \outbus,
-			value: 0.75, time: 1.0, curve: 2.1
+			value: -8.5.dbamp, time: 3.5, curve: 2.1
 		)
 	],
 
@@ -887,3 +880,27 @@ BP(\cd).p5_(2).sharp_(true).shortFirst_(true).oneNote_(false);
 
 BP(\int).clock.gui;
 
+
+// scrap?
+t.stop
+BP(\mstClock).chan.stopRecord;
+
+t.isPlaying
+
+BP(\hstrig).delta = Pexprand(0.04, 0.2, inf) * Plazy { Env(#[32, 1], #[120], \exp).asStream };
+
+BP(\mstClock).fund * 32
+FormantTable.keys.select { |k| k.asString.contains("tenor") }.do { |k| FormantTable.at(k).postln }; ""
+
+BP(\fmt).delta = Pexprand(0.1, 0.9, inf);
+BP(\fmt).fmtslideTime = Pkey(\delta) * Pwhite(0.4, 0.8, inf);
+
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-chorus.aiff");
+
+BP.all.do { |bp| bp.printStopMsg = false };
+
+~clock60 = TempoClock(tempo: 1, queueSize: 1024);
+~clock60 => BP(\int);
+
+p = BP(\cpt);
