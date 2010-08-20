@@ -31,38 +31,6 @@ topEnvironment[\feetdir] ?? {
 	};
 };
 
-~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
-
-// don't want reverb on netbook
-if(Window.screenBounds.height > 600) {
-	// global reverb
-	~glrvbmc ?? {
-		~glrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
-	};
-
-	~glrvbmc.doWhenReady {
-		if(~glrvb.isNil or: { ~glrvb.isPlaying.not }) {
-// 			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), #[0] ++
-// 				[#[1.0, 0.75, 0.5, 1.0], Instr("busfx.freeverb2").specs[1..]].flop
-// 				.collect { |val_spec| KrNumberEditor(*val_spec) }
-			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), [0, KrNumberEditor(1.0, ControlSpec(0, 1, 'linear', 0, 0.5, "")), KrNumberEditor(0.54166668653488, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(0.5, ControlSpec(0.0, 1.0, 'linear', 0.0, 0.0, "")), KrNumberEditor(1.0, ControlSpec(0, 1, 'amp', 0, 0, "")) ]
-			);
-		};
-	};
-
-	// local reverb should be more stereo-separated
-	~lcrvbmc ?? {
-		~lcrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
-	};
-
-	~lcrvbmc.doWhenReady {
-		if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
-			~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
-		};
-	};
-};
-
-
 
 // trajectories for cheap-ass spatialization
 Proto {
