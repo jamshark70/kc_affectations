@@ -12,6 +12,7 @@ MixingBoard.at(0).refresh;
 )
 
 BP.all.do { |bp| bp.free };
+BP.all.select { |bp| bp.collIndex.asString.contains("drum") }.do(_.free);
 
 (
 (1..3).do { |i| Fact(("drum" ++ i).asSymbol).chuck(BP(("drum" ++ i).asSymbol), nil, (source: \drum1)) };
@@ -26,6 +27,11 @@ NotificationCenter.registerOneShot(\drum3, \ready, \bploader, e {
 	Fact(\drum7).chuck(BP(\drum8), nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
 });
 )
+
+BP.keys.asArray.sort.select { |bp| bp.asString.contains("drum") }.do { |bp, i|
+	BP(bp).chuck(MT(1), 60+i)
+};
+
 
 // NotificationCenter.registrationsFor(\drum3, \ready)
 // NotificationCenter.unregister(\drum3, \ready, \bploader);
@@ -81,6 +87,7 @@ t = TLSequenceIterator([
 		bp.fdecCtl.value = 0.25;
 		bp.ffLowCtl.value = 2;
 		bp.ffRangeCtl.value = 0;
+		if(d.class == DDWTimer) { d.reset };
 		0
 	},
 
