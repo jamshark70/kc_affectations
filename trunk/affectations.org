@@ -1,18 +1,24 @@
 * For showing
   DEADLINE: <2010-08-31 Tue>
-** Feet [1/4]
+** Feet [1/1]
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
-*** TODO [#B] improve sound for axial chords
-*** TODO [#B] better chords
-*** TODO [#C] Differentiate locomotive themes
+*** Optional [0/3]
+**** TODO [#B] improve sound for axial chords
+**** TODO [#B] better chords
+**** TODO [#C] Differentiate locomotive themes
 ** Arms
 *** Axial
 *** Locomotive
 ** Head [0/2]
-*** TODO [#A] [0/4] combine harmonics, vocalization and drums
-**** TODO Pull all the init stuff together
-***** TODO what clock should int use?
-**** TODO Why are notes so quiet compared to drone?
-**** TODO Merge formants into drone
-**** TODO When/how to add drums?
+*** TODO [#A] [4/6] combine harmonics, vocalization and drums
+**** TODO Reverb
+**** TODO [0/2] When/how to add drums?
+***** TODO Pacing: need to send signals between the two iterators
+****** (drums' start position is fine but it hits the climax before choral stuff is done)
+***** TODO Drum mixer levels
+**** DONE Pull all the init stuff together
+***** DONE what clock should int use?
+**** DONE Why are notes so quiet compared to drone?
+**** DONE Merge formants into drone
+**** DONE Tighten drone pacing
 *** TODO [#C] LPC for face/section start
