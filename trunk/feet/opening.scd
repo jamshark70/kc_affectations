@@ -10,6 +10,7 @@
 // track fwd/back position of dancers for 'distance' parm?
 
 BP.all.free;
+VC.all.free;
 
 s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
 Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
@@ -1303,7 +1304,7 @@ t.stop;
 
 (
 t = TLSequenceIterator([
-	{ ~master.level = -10.dbamp;
+	{ //~master.level = -10.dbamp;
 //		~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet-open.aiff");
 		1
 	},
@@ -1391,6 +1392,7 @@ t = TLSequenceIterator([
 	{	BP(\st).chordN = 1;
 		20
 	},
+/*
 	bpCmd: (name: \waterch, dur: 36, prepareBP: { |bp|
 		bp.reset;
 		BP(\st).stop(0);
@@ -1404,8 +1406,9 @@ t = TLSequenceIterator([
 	16,
 	mixerAutoSynthCmd: (mixer: ~master, name: \ctlPoint, outName: \outbus,
 		value: 0, time: 20, curve: -2.1, stopAction: { BP(\st).stop }),
+*/
 	\cmdSync,
-	{ "over".debug;
+	{ "over".debug; BP.all.stop;
 //		~master.stopRecord;
 		0
 	}
