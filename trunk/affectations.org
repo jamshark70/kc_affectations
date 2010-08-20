@@ -11,6 +11,7 @@
 ** Head [0/2]
 *** TODO [#A] [0/4] combine harmonics, vocalization and drums
 **** TODO Pull all the init stuff together
+***** TODO what clock should int use?
 **** TODO Why are notes so quiet compared to drone?
 **** TODO Merge formants into drone
 **** TODO When/how to add drums?
