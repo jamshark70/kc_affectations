@@ -569,6 +569,9 @@ PR(\basicSynthChooser).chuck(BP(\fmt), nil, (
 
 BP(\mstClock).chan.startRecord(thisProcess.platform.recordingsDir +/+ "harmonics-demo.aiff");
 
+
+// general init
+
 (
 BP.all.free;
 Fact(\mstClock) => BP(\mstClock);
@@ -588,6 +591,9 @@ PR(\counterpoint).chuck(BP(\cpt), nil, (master: ~master));
 BP(\cd).free;
 PR(\cadences).chuck(BP(\cd), nil, (parentBP: \cpt));
 0 => BP(\cd);
+
+Fact(\int) => BP(\int);
+// what clock should int use?
 )
 
 (
