@@ -280,6 +280,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		}
 	))) => ProtoEvent(\polySynthFxPatLock);
 
+	topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
 
 	Library.put(\affectations, \commonLoaded, true);
 } { true };	// avoid stupid "found nil" warning
