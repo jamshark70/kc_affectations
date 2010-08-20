@@ -31,7 +31,7 @@ SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, 
 }).add;
 
 
-
+/*
 // bus lock object - release bus when all the locking objects are gone
 Proto {
 	~prep = { |args|
@@ -176,7 +176,7 @@ PR(\busLock).clone {
 		};
 	}
 ))) => ProtoEvent(\polySynthFxPatLock);
-
+*/
 
 
 
@@ -591,8 +591,8 @@ PR(\hs1).clone {
 		},
 		delta: Pexprand(0.1, 0.9, inf), // Pexprand(1.0, 4.0, inf),
 		formant: Plazy { Pxrand(~fmtKeys, inf) },
-		fadeIn: 8,
-		fadeOut: 4,
+		fadeIn: 12,
+		fadeOut: 8,
 		objects: (
 			fmt: (
 				def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1,
@@ -868,7 +868,7 @@ PR(\abstractProcess).clone {
 	~asPattern = {
 		var	self = currentEnvironment, resp, pat = ~moreHorribleIndirectionPattern.();
 		(if(~useLpf ? false) { 
-			Pfset({ ~lpfbus = Bus.control(s, 1) },
+			Pfset({ ~lpfbus = Bus.control(s, 1).debug("made") },
 				Ptpar([
 					0, pat,
 					0.01, Pfuncn { |ev|
@@ -878,7 +878,7 @@ PR(\abstractProcess).clone {
 							group: self.chan.synthgroup,
 							callback: { |event|
 								resp = OSCpathResponder(s.addr, ['/n_end', event[\id][0]], {
-									ev[\lpfbus].free; resp.remove;
+									ev[\lpfbus].debug("freed").free; resp.remove;
 								}).add
 							},
 							delta: 0
@@ -1832,6 +1832,8 @@ make: { |name|
 		mode: \ab,
 		bufmod: Pwhite(0, Pfunc { ~wt.size - 1.001 }, inf),
 		amp: Pexprand(0.5, 1, inf),
+		delta: Pexprand(0.25, 1.0, inf),
+		sustain: Pwhite(0.6, 2.2, inf),
 	
 		degToCps: Pfunc { |ev|  // ev[\degree] should be a 2-item array
 			var	deg = ev[\degree].unmapMode(ev[\mode]),
