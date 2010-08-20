@@ -7,6 +7,7 @@ m.free;
 m = MixerChannel(\test, s, 1, 2);
 m => MCG(0);
 
+n.free;
 n = MixerChannel(\test, s, 2, 2);
 n => MCG(1);
 
@@ -379,23 +380,34 @@ e = #[-1, 1].collect { |pan|
 	.parent_(ProtoEvent(\singleSynthPlayer).v.parent)
 };
 
+(
 p = PR(\estimateTempo).copy;
 r = Routine {
 	var	//curve = e.asStream,
-		prediction,
+		prediction, predThread, ptCurBeat,
 		seed = Date.seed,
 		freq = Pseed(seed, Pexprand(200.0, 800.0, inf)),
 		fgen = freq.asStream,
-		fdelay = Pdelay(freq, 1, 1).asStream;
+		saveFreq;
+// 		fdelay = Pdelay(freq, 1, 1).asStream;
 	loop {
-		n.play(e[0].copy.put(\freq, fdelay.next));
+		ptCurBeat = predThread.tryPerform(\stream).tryPerform(\beats);
+		if(ptCurBeat.isNil or: { thisThread.beats - ptCurBeat > 0.1 }) {
+			n.play(e[0].copy.put(\freq, saveFreq ?? { fgen.next }));
+		}; // { fdelay.next };	// unsure of else
+		predThread.stop;
+
 		prediction = p.recvTrig(thisThread.beats);
 		if(prediction.notNil) {
-			thisThread.clock.sched(prediction, {
-				n.play(e[1].copy.put(\freq, fgen.next));
-				nil
-			});
-		} { fgen.next };  // keep freq streams in sync
+			predThread = Task {
+				var	localPred = prediction;
+				loop {
+					localPred.wait;
+					n.play(e[1].copy.put(\freq, saveFreq = fgen.next));
+				};
+			};
+			predThread.play(thisThread.clock);
+		}; // { fgen.next };  // keep freq streams in sync
 		true.yield;
 	}
 };
@@ -409,29 +421,109 @@ b = Button(w, w.view.bounds.insetBy(2, 2))
 	});
 w.onClose_({
 	w = nil;
+	TempoClock.default.clear;
 }).front;
-
-
-
-// problem:
-// sometimes near-multiple of yield is chosen -- why?
-//		Could be more than one agent with very close ioi's but different phases?
+)
 
 
 (
-a = m.play({ |t_trig = 0|
-	SinOsc.ar(TExpRand.kr(200, 800, t_trig)) * Decay2.kr(t_trig, 0.01, 0.08)
-}, [t_trig: k.asMap]);
-
-o = OSCpathResponder(s.addr, ['/n_end', synth.nodeID], { |t, r, m|
-	"z(%) ended".format(m[1]).debug;
-	z = nil;
-	p.remove;
-	r.remove;
-}).add;
-t = List.new;
-u = List.new;
-p = OSCresponderNode(s.addr, '/tr', { |time, r, m|
-	[t, u][m[2]].add(m[3]);
-}).add;
+PR(\basicSynthChooser).chuck(BP(\notes), nil, (
+	inChannels: 2,
+	delta: 0.5,
+	objects: (
+		singrain: (
+			def: \singrain,
+			args: [
+				\freq, Pexprand(200, 800, inf),
+				\amp, 1,
+				\time, 0.15,
+			]
+		)
+	)
+));
+0 => BP(\notes);
 )
+
+
+(
+Proto {
+	~clock = { TempoClock.default };
+	~clickMargin = 0.1;
+
+	~estimateProto = \estimateTempo;
+	~agentProto = \tempoAgent;
+	~estParmKeys = #[agentProto, newAgentHigh, newAgentLow, rejectThresh];
+	~prep = {
+		~userprep.();
+		~reset.();
+		currentEnvironment
+	};
+
+	~freeCleanup = {
+		BP(~collIndex).releaseDependants;
+		~userfree.();
+	};
+
+	~reset = {
+		~estTempo = PR(~estimateProto).copy;
+		~estParmKeys.do { |key|
+			key.envirGet !? { ~estTempo.put(key, key.envirGet) };
+		};
+	};
+
+	~recvTrig = {
+		~clock.value.sched(0, e {
+			var	ptCurBeat = ~predThread.tryPerform(\stream).tryPerform(\beats),
+				prediction;
+			if(ptCurBeat.isNil or: { thisThread.beats - ptCurBeat > ~clickMargin }) {
+BP(~collIndex).dependants.debug("sending trig to");
+				BP(~collIndex).changed(\click);
+			};
+			~predThread.stop;
+
+			prediction = ~estTempo.recvTrig(thisThread.beats);
+			if(prediction.notNil) {
+				~predThread = Task {
+					loop {
+						prediction.wait;
+BP(~collIndex).dependants.debug("sending trig to");
+						BP(~collIndex).changed(\click);
+					};
+				};
+				~predThread.play(thisThread.clock);
+			};
+		});
+	};
+} => PR(\trigPredictor);
+)
+
+BP(\tp).free;
+PR(\trigPredictor).chuck(BP(\tp), nil, (
+	userprep: {
+		~window = Window(\test, Rect(Window.screenBounds.width - 150, 10, 145, 50));
+		b = Button(~window, ~window.view.bounds.insetBy(2, 2))
+			.states_([["click", Color.new255(255, 200, 200), Color.black]])
+			.action_(e { |view, modifiers|
+				~recvTrig.();
+			});
+		~window.onClose_(e {
+			~window = nil;
+			~predThread.stop;
+		}).front;
+	},
+	userfree: {
+		~window.tryPerform(\close);
+	}
+));
+
+();
+BP(\notes).update = { |obj, what|
+	if(what.debug("notify") == \click) {
+		BP(~collIndex).triggerOneEvent(0);
+	};
+};
+
+BP(\tp).addDependant(BP(\notes).v);
+
+BP(\notes).event.immediateOSC = true;
+BP(\notes).prepareForPlay;
