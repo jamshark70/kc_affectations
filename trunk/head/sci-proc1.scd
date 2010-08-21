@@ -628,10 +628,10 @@ PR(\bpCmd).clone {
 i = 0;
 BP.keys.asArray.sort.do { |key|
 	BP(key) => MT(1);
-// 	if(BP(key)[\chan].notNil and: { BP(key)[\chan].mcgui.isNil }) {
-// 		BP(key) => MCG(i);
-// 		i = i + 1;
-// 	}
+	if(key.asString.contains("drum") and: { BP(key)[\chan].notNil and: { BP(key)[\chan].mcgui.isNil } }) {
+		BP(key) => MCG(i);
+		i = i + 1;
+	}
 };
 
 d = DDWTimer.new;
@@ -711,7 +711,9 @@ var	drumLevel = -7.dbamp,
 		waitForNotesCmd, \cmdSync,
 		Quant(3, -0.5),
 	
-	
+
+		gcAutoSynthCmd: (gc: BP(\drum1).distCtl, name: \ctlEnv, outName: \outbus, 
+			connect: 0, time: 36, env: Env(#[20, 5], #[1], 4)),
 		bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
 			bp.bar = Pseq(#[3, 0], inf);
 		}),
