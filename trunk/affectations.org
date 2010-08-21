@@ -10,15 +10,16 @@
 *** Axial
 *** Locomotive
 ** Head [0/2]
-*** TODO [#A] [4/6] combine harmonics, vocalization and drums
+*** TODO [#A] [3/6] combine harmonics, vocalization and drums
+**** TODO Tighten drone pacing
 **** TODO Reverb
-**** TODO [0/2] When/how to add drums?
-***** TODO Pacing: need to send signals between the two iterators
+**** TODO [2/3] When/how to add drums?
+***** TODO Doublecheck drum pacing
+***** DONE Send signals between the two iterators
 ****** (drums' start position is fine but it hits the climax before choral stuff is done)
-***** TODO Drum mixer levels
+***** DONE Drum mixer levels
 **** DONE Pull all the init stuff together
 ***** DONE what clock should int use?
 **** DONE Why are notes so quiet compared to drone?
 **** DONE Merge formants into drone
-**** DONE Tighten drone pacing
 *** TODO [#C] LPC for face/section start

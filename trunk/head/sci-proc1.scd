@@ -628,293 +628,322 @@ PR(\bpCmd).clone {
 i = 0;
 BP.keys.asArray.sort.do { |key|
 	BP(key) => MT(1);
-	if(BP(key)[\chan].notNil and: { BP(key)[\chan].mcgui.isNil }) {
-		BP(key) => MCG(i);
-		i = i + 1;
-	}
+// 	if(BP(key)[\chan].notNil and: { BP(key)[\chan].mcgui.isNil }) {
+// 		BP(key) => MCG(i);
+// 		i = i + 1;
+// 	}
 };
 
 d = DDWTimer.new;
 
 (
-var	t2 = TLSequenceIterator([
-	{	var	bp = BP(\drum1);
-		bp.bar = 3;
-		bp.wetCtl.value = 0.98;
-		bp.fdecCtl.value = 0.25;
-		bp.ffLowCtl.value = 2;
-		bp.ffRangeCtl.value = 0;
-		// if(d.class == DDWTimer) { d.reset };
-		0
-	},
-/*
-	loopCmd: (
+var	drumLevel = -7.dbamp,
+	waitForNotesCmd = PR(\funcCmd).copy.putAll((
 		setDoneSignal: {
-			~doneSignal = true;
-			defer(e {
-				~window = ResizeFlowWindow("trigger",
-					Rect(Window.screenBounds.width - 200, 50, 200, 100));
-				Button(~window, 90@20)
-					.states_([["go"]])
-					.action_(e {
-						if(BP(\drum1).isPlaying.not) { ~cmd.stop };
-					});
-				Button(~window, 90@20)
-					.states_([["move on"]])
-					.action_(e {
-						currentEnvironment.stop;
-					});
-				~window.recursiveResize.front;
-			})
+			~doneSignal = NotificationCenter.register(\notes, \go, \drumproc, e { |args|
+				args.debug("got go signal");
+				~doneSignal.remove;  // this is a NotificationRegistration
+				~stop.();
+			});
 		},
-		clearDoneSignal: { defer(e { ~window.close }) },
-		cmds: [
-			{	PR(\funcCmd).copy.putAll((
-					looper: currentEnvironment,
-					func: { ~looper.cmd = currentEnvironment },
-					doneSignal: true
-				))
-			},
-			\cmdSync,
-			{	if(~doneSignal == true) {
-					PR(\bpCmd).copy.putAll((
-						name: \drum1,
-						quant: 1,
-						dur: 2.9
-					))
-				}
-			},
-			\cmdSync
-		]
-	),
-	\sync,
-*/
-
-	Quant(3, -0.5),
-
-
-	bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
-		bp.bar = Pseq(#[3, 0], inf);
-	}),
-	12,
-	gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
-		value: 0.078, time: 30, curve: 0),
-	bpCmd: (name: \drum2, quant: `nil, prepareBP: { |bp|
-		bp.bar = Pseq(#[0, 2], inf);
-	}),
-	12,
-
-	bpCmd: (name: \drum3, quant: `nil, prepareBP: { |bp|
-		bp.bar = Prand(#[8, 2], inf);
-		bp.ffreqCtl.value = 60;
-	}),
-	mixerAutoSynthCmd: (mixer: BP(\drum3).chan, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[0, 0.75], #[18], 2.4)),
-	gcAutoSynthCmd: (gc: BP(\drum3).ffreqCtl, name: \ctlPoint, outName: \outbus, 
-		value: 18000, time: 30, curve: 5),
-
-	{	BP(\drum1).bar = Pseq([3, Prand(BP(\drum1).indices[1], 1)], inf);
-		12
-	},
-	{	BP(\drum2).bar = Prand(BP(\drum2).indices[1], inf);
-		12
-	},
-
-	{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
-		12
-	},
-	gcAutoSynthCmd: (gc: BP(\drum1).ffRangeCtl, name: \ctlEnv, outName: \outbus, 
-		env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
-
-	{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
-		BP(\drum2).bar = 3;
-		12
-	},
-
-	{	BP(\drum3).bar = Prand(BP(\drum3).indices[2], inf);
-		12
-	},
-
-	{	BP(\drum3).bar = Prand(BP(\drum3).indices[[2, 3]].flat, inf);
-		BP(\drum1).bar = 3;
-		24
-	},
-
-	{	BP(\drum3).bar = 15;
-		6
-	},
-
-	{ BP(#[drum1, drum2, drum3]).stop; 0 },
-
-	bpCmd: (name: #[drum4, drum5], quant: `nil, prepareBP: { |bp|
-		var	panEnd = -1;
-		bp.reset;
-		if(bp.collIndex == \drum5) {
-			bp.quant = #[-1, 0.02];
-			panEnd = 1;
-			bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) * Env(#[0, 1], #[12], 2.4)
-		};
-		bp.pan = Env([0, panEnd], #[30]);
-		bp.wetCtl.value = 0.078;
-	}),
-
-	18,
-	swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
-	gcAutoSynthCmd: (gc: BP(\drum4).ffRangeCtl, name: \ctlPoint, outName: \outbus, 
-		value: 18, time: 36),
-
-	24,
-	swap56cmd: (quant: #[-1, 1.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
-	24,
-	swap56cmd: (quant: #[-1, 0.75]),
-	24,
-
-	{	BP(#[drum4, drum5, drum6]).stop;
-		BP(\drum7).pan = -1;
-		BP(\drum8).pan = 1;
-		BP(\drum7).quant = -1;
-		BP(\drum8).quant = #[-1, 0.75];
-		0
-	},
-
-	bpCmd: (name: #[drum7, drum8], quant: -1, prepareBP: { |bp|
-		bp.ostFiltCtl.value = 1;
-		bp.fmltDcyCtl.value = 0.25;
-		bp.fmltWetCtl.value = 0.1;
-	}),
-	funcCmd: (doneSignal: true,
-		num3: rrand(2, 7),
-		func: {
-			var	thisCmd = currentEnvironment;
-			BP(#[drum7, drum8]).do { |bp|
-				~num3 = ~num3 + 5;
-				bp.gest = Pseq([
-					CleanupStream(
-						Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant]).asStream,
-						{ thisCmd.stop }
-					),
-					Pn(\ostFilt2, inf)
-				]);
-				bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
-				bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
+		clearDoneSignal: { ~doneSignal = nil }
+	)),
+	t2 = TLSequenceIterator([
+		{	var	bp = BP(\drum1);
+			bp.bar = 3;
+			bp.wetCtl.value = 0.98;
+			bp.fdecCtl.value = 0.25;
+			bp.ffLowCtl.value = 2;
+			bp.ffRangeCtl.value = 0;
+			BP.all.do { |bp|
+				if(bp.collIndex.asString.contains("drum")) {
+					bp[\chan].tryPerform(\level_, drumLevel);
+				};
 			};
-		}
-	),
-	\cmdSync,
-	{ "synced".debug; 6 },
+			// if(d.class == DDWTimer) { d.reset };
+			0
+		},
+	/*
+		loopCmd: (
+			setDoneSignal: {
+				~doneSignal = true;
+				defer(e {
+					~window = ResizeFlowWindow("trigger",
+						Rect(Window.screenBounds.width - 200, 50, 200, 100));
+					Button(~window, 90@20)
+						.states_([["go"]])
+						.action_(e {
+							if(BP(\drum1).isPlaying.not) { ~cmd.stop };
+						});
+					Button(~window, 90@20)
+						.states_([["move on"]])
+						.action_(e {
+							currentEnvironment.stop;
+						});
+					~window.recursiveResize.front;
+				})
+			},
+			clearDoneSignal: { defer(e { ~window.close }) },
+			cmds: [
+				{	PR(\funcCmd).copy.putAll((
+						looper: currentEnvironment,
+						func: { ~looper.cmd = currentEnvironment },
+						doneSignal: true
+					))
+				},
+				\cmdSync,
+				{	if(~doneSignal == true) {
+						PR(\bpCmd).copy.putAll((
+							name: \drum1,
+							quant: 1,
+							dur: 2.9
+						))
+					}
+				},
+				\cmdSync
+			]
+		),
+		\sync,
+	*/
 
-	36,
-	loopCmd: (repeats: 2,
-		qphase: Pseq(#[1.25, 0.75], inf).asStream,
-		acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
-		cmds: [
-			{	var	numAcc = rrand(3, 6), acc = ~acc.next,
-					pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
+		waitForNotesCmd, \cmdSync,
+		Quant(3, -0.5),
+	
+	
+		bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
+			bp.bar = Pseq(#[3, 0], inf);
+		}),
+		12,
+		gcAutoSynthCmd: (gc: BP(\drum1).wetCtl, name: \ctlPoint, outName: \outbus, 
+			value: 0.078, time: 30, curve: 0),
+		bpCmd: (name: \drum2, quant: `nil, prepareBP: { |bp|
+			bp.bar = Pseq(#[0, 2], inf);
+		}),
+		12,
+
+		[	{	BP(\drum1).bar = Pseq([3, Prand(BP(\drum1).indices[1], 1)], inf);
+				12
+			},
+			{	BP(\drum2).bar = Prand(BP(\drum2).indices[1], inf);
+				12
+			},
+		
+			{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
+				12
+			},
+			gcAutoSynthCmd: (gc: BP(\drum1).ffRangeCtl, name: \ctlEnv, outName: \outbus, 
+				env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
+		],
+
+		waitForNotesCmd, \cmdSync,
+		Quant(3, -0.5),
+	
+		bpCmd: (name: \drum3, quant: `nil, prepareBP: { |bp|
+			bp.bar = Prand(#[8, 2], inf);
+			bp.ffreqCtl.value = 60;
+		}),
+		mixerAutoSynthCmd: (mixer: BP(\drum3).chan, name: \ctlEnv, outName: \outbus,
+			connect: 0, env: Env([0, drumLevel], #[18], 2.4)),
+		gcAutoSynthCmd: (gc: BP(\drum3).ffreqCtl, name: \ctlPoint, outName: \outbus, 
+			value: 18000, time: 30, curve: 5),
+		
+		{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
+			BP(\drum2).bar = 3;
+			12
+		},
+	
+		{	BP(\drum3).bar = Prand(BP(\drum3).indices[2], inf);
+			12
+		},
+	
+		{	BP(\drum3).bar = Prand(BP(\drum3).indices[[2, 3]].flat, inf);
+			BP(\drum1).bar = 3;
+			24
+		},
+	
+		{	BP(\drum3).bar = 15;
+			6
+		},
+	
+		waitForNotesCmd, \cmdSync,
+		Quant(3, -0.5),
+
+		{ BP(#[drum1, drum2, drum3]).stop; 0 },
+	
+		bpCmd: (name: #[drum4, drum5], quant: `nil, prepareBP: { |bp|
+			var	panEnd = -1;
+			bp.reset;
+			if(bp.collIndex == \drum5) {
+				bp.quant = #[-1, 0.02];
+				panEnd = 1;
+				bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) * Env(#[0, 1], #[12], 2.4)
+			};
+			bp.pan = Env([0, panEnd], #[30]);
+			bp.wetCtl.value = 0.078;
+		}),
+	
+		18,
+		swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
+		gcAutoSynthCmd: (gc: BP(\drum4).ffRangeCtl, name: \ctlPoint, outName: \outbus, 
+			value: 18, time: 36),
+	
+		24,
+		swap56cmd: (quant: #[-1, 1.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
+		24,
+		swap56cmd: (quant: #[-1, 0.75]),
+		24,
+	
+		waitForNotesCmd, \cmdSync,
+		Quant(3, -0.5),
+
+		{	BP(#[drum4, drum5, drum6]).stop;
+			BP(\drum7).pan = -1;
+			BP(\drum8).pan = 1;
+			BP(\drum7).quant = -1;
+			BP(\drum8).quant = #[-1, 0.75];
+			0
+		},
+	
+		bpCmd: (name: #[drum7, drum8], quant: -1, prepareBP: { |bp|
+			bp.ostFiltCtl.value = 1;
+			bp.fmltDcyCtl.value = 0.25;
+			bp.fmltWetCtl.value = 0.1;
+		}),
+		funcCmd: (doneSignal: true,
+			num3: rrand(2, 7),
+			func: {
+				var	thisCmd = currentEnvironment;
 				BP(#[drum7, drum8]).do { |bp|
-					bp.override(\gest, pat);
+					~num3 = ~num3 + 5;
+					bp.gest = Pseq([
+						CleanupStream(
+							Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant]).asStream,
+							{ thisCmd.stop }
+						),
+						Pn(\ostFilt2, inf)
+					]);
+					bp.accFreq = 52 * Pwhite(2, Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf), inf);
+					bp.accFreq2 = (Pkey(\ffreq) * Pwhite(2, 4, inf)).wrap(52, 52 * (Pseries.fromEndpoints(16, 5, ~num3) ++ Pn(5, inf)));
 				};
-				BP(\drum8).quant = [-1, ~qphase.next];
-				24
 			}
-		]
-	),
-	\cmdSync,
-
-	{	BP(\drum8).gest = Pfsm([
-			#[4, 5],
-			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-			Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-			\fiveAcc, #[2, 4, 5],
-			\sevenAcc, #[3, 4, 5],
-			\five1Acc, #[0, 2],
-			\seven1Acc, #[1, 3],
-		], inf);
-		6
-	},
-	{	BP(\drum7).gest = BP(\drum8).gest;
-		6 //24
-	},
-
-	loopCmd: (repeats: 3,
-		acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
-		cmds: [
-			{	var	// both 7+8 use the same random seed
-					pat = Pseed(Pn(Date.seed, 1), Pseq([
-						Pif(Ptime() < rrand(8, 15), Pseq([\randsync, ~acc], 1)),
-						\randquant
-					], 1));
-				BP(#[drum7, drum8]).do { |bp|
-					bp.keepGoing = false;
-					bp.override(\gest, pat);
-				};
-				BP(\drum8).quant = -1;
-				rrand(3, 6) * 6
-			}
-		]
-	),
-	\cmdSync,
-
-	gcAutoSynthCmd: (gc: BP(\drum7).fmltWetCtl, name: \ctlPoint, outName: \outbus,
-		value: 0.736, time: 20, curve: 2),
-	loopCmd: (repeats: 4,
-		cmds: [
-			funcCmd: (
-				doneSignal: true,
-				func: {
-					var	seed = Date.seed, num = rrand(7, 15),
-						thisCmd = currentEnvironment,
-						n = Pxrand((2..8), num).asStream.all.debug("n"),
-						factor = { rrand(1, 2) } ! num,
-						rest = #[1, 2].wchoose(#[0.8, 0.2]);
+		),
+		\cmdSync,
+		{ "synced".debug; 6 },
+	
+		36,
+		loopCmd: (repeats: 2,
+			qphase: Pseq(#[1.25, 0.75], inf).asStream,
+			acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
+			cmds: [
+				{	var	numAcc = rrand(3, 6), acc = ~acc.next,
+						pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
 					BP(#[drum7, drum8]).do { |bp|
-						var	once = true, saven, saveFactor;
-						bp.keepGoing = false;
-						bp.override(\restBeats, Pn(rest, 1));
-						bp.override(\gest, Pseq([
-							\randsync,
-							\oneAcc,
-							Pseed(Pn(seed, 1),
-								Pwrand(#[nhigh, nhighAcc], #[0.4, 0.6], num)
-							).collect { |gest|
-								if(once) {
-									bp.override(\n, Pseq(n, 1));
-									bp.override(\factor, Pseq(factor, 1));
-									once = false;
-								};
-								gest
-							}
-						], 1), false, { thisCmd.stop });
+						bp.override(\gest, pat);
 					};
+					BP(\drum8).quant = [-1, ~qphase.next];
+					24
 				}
-			),
-			\sync,
-			{ if(~repeats > 1) { rrand(18, 48) } { 0 } }
-		]
-	),
-	\cmdSync,
-	{ "synced".debug; 0 },
+			]
+		),
+		\cmdSync,
+	
+		{	BP(\drum8).gest = Pfsm([
+				#[4, 5],
+				Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+				Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+				\fiveAcc, #[2, 4, 5],
+				\sevenAcc, #[3, 4, 5],
+				\five1Acc, #[0, 2],
+				\seven1Acc, #[1, 3],
+			], inf);
+			6
+		},
+		{	BP(\drum7).gest = BP(\drum8).gest;
+			6 //24
+		},
+	
+		loopCmd: (repeats: 3,
+			acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
+			cmds: [
+				{	var	// both 7+8 use the same random seed
+						pat = Pseed(Pn(Date.seed, 1), Pseq([
+							Pif(Ptime() < rrand(8, 15), Pseq([\randsync, ~acc], 1)),
+							\randquant
+						], 1));
+					BP(#[drum7, drum8]).do { |bp|
+						bp.keepGoing = false;
+						bp.override(\gest, pat);
+					};
+					BP(\drum8).quant = -1;
+					rrand(3, 6) * 6
+				}
+			]
+		),
+		\cmdSync,
+	
+		gcAutoSynthCmd: (gc: BP(\drum7).fmltWetCtl, name: \ctlPoint, outName: \outbus,
+			value: 0.736, time: 20, curve: 2),
+		loopCmd: (repeats: 4,
+			cmds: [
+				funcCmd: (
+					doneSignal: true,
+					func: {
+						var	seed = Date.seed, num = rrand(7, 15),
+							thisCmd = currentEnvironment,
+							n = Pxrand((2..8), num).asStream.all.debug("n"),
+							factor = { rrand(1, 2) } ! num,
+							rest = #[1, 2].wchoose(#[0.8, 0.2]);
+						BP(#[drum7, drum8]).do { |bp|
+							var	once = true, saven, saveFactor;
+							bp.keepGoing = false;
+							bp.override(\restBeats, Pn(rest, 1));
+							bp.override(\gest, Pseq([
+								\randsync,
+								\oneAcc,
+								Pseed(Pn(seed, 1),
+									Pwrand(#[nhigh, nhighAcc], #[0.4, 0.6], num)
+								).collect { |gest|
+									if(once) {
+										bp.override(\n, Pseq(n, 1));
+										bp.override(\factor, Pseq(factor, 1));
+										once = false;
+									};
+									gest
+								}
+							], 1), false, { thisCmd.stop });
+						};
+					}
+				),
+				\sync,
+				{ if(~repeats > 1) { rrand(18, 48) } { 0 } }
+			]
+		),
+		\cmdSync,
+		{ "synced".debug; 0 },
+	
+		{	BP(\drum7).gest = Pseq([
+				\randsync,
+				Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
+				Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "7-num57: ").asStream, BP(\drum7).gest)
+			], inf);
+			12
+		},
+	
+		{	BP(\drum8).gest = Pseq([
+				\randsync,
+				Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
+				Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "8-num57: ").asStream, BP(\drum8).gest)
+			], inf);
+			36
+		},
+	
+	// 	36,
+	//	funcCmd: (func: { ~iterator.stop })
+	//	{ BP.all.stop; 8 },
+	//	{ ~master.stopRecord; 0 }
+	]);
 
-	{	BP(\drum7).gest = Pseq([
-			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
-			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "7-num57: ").asStream, BP(\drum7).gest)
-		], inf);
-		12
-	},
-
-	{	BP(\drum8).gest = Pseq([
-			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
-			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "8-num57: ").asStream, BP(\drum8).gest)
-		], inf);
-		36
-	},
-
-// 	36,
-//	funcCmd: (func: { ~iterator.stop })
-//	{ BP.all.stop; 8 },
-//	{ ~master.stopRecord; 0 }
-]);
+if(t.tryPerform(\isRunning) ? false) { t.stop; "Wait for t to stop first".die };
 
 c = BP(\mstClock).clock;
 t = TLSequenceIterator([
@@ -1016,17 +1045,6 @@ t = TLSequenceIterator([
 
 	25, //{ rrand(10.0, 18.0) },
 
-	bpCmd: (name: \cd, prepareBP: { |p|
-		p.debug("choral").tempoPat = 1;
-		p.chan.level = -3.8.dbamp;
-		p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
-		p.p5_(0).sharp_(false).shortFirst_(false).oneNote_(true);
-		p.reset;	// maybe voodoo, but it seems sometimes \cd reuses a freed bus object??
-	}),
-	\cmdSync,
-
-	{ rrand(5.0, 8.0) },
-
 	// DRUM SUB-ITERATOR
 	funcCmd: (
 		subIter: t2,
@@ -1050,8 +1068,22 @@ t = TLSequenceIterator([
 		}
 	),
 
-	{ rrand(5.0, 8.0) },
+	bpCmd: (name: \cd, prepareBP: { |p|
+		p.debug("choral").tempoPat = 1;
+		p.chan.level = -1.dbamp;
+		p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
+		p.p5_(0).sharp_(false).shortFirst_(false).oneNote_(true);
+		p.reset;	// maybe voodoo, but it seems sometimes \cd reuses a freed bus object??
+	}),
+	\cmdSync,
 
+	{ rrand(10.0, 16.0) },
+
+	[	{ rrand(5.0, 8.0) },
+		{	NotificationCenter.notify(\notes, \go, 0);  // tell drum process to move ahead
+			0
+		}
+	],
 	bpCmd: (name: \cd, prepareBP: { |p|
 		p.oneNote_(false);
 	}),
@@ -1064,10 +1096,16 @@ t = TLSequenceIterator([
 		p.seqKeys = #[t2];
 		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 		p.att_(0.7).rel_(0.9).dec_(1.2);
+		p.reset;
 	}),
 	\cmdSync,
 	2, //{ rrand(6.0, 9.0) },
 
+	[	{ rrand(5.0, 8.0) },
+		{	NotificationCenter.notify(\notes, \go, 1);
+			0
+		}
+	],
 	bpCmd: (name: \cd, prepareBP: { |p|
 		p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 		p.p5_(1).shortFirst_(true);
@@ -1087,6 +1125,11 @@ t = TLSequenceIterator([
 	\cmdSync,
 	{ rrand(8.0, 12.0) },
 
+	[	{ rrand(5.0, 8.0) },
+		{	NotificationCenter.notify(\notes, \go, 2);
+			0
+		}
+	],
 	bpCmd: (name: \cpt, prepareBP: { |p|
 		p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 		p.seqKeys = #[t3, a31, a32];
@@ -1157,6 +1200,11 @@ t = TLSequenceIterator([
 	\cmdSync,
 	{ rrand(1.0, 2.5) },
 
+	[	{ rrand(1.0, 3.0) },
+		{	NotificationCenter.notify(\notes, \go, 3);
+			0
+		}
+	],
 	bpCmd: (name: \cpt, prepareBP: { |p|
 		p.tempoPat = 1.2;
 		p.filterNotePat = { |pat|
@@ -1165,8 +1213,8 @@ t = TLSequenceIterator([
 	}),
 	\cmdSync,
 
-	{ rrand(6.0, 9.0) },
-	funcCmd: (func: { ~iterator.stop })
+// 	{ rrand(6.0, 9.0) },
+// 	funcCmd: (func: { ~iterator.stop })
 ]).play(argClock: SystemClock)
 )
 
