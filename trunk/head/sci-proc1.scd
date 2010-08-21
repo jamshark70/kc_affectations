@@ -598,8 +598,8 @@ PR(\cadences).chuck(BP(\cd), nil, (parentBP: \cpt));
 
 Fact(\int) => BP(\int);
 // what clock should int use?
-~clock60 ?? { ~clock60 = TempoClock(tempo: 1, queueSize: 1024) };
-~clock60 => BP(\int);
+//~clock60 ?? { ~clock60 = TempoClock(tempo: 1, queueSize: 1024) };
+~clock108 => BP(\int);
 
 BP(#[cd, cpt, fmt, hs, hsd, hstrig, hswp, int, mstClock]).do { |bp| bp.printStopMsg = false };
 
@@ -635,6 +635,8 @@ BP.keys.asArray.sort.do { |key|
 };
 
 d = DDWTimer.new;
+
+BP.all.do(_.reset);
 
 (
 var	drumLevel = -7.dbamp,
@@ -730,23 +732,24 @@ var	drumLevel = -7.dbamp,
 		
 			{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
 				12
-			},
-			gcAutoSynthCmd: (gc: BP(\drum1).ffRangeCtl, name: \ctlEnv, outName: \outbus, 
-				env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
+			}
 		],
 
 		waitForNotesCmd, \cmdSync,
 		Quant(3, -0.5),
 	
+		gcAutoSynthCmd: (gc: BP(\drum1).ffRangeCtl, name: \ctlEnv, outName: \outbus, 
+			env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
 		bpCmd: (name: \drum3, quant: `nil, prepareBP: { |bp|
 			bp.bar = Prand(#[8, 2], inf);
-			bp.ffreqCtl.value = 60;
+			bp.ffreqCtl.value = 360;
 		}),
 		mixerAutoSynthCmd: (mixer: BP(\drum3).chan, name: \ctlEnv, outName: \outbus,
-			connect: 0, env: Env([0, drumLevel], #[18], 2.4)),
+			connect: 0, env: Env([-16.dbamp, drumLevel], #[18], 2.4)),
 		gcAutoSynthCmd: (gc: BP(\drum3).ffreqCtl, name: \ctlPoint, outName: \outbus, 
 			value: 18000, time: 30, curve: 5),
 		
+		24,
 		{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
 			BP(\drum2).bar = 3;
 			12
@@ -957,7 +960,7 @@ t = TLSequenceIterator([
 	}*/),
 	gcAutoSynthCmd: (
 		gc: BP(\mstClock).tempoCtl, name: \ctlEnv, outName: \outbus,
-		connect: 0, env: Env(#[0.1, 0.1, 0.245], #[25, 60]), time: 1
+		connect: 0, env: Env(#[0.1, 0.1, 0.5, 0.245], #[30, 25, 25], 3.5), time: 1
 	),
 	6,
 	bpCmd: (name: \hs, prepareBP: { |bp|
@@ -984,20 +987,20 @@ t = TLSequenceIterator([
 		});
 	}),
 
-	45,
+	40,
 	bpCmd: (name: \hswp, prepareBP: { |bp|
 		bp.debug.lowhCtl.value = 2;
 		bp.tophCtl.value = 2;
 	}),
 	gcAutoSynthCmd: (
 		gc: BP(\hswp).tophCtl, name: \ctlPoint, outName: \outbus,
-		value: 32, time: 40, curve: 1.6,
+		value: 32, time: 28, curve: 1.6,
 		setDoneSignal: {
 			~upd = Updater(~gc, e { |obj, msg|
 				var	val;
 				if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hs).low }) {
 					if(val < BP(\hs).high) {
-						BP(\hs).low = val+1;
+						BP(\hs).low = max(val - 12, 2);
 					} {
 						BP(#[hstrig]).stop;
 					}
@@ -1007,7 +1010,7 @@ t = TLSequenceIterator([
 		clearDoneSignal: { ~upd.remove }
 	),
 
-	25,
+	18,
 // 	#[30] ++ #[chan, chan2].collect { |key|
 // 		PR(\mixerAutoSynthCmd).copy.putAll((
 // 			mixer: BP(\mstClock)[key], name: \ctlPoint, outName: \outbus,
@@ -1019,7 +1022,7 @@ t = TLSequenceIterator([
 	}),
 	gcAutoSynthCmd: (
 		gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
-		value: 32, time: 45, curve: 1.6,
+		value: 32, time: 30, curve: 1.6,
 		setDoneSignal: {
 			~upd = Updater(~gc, e { |obj, msg|
 				var	val;
@@ -1035,7 +1038,7 @@ t = TLSequenceIterator([
 		clearDoneSignal: { ~upd.remove; BP(\hswp).stop }
 	),
 //	\cmdSync,
-	20,
+	14,
 	bpCmd: (name: \fmt, prepareBP: { |bp|
 		bp.debug.fadeIn = 22;
 		bp.fadeOut = 12;
@@ -1043,7 +1046,7 @@ t = TLSequenceIterator([
 
 // start choral section (which was always after formants)
 
-	25, //{ rrand(10.0, 18.0) },
+	16, //{ rrand(10.0, 18.0) },
 
 	// DRUM SUB-ITERATOR
 	funcCmd: (
@@ -1077,7 +1080,7 @@ t = TLSequenceIterator([
 	}),
 	\cmdSync,
 
-	{ rrand(10.0, 16.0) },
+	{ rrand(16.0, 24.0) },
 
 	[	{ rrand(5.0, 8.0) },
 		{	NotificationCenter.notify(\notes, \go, 0);  // tell drum process to move ahead
@@ -1086,6 +1089,7 @@ t = TLSequenceIterator([
 	],
 	bpCmd: (name: \cd, prepareBP: { |p|
 		p.oneNote_(false);
+		p.dur = Pwhite(0.7, 0.9, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 	}),
 	\cmdSync,
 	7, //{ rrand(6.0, 14.0) },
@@ -1152,8 +1156,8 @@ t = TLSequenceIterator([
 			},
 			cmds: [
 				{ rrand(3.0, 9.0) },
-				{	~bpDur = rrand(7.0, 11.0);
-					PR(\bpCmd).copy.putAll((name: \int, dur: ~bpDur))
+				{	~bpDur = rrand(11.0, 18.0);
+					PR(\bpCmd).copy.putAll((name: \int, quant: `nil, dur: ~bpDur))
 				},
 				{	var	up = rrand(0.1, 0.3);
 					PR(\mixerAutoSynthCmd).copy.putAll((
@@ -1167,7 +1171,7 @@ t = TLSequenceIterator([
 			]
 		),
 		\cmdSync,
-		bpCmd: (name: \int),
+		bpCmd: (name: \int, quant: `nil),
 		mixerAutoSynthCmd: (
 			mixer: BP(\int).chan, name: \ctlPoint, outName: \outbus,
 			value: -8.5.dbamp, time: 3.5, curve: 2.1
@@ -1212,6 +1216,17 @@ t = TLSequenceIterator([
 		};
 	}),
 	\cmdSync,
+
+	#[chan, chan2].collect { |key, i|
+		PR(\mixerAutoSynthCmd).copy.putAll((
+			mixer: BP(\mstClock)[key], name: \ctlPoint, outName: \outbus,
+			value: 0, time: 32, curve: -2.1,
+			stopAction: if(i == 0) {
+				// this branch must return a function, not run the action
+				{ BP(#[mstClock, hs, hstrig, hswp, hsd, fmt]).stop }
+			}
+		))
+	}
 
 // 	{ rrand(6.0, 9.0) },
 // 	funcCmd: (func: { ~iterator.stop })
@@ -1286,3 +1301,16 @@ BP.all.do { |bp| bp.printStopMsg = false };
 ~clock60 => BP(\int);
 
 p = BP(\cpt);
+
+p = BP(\int);
+p.listVars;
+
+p.delta = Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf);
+p.sustain = Pexprand(0.6, 2.2, inf);
+
+p.sustain = Pswitch1([
+	Pexprand(0.6, 0.8, inf),
+	Pexprand(1.0, 2.7, inf)
+], Pwrand(#[0, 1], #[0.7, 0.3], inf));
+
+p.quant = 1;
