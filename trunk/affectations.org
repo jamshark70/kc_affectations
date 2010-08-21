@@ -10,11 +10,15 @@
 *** Axial
 *** Locomotive
 ** Head [0/2]
-*** TODO [#A] [3/6] combine harmonics, vocalization and drums
-**** TODO Tighten drone pacing
-**** TODO Reverb
-**** TODO [2/3] When/how to add drums?
-***** TODO Doublecheck drum pacing
+*** TODO [#A] [5/7] combine harmonics, vocalization and drums
+**** TODO [0/4] Reverb
+***** TODO drones - esp. hswp
+***** TODO harmonies
+***** TODO drums (bring drums forward from back of space?)
+***** TODO Spatialize: push \int to back of space
+**** DONE Tighten drone pacing - tentatively done
+**** DONE [3/3] When/how to add drums?
+***** DONE Doublecheck drum pacing
 ***** DONE Send signals between the two iterators
 ****** (drums' start position is fine but it hits the climax before choral stuff is done)
 ***** DONE Drum mixer levels
