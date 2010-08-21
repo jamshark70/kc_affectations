@@ -15,6 +15,7 @@
 ***** TODO drones - esp. hswp
 ***** TODO harmonies
 ***** TODO drums (bring drums forward from back of space?)
+****** Spatialization makes drums quieter - fix
 ***** TODO Spatialize: push \int to back of space
 **** DONE Tighten drone pacing - tentatively done
 **** DONE [3/3] When/how to add drums?
