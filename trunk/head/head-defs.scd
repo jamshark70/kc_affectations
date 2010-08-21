@@ -31,153 +31,6 @@ SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, 
 }).add;
 
 
-/*
-// bus lock object - release bus when all the locking objects are gone
-Proto {
-	~prep = { |args|
-		if(args.respondsTo(\keysValuesDo)) {
-			currentEnvironment.putAll(args);
-		};
-		~locks = IdentitySet.new;
-		// this way, makeStuff can have whatever args it needs
-		// and it will pull them from the environment (after being put there by putAll)
-		currentEnvironment.env.use { ~makeStuff.valueEnvir };
-		currentEnvironment
-	};
-
-	~numCh = 1;
-	~rate = \audio;
-	~server = { Server.default };
-
-	// user overrides
-	~makeStuff = { |numCh, rate, server|
-		~server = server.value;
-		if((~bus = Bus.perform(rate, ~server, numCh)).isNil) {
-			Error("couldn't get % bus".format(rate)).throw;
-		};
-		~bus //.debug("made");
-	};
-
-	~freeStuff = {
-		~bus /*.debug("freed")*/ .free;
-		~killNodes.do(_.free);
-	};
-
-	~addNode = { |node|
-		var	endFunc = e { |obj, what|
-			if(what == \n_end) {
-				node.removeDependant(endFunc);
-				~removeLock.(node);
-			};
-		};
-		~locks.add(node);
-		NodeWatcher.register(node);
-		node.addDependant(endFunc);
-	};
-
-	~removeLock = { |obj|
-		~locks.remove(obj);
-		if(~locks.isEmpty) {
-			~freeStuff.();
-		};
-	};
-} => PR(\busLock);
-
-PR(\busLock).clone {
-	~busFreeDelay = 1;
-	~freeStuff = {
-		~stopThings.do(_.stop);
-		~killNodes.do(_.free);
-		AppClock.sched(~busFreeDelay, e { ~bus.free });
-	};
-} => PR(\busFxPatLock);
-
-(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
-	lockKey: \busLock,
-	superPlay: ProtoEvent(\polySynthPlayer).v[\play],
-	play: {
-		var	chan = ~chan;
-		~numCh ?? { ~numCh = ~chan.inChannels };
-		~lock = PR(~lockKey).copy.prep((
-			numCh: ~numCh, server: ~chan.server
-		));
-		~bus = ~lock.bus;
-		~target = ~chan.synthgroup;
-		~chan = nil;
-		~superPlay.();
-
-		if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
-			~playExtraProcess.(chan);
-			~node.do { |node| ~lock.addNode(node) };
-		} {
-			~lock.freeStuff;
-		};
-		if(~tempo.isNumber) { thisThread.clock.tempo = ~tempo }
-	},
-	playExtraProcess: { |chan|
-		if(~lpcEv.size > 0) {
-			~lpcEv.putAll((
-				bus: chan.inbus,
-				target: chan.effectgroup,
-				chan: nil,
-				inbus: ~lock.bus,
-				collIndex: ~collIndex,
-					// effectgroup might have post-lpc effect nodes (chorus etc.)
-					// so put lpc's up front
-				addAction: ~lpcEv[\addAction] ?? { \addToHead }
-			))
-			// cuz parent: don't work in putAll #@$*$&*$&@#312
-			.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
-			.play;
-			~lpcEv[\node].do { |node| ~lock.addNode(node) };
-		} {
-			~sendNode = Synth("mixers/Send" ++ ~numCh,
-				[busin: ~lock.bus, busout: chan.inbus, level: 1],
-				chan.effectgroup
-			);
-			~lock.killNodes = ~sendNode;
-		};
-	} //,
-// 	notifyDependents: {
-// 		~node.do { |node| ~lock.addNode(node) };
-// 	}
-))) => ProtoEvent(\polySynthBusLock);
-
-(parent: ProtoEvent(\polySynthBusLock).v.parent.copy.putAll((
-	lockKey: \busFxPatLock,
-	playExtraProcess: { |chan|
-		~lock.busFreeDelay = ~busFreeDelay ? 1;
-		if(~fxPatEv.size > 0 and: { ~fxPatEv[\pat].notNil }) {
-			~fxPatEv[\streamPlayer] = ~fxPatEv[\pat].play(
-				thisThread.clock,
-				Event(
-					proto: (
-						bus: chan.inbus,
-						target: chan.effectgroup,
-						chan: nil,
-						inbus: ~lock.bus,
-						lock: ~lock,
-						collIndex: ~collIndex,
-							// effectgroup might have post-lpc effect nodes (chorus etc.)
-							// so put lpc's up front
-						addAction: ~fxPatEv[\addAction] ?? { \addToHead }
-					),
-					parent: ProtoEvent(~fxProto ?? { \singleSynthPlayer }).v.parent.copy
-				),
-				~fxPatEv[\quant]
-			);
-			~lock.stopThings = [~fxPatEv[\streamPlayer]];
-		} {
-			~sendNode = Synth("mixers/Send" ++ ~numCh,
-				[busin: ~lock.bus, busout: chan.inbus, level: 1],
-				chan.effectgroup
-			);
-			~lock.killNodes = ~sendNode;
-		};
-	}
-))) => ProtoEvent(\polySynthFxPatLock);
-*/
-
 
 
 // harmonic series drones
@@ -868,7 +721,7 @@ PR(\abstractProcess).clone {
 	~asPattern = {
 		var	self = currentEnvironment, resp, pat = ~moreHorribleIndirectionPattern.();
 		(if(~useLpf ? false) { 
-			Pfset({ ~lpfbus = Bus.control(s, 1).debug("made") },
+			Pfset({ ~lpfbus = Bus.control(s, 1) },
 				Ptpar([
 					0, pat,
 					0.01, Pfuncn { |ev|
@@ -878,7 +731,7 @@ PR(\abstractProcess).clone {
 							group: self.chan.synthgroup,
 							callback: { |event|
 								resp = OSCpathResponder(s.addr, ['/n_end', event[\id][0]], {
-									ev[\lpfbus].debug("freed").free; resp.remove;
+									ev[\lpfbus].free; resp.remove;
 								}).add
 							},
 							delta: 0
@@ -1832,8 +1685,11 @@ make: { |name|
 		mode: \ab,
 		bufmod: Pwhite(0, Pfunc { ~wt.size - 1.001 }, inf),
 		amp: Pexprand(0.5, 1, inf),
-		delta: Pexprand(0.25, 1.0, inf),
-		sustain: Pwhite(0.6, 2.2, inf),
+		delta: Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf),
+		sustain: Pswitch1([
+			Pexprand(0.6, 0.8, inf),
+			Pexprand(1.0, 2.7, inf)
+		], Pwrand(#[0, 1], #[0.7, 0.3], inf)),
 	
 		degToCps: Pfunc { |ev|  // ev[\degree] should be a 2-item array
 			var	deg = ev[\degree].unmapMode(ev[\mode]),
@@ -1911,5 +1767,6 @@ make: { |name|
 			newEv
 		}
 	));
-	0 => BP(name);
+	// will play on same clock as drums, and needs to stay in sync
+	1 => BP(name);
 }, type: \bp) => Fact(\int);
