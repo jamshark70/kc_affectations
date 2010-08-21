@@ -954,9 +954,16 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	Line.kr(0, 1, time + fdec, doneAction: 2);
 }).add;
 
+s.doWhenBooted {
+	1.0.wait;
+	#[bufGrainPanFmlet, bufGrainRLPFPan].do { |key|
+		\addRvbOut.eval((key ++ "Dist").asSymbol, SynthDescLib.at(key).def.func).add;
+	};
+};
 
-(keys: #[master, glrvbmc],
-copyKeys: #[buffers, chan, postMCCreation, calcBar, bar, amps],  // you can override this
+
+(keys: #[master, glrvbmc, lcrvbmc],
+copyKeys: #[master, glrvbmc, lcrvbmc, buffers, chan, postMCCreation, calcBar, bar, amps],  // you can override this
 sourceFreesMe: true,
 bp: \drum1,
 make: { |name|
@@ -979,11 +986,11 @@ make: { |name|
 
 
 (
-keys: #[master, glrvbmc, clock108],
+keys: #[master, glrvbmc, lcrvbmc, clock108],
 make: { |name|
 	BP(name).free;
 	PR(\bufPerc).chuck(BP(name), nil, (
-		master: ~master, rvbmc: ~glrvbmc,
+		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		alwaysReset: true,
 		reset: { ~pbindPreAction.reset },
 		bufPaths: [topEnvironment[\sampleDir] +/+ "head/uduSLAP1.wav".standardizePath],
@@ -991,6 +998,12 @@ make: { |name|
 		baseAmp: 1,
 		postMCCreation: {
 			var	zero = 0 ! 12, temp;
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\distFar, 20);
 			~pbindPreAction = Routine(~calcBar);
 			~bases = { |i|
 				temp = zero.copy;
@@ -1013,6 +1026,8 @@ make: { |name|
 			~ffLowCtl ?? { ~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]) };
 			~ffRangeCtl ?? { ~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]) };
 			~wetCtl ?? { ~wetCtl = GenericGlobalControl(\wet, nil, 1) };
+			~distCtl ?? { ~distCtl = GenericGlobalControl(\dist, nil, 5, #[5, 20]) };
+			~event.put(\distance, ~distCtl.asMap);
 
 			~ffreq = 52 * Pwhite(~ffLowCtl, ~ffLowCtl.asPattern + ~ffRangeCtl + 0.99).trunc;
 			~argPairs = ~argPairs ++ [
@@ -1024,7 +1039,12 @@ make: { |name|
 			NotificationCenter.notify(name, \ready);
 		},
 		useGui: { |vpi| #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl].do { |key| key.envirGet => VP(vpi) } },
-		free: { [~fdecCtl, ~ffLowCtl, ~ffRangeCtl, ~wetCtl].free },
+		free: {
+			[~glrvbmc, ~lcrvbmc].do { |mc|
+				mc.tryPerform(\stopsReceivingFrom, ~chan);
+			};
+			[~fdecCtl, ~ffLowCtl, ~ffRangeCtl, ~wetCtl, ~distCtl].free
+		},
 		amps: 0,
 		bar: Pseq(#[0, 1], inf),
 		calcBar: {
@@ -1049,7 +1069,7 @@ make: { |name|
 }, type: \bp) => Fact(\drum1);
 
 (
-keys: #[master, glrvbmc, clock108],
+keys: #[master, glrvbmc, lcrvbmc, clock108],
 source: \drum1,
 make: { |name|
 	BP(name).free;
@@ -1068,7 +1088,7 @@ make: { |name|
 },
 makeBP: { |name|
 	Fact(\copyBufPerc).chuck(BP(name), nil, (
-		copyKeys: Fact(\copyBufPerc).copyKeys ++ #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, def],
+		copyKeys: Fact(\copyBufPerc).copyKeys ++ #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, distCtl, def],
 		bp: ~source,
 		parms: (
 			alwaysReset: true,
@@ -1092,7 +1112,7 @@ makeBP: { |name|
 }, type: \bp) => Fact(\drum2);
 
 (
-keys: #[master, glrvbmc, clock108],
+keys: #[master, glrvbmc, lcrvbmc, clock108],
 source: \drum1,
 make: Fact(\drum2).v[\make],
 makeBP: { |name|
@@ -1100,10 +1120,12 @@ makeBP: { |name|
 	BP(name).free;
 	parms = (
 		alwaysReset: true,
-		master: ~master,
-		rvbmc: ~glrvbmc,
+		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		reset: { ~pbindPreAction.reset },
 		postBufferLoad: {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
 			~argPairs = [ffreq: ~ffreqCtl.asMap];
 			NotificationCenter.notify(name, \ready);
@@ -1127,7 +1149,7 @@ makeBP: { |name|
 
 
 // drum4-6
-(keys: #[master, glrvbmc, clock108],
+(keys: #[master, glrvbmc, lcrvbmc, clock108],
 source: #[drum1, drum3],
 make: { |name|
 	BP(name).free;
@@ -1155,12 +1177,14 @@ makeBP: { |name|
 		copyCtls: #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl],
 		ctlSource: \drum1,
 		postMCCreation: {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
 			~copyCtls.do { |ckey| ckey.envirPut(BP(~ctlSource)[ckey]) };
 		},
 		postBufferLoad: BP(\drum1).v[\postBufferLoad],
 // 		free: {},
-		master: ~master,
-		rvbmc: ~glrvbmc,
+		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		delta: Pseq(#[0.25, 0.25, 0.5, 0.5], inf),
 		bufIndex: Ppatlace([0, Pxrand((1..4), inf)], inf),
 		time: Pfunc { |ev| ~buffers[ev[\bufIndex]].duration },
@@ -1192,8 +1216,7 @@ quant: -1,
 makeBP: { |name|
 	BP(name).free;
 	PR(\drumSubdiv).chuck(BP(name), nil, (
-		master: ~master,
-		rvbmc: ~glrvbmc,
+		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		gest: \ostFilt2,
 		source: ~source,
 		ctlSource: ~ctlSource	// use same controls as ctlSource
@@ -1213,6 +1236,9 @@ PR(\abstractProcess).clone {
 
 	~prep = {
 		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};
 		~event[\chan] = ~chan;
 		~buffers = ~source.collect { |key| BP(key).buffers }.flat;
 		~pan = 0;
