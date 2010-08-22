@@ -786,7 +786,7 @@ n.free;
 // not really lpc but related: amp response of formant filters?
 (
 f = { |center, freq, bw|
-	var w0, sin_w0, alpha, a0, b0rz, b1, b2, sr, a1, a2, cos_w0, w, sin_w, cos_w;
+	var w0, sin_w0, alpha, a0, b0rz, b1, b2, sr, a1, a2, cos_w0, w, sin_w, cos_w, out;
 	sr  = 44100;
 	w0 = pi * 2 * center / 44100;
 	sin_w0 = w0.sin;
@@ -799,43 +799,46 @@ f = { |center, freq, bw|
 
 	a1 = 0.0;
 	a2 = a0.neg;
+	b1 = b1.neg;
+	b2 = b2.neg;
 
-	w = 2pi * freq / 44100;
-	sin_w = w.sin;
-	cos_w = w.cos;
-
-//	20 * log(
-		(
-			sqrt(
-				squared(
-					(a0 * squared(cos_w))
-					- (a0 * squared(sin_w))
-					+ (a1 * cos_w) 
-					+ a2
-				)
-				+ squared(
-					(2 * a0 * cos_w * sin_w)
-					+ (a1 * (sin_w))
-				)
+	out = freq.asArray.collect { |freq|
+		w = 2pi * freq / 44100;
+		sin_w = w.sin;
+		cos_w = w.cos;
+	
+		sqrt(
+			squared(
+				(a0 * squared(cos_w))
+				- (a0 * squared(sin_w))
+				+ (a1 * cos_w) 
+				+ a2
 			)
-			/ 
-			sqrt(
-				squared(
-					squared(cos_w)
-					- squared(sin_w)
-					+ (b1 * cos_w)
-					+ b2
-				)
-				+ squared(
-					(2 * cos_w * sin_w)
-					+ (b1 * sin_w)
-				)
+			+ squared(
+				(2 * a0 * cos_w * sin_w)
+				+ (a1 * (sin_w))
 			)
 		)
-//	)
+		/ 
+		sqrt(
+			squared(
+				squared(cos_w)
+				- squared(sin_w)
+				+ (b1 * cos_w)
+				+ b2
+			)
+			+ squared(
+				(2 * cos_w * sin_w)
+				+ (b1 * sin_w)
+			)
+		)
+	};
+	if(freq.size == 0) { out[0] } { out }
 };
 )
 
 f.(500, 500, 0.1)
 
 (56 * (1..50)).collect { |test| f.(500, test, 0.1) }.plot
+
+f.(500, (56 * (1..50)), 0.1).plot
