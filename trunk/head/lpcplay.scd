@@ -842,3 +842,18 @@ f.(500, 500, 0.1)
 (56 * (1..50)).collect { |test| f.(500, test, 0.1) }.plot
 
 f.(500, (56 * (1..50)), 0.1).plot
+
+FormantTable.keys.select { |key| key.asString.contains("tenor") };
+
+x = FormantTable.at(\tenorO);
+
+z = Pseries.fromEndpoints(100, 5000, 100).asStream.all;
+
+y = x.flop.collect { |filt|
+	f.(filt[0], z, filt[2]) * filt[1]
+};
+
+y[0].plot;
+y.sum.plot;
+
+
