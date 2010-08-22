@@ -1,5 +1,11 @@
+* Schedules
+** Meet with Lorne
+   SCHEDULED: <2010-08-24 Tue 21:00>
 * For showing
   DEADLINE: <2010-08-31 Tue>
+** Misc [2/2]
+*** DONE Email Lorne re: Linux setup, video times
+*** DONE Email ateam re: my schedule
 ** Feet [1/1]
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** Optional [0/3]
