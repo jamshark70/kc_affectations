@@ -780,3 +780,62 @@ q = n.play(Pbind(
 q.stop;
 
 n.free;
+
+
+
+// not really lpc but related: amp response of formant filters?
+(
+f = { |center, freq, bw|
+	var w0, sin_w0, alpha, a0, b0rz, b1, b2, sr, a1, a2, cos_w0, w, sin_w, cos_w;
+	sr  = 44100;
+	w0 = pi * 2 * center / 44100;
+	sin_w0 = w0.sin;
+	cos_w0 = w0.cos;
+	alpha = sin_w0 * sinh(0.34657359027997 * bw * w0 / sin_w0);
+	b0rz = (1 + alpha).reciprocal;
+	a0 = alpha * b0rz;
+	b1 = cos_w0 * 2 * b0rz;
+	b2 = (1 - alpha) * b0rz.neg;
+
+	a1 = 0.0;
+	a2 = a0.neg;
+
+	w = 2pi * freq / 44100;
+	sin_w = w.sin;
+	cos_w = w.cos;
+
+//	20 * log(
+		(
+			sqrt(
+				squared(
+					(a0 * squared(cos_w))
+					- (a0 * squared(sin_w))
+					+ (a1 * cos_w) 
+					+ a2
+				)
+				+ squared(
+					(2 * a0 * cos_w * sin_w)
+					+ (a1 * (sin_w))
+				)
+			)
+			/ 
+			sqrt(
+				squared(
+					squared(cos_w)
+					- squared(sin_w)
+					+ (b1 * cos_w)
+					+ b2
+				)
+				+ squared(
+					(2 * cos_w * sin_w)
+					+ (b1 * sin_w)
+				)
+			)
+		)
+//	)
+};
+)
+
+f.(500, 500, 0.1)
+
+(56 * (1..50)).collect { |test| f.(500, test, 0.1) }.plot
