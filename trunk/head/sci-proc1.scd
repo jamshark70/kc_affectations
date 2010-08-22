@@ -240,7 +240,7 @@ PR(\abstractProcess).clone {
 		});
 	};
 
-	~oneStream = { |ratio = 1, repeats = 1, pbindf|
+	~oneStream = { |ratio = 1, repeaPts = 1, pbindf|
 		var	self = currentEnvironment,
 			result = Pbind(
 				\instrument, \partial1bgated,
@@ -577,7 +577,9 @@ BP(\mstClock).chan.startRecord(thisProcess.platform.recordingsDir +/+ "harmonics
 // general init
 
 (
-BP.all.free;
+BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } };
+BP(\mstClock).free;
+
 Fact(\mstClock) => BP(\mstClock);
 
 PR(\hs1) => BP(\hs);
@@ -585,6 +587,7 @@ Fact(\hstrig) => BP(\hstrig);
 
 PR(\hsSweep) => BP(\hswp);
 
+PR(\trajectories) => BP(\traj);
 PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
 Fact(\formantfx1) => BP(\fmt);
 
@@ -637,6 +640,10 @@ BP.keys.asArray.sort.do { |key|
 d = DDWTimer.new;
 
 BP.all.do(_.reset);
+
+NotificationCenter.notify(\notes, \go, 0);  // tell drum process to move ahead
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+o.remove;
 
 (
 var	drumLevel = -7.dbamp,
