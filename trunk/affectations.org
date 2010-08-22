@@ -17,10 +17,10 @@
 *** Locomotive
 ** Head [0/2]
 *** TODO [#A] [5/7] combine harmonics, vocalization and drums
-**** TODO [0/4] Reverb
+**** TODO [1/4] Reverb
 ***** TODO drones - esp. hswp
 ***** TODO harmonies
-***** TODO drums (bring drums forward from back of space?)
+***** DONE drums (bring drums forward from back of space?)
 ****** Spatialization makes drums quieter - fix
 ***** TODO Spatialize: push \int to back of space
 **** DONE Tighten drone pacing - tentatively done
