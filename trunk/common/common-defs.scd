@@ -318,6 +318,73 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		}
 	))) => ProtoEvent(\polySynthFxPatLock);
 	
+	// trajectories for cheap-ass spatialization
+	Proto {
+		~numSynths = 10;
+		~prep = {
+			~group = Group.before(s.asTarget);
+	
+			SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0|
+				var	theta, r, x, y;
+				theta = DemandEnvGen.kr(
+					Dwhite(-2pi, 2pi, inf),
+					Dwhite(0.25, 0.9, inf),
+					Env.shapeNumber(\sine)
+				);
+				r = DemandEnvGen.kr(
+					Dwhite(0.1, 1.0, inf),
+					Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+					Env.shapeNumber(\sine)
+				);
+				x = theta.cos * r;
+				y = theta.sin * r;
+				x = x * mul;
+				y = (y * mul).linlin(-1, 1, distNear, distFar);
+				SendReply.kr(send * Impulse.kr(10), "/xy", [x, y]);
+				Out.kr(out, [x, y]);
+			}, #[\ir, \ir]).add;
+	
+			~xys = { Bus.control(s, 2) } ! ~numSynths;
+			~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
+			~clients = IdentitySet.new;
+		};
+	
+		~freeCleanup = {
+			[~group, ~xys].free;
+		};
+	
+		~makeSynths = {
+			~xysynths ?? {
+				~xysynths = ~xys.collect { |xybus|
+					Synth(\xy1, [mul: 1, send: 0, out: xybus], ~group);
+				}
+			};
+		};
+	
+		~removeSynths = {
+			~xysynths !? {
+				~xysynths.do(_.free);
+				~xysynths = nil;
+			};
+		};
+	
+		~isUsedBy = { |name|
+			if(~clients.includes(name)) {
+				"% is already used by %.".format(~collIndex.asCompileString, name.asCompileString).warn
+			} {
+				~clients.add(name);
+				~makeSynths.();
+			}
+		};
+	
+		~notUsedBy = { |name|
+			~clients.remove(name);
+			if(~clients.isEmpty) {
+				~removeSynths.()
+			}
+		};
+	} => PR(\trajectories);
+
 	topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
 
 };
