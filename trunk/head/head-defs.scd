@@ -50,9 +50,11 @@ SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
 }).add;
 
 
-(keys: #[master],
+(keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
-	var	master = ~master;	// to get master into the Proto environment
+	var	master = ~master,	// to get master into the Proto environment
+		glrvbmc = ~glrvbmc,
+		lcrvbmc = ~lcrvbmc;
 	BP(name).free;
 	Proto {
 		~fund = 32.midicps;
@@ -61,6 +63,10 @@ make: { |name|
 		~initTempo = 0.1;
 		~tempoSpec = #[0.01, 10, \exp].asSpec;
 		~alwaysReset = true;
+
+		~master = master;	// to get master into the Proto environment
+		~glrvbmc = glrvbmc;
+		~lcrvbmc = lcrvbmc;
 
 		~prep = {
 			~clock = TempoClock(~initTempo, queueSize: 2048).permanent_(true);
@@ -80,6 +86,17 @@ make: { |name|
 				// this reduces the amp variation from about 20dB to about 6
 				chan.playfx(Instr("busfx.companderd"), [0, 2, 0.03, 1.0, 0.10660504994928, 0.0022888750750465, 0.1821720077621, 7.2629183877784, 0.005]);
 			});
+
+			#[glrvb, lcrvb].do { |rvb|
+				var	rvbmc = (rvb ++ "mc").asSymbol.envirGet;
+				~event.put((rvb ++ "out").asSymbol,
+					rvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels });
+				[~chan, ~chan2].do { |mc|
+					rvbmc.tryPerform(\receivesSignalFrom, mc);
+				};
+			};
+			~event.put(\distNear, 5).put(\distFar, 20);
+
 			~egbuf = Buffer.alloc(s, 1024, 1, { |buf|
 				buf.setnMsg(0, Env(#[0, 1, 0], #[0.5, 0.5], \sine).discretize(1024))
 			});
@@ -111,6 +128,11 @@ make: { |name|
 			~upd.remove;
 			~clock.stop;
 			[~tempoCtl, ~holdPctCtl, ~chan, ~chan2, ~egbuf].free;
+			[~glrvbmc, ~lcrvbmc].do { |rvb|
+				[~chan, ~chan2].do { |mc|
+					rvb.tryPerform(\stopsReceivingFrom, mc);
+				};
+			};
 		}
 	} => BP(name);
 },
@@ -142,7 +164,7 @@ PR(\abstractProcess).clone {
 		~fullSet = (~low .. ~high).asFloat.as(Set);
 	};
 
-	~clImportKeys = #[clock, tempoCtl, fund, chan2, egbuf, holdPctCtl];
+	~clImportKeys = #[clock, event, tempoCtl, fund, chan2, egbuf, holdPctCtl];
 	~clImport = {
 		~clImportKeys.do { |key|
 			key.envirPut(BP(~cl)[key])
@@ -205,7 +227,7 @@ PR(\abstractProcess).clone {
 	~oneStream = { |ratio = 1, repeats = 1, pbindf|
 		var	self = currentEnvironment,
 			result = Pbind(
-				\instrument, \partial1bgated,
+				\instrument, \partial1bgatedDist,
 				\ratio, ratio,
 				\freq, BPStream(\fund) * ratio,
 				\egRate, ~tempoCtl.asMap,
@@ -218,7 +240,10 @@ PR(\abstractProcess).clone {
 		if(pbindf.notNil) {
 			result = Pbindf(result, *pbindf)
 		};
-		if(repeats.notNil) { result = Pfin(repeats, result) };
+		if(repeats.notNil) {
+//			result = Pfin(repeats, result)
+			result = Pbindf(result, \distance, Pseries.fromEndpoints(5, 20, repeats));
+		};
 		// note, this doesn't call endhook if the process is stopped manually
 		// (you should supply stopCleanup to handle it for that case)
 		result = CleanupStream(result.asStream, e {
@@ -295,6 +320,7 @@ PR(\hs1).clone {
 	~ctrout = Plazy { |num| Pseries.fromEndpoints(0.0, 1.0, num) * Pseq(#[-1, 1], inf, { 2.rand }) };
 	~scatter = Pwhite(-1.0, 1.0, inf);
 	~zero = 0;
+	~distEnv = Env(#[15, 5], #[1], #[-4.5]);
 
 	~asPattern = {
 		~makeStreamForKey.(\panGen);
@@ -310,7 +336,7 @@ PR(\hs1).clone {
 							[	(1 - i.reciprocal),
 								Pbind(
 									\chan, ~chan,
-									\instrument, Pn(\partial1bgated, 2),
+									\instrument, Pn(\partial1bgatedDist, 2),
 									\numHold, 1, //if(i == 0, 1, max(num / 4, 1)),
 									\ratio, i,
 									\freq, ~fund * Pkey(\ratio),
@@ -322,7 +348,8 @@ PR(\hs1).clone {
 									\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
 									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
 									\panCtr, panGen.next(num),
-									\panWidth, 0
+									\panWidth, 0,
+									\distance, ~distEnv.at(i / (num-1))
 								)
 							]
 						}).flat, 1
@@ -337,6 +364,7 @@ PR(\hs1).clone {
 PR(\hs1).clone {
 	~minTop = 2;
 	~maxTop = 40;
+	~trajectoryKey = \traj;
 	~procInit = {
 		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 		~tophCtl.addDependant(currentEnvironment);
@@ -354,6 +382,10 @@ PR(\hs1).clone {
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
+	~preparePlay = {
+		BP(~trajectoryKey).isUsedBy(~collIndex);
+		~traj ?? { ~traj = Pn(Pshuf(BP(~trajectoryKey).xymaps, 1), inf) };
+	};
 	~stopCleanup = {
 		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
 	};
@@ -372,7 +404,8 @@ PR(\hs1).clone {
 					panCtr: 0,
 					panWidth: ratio / ~tophCtl.value,
 					// when ~sawCtl hits 1.0, output should be a sawtooth spectrum
-					amp: Pnaryop('blend', 1.0, [ratio.reciprocal, ~sawCtl])
+					amp: Pnaryop('blend', 1.0, [ratio.reciprocal, ~sawCtl]),
+					#[pan, distance], ~trajStream.next
 				]),
 				sync
 			);
@@ -954,12 +987,12 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 	Line.kr(0, 1, time + fdec, doneAction: 2);
 }).add;
 
-s.doWhenBooted {
-	1.0.wait;
-	#[bufGrainPanFmlet, bufGrainRLPFPan].do { |key|
+// s.doWhenBooted {
+// 	1.0.wait;
+	#[bufGrainPanFmlet, bufGrainRLPFPan, partial1bgated].do { |key|
 		\addRvbOut.eval((key ++ "Dist").asSymbol, SynthDescLib.at(key).def.func).add;
 	};
-};
+// };
 
 
 (keys: #[master, glrvbmc, lcrvbmc],
@@ -1063,7 +1096,7 @@ make: { |name|
 			{ ~rates };
 		},
 
-		def: \bufGrainPanFmlet
+		def: \bufGrainPanFmletDist
 	));
 	~clock108 => BP(name);
 }, type: \bp) => Fact(\drum1);
@@ -1073,7 +1106,7 @@ keys: #[master, glrvbmc, lcrvbmc, clock108],
 source: \drum1,
 make: { |name|
 	BP(name).free;
-	if (BP.exists(~source)) {
+	if(BP.exists(~source)) {
 		if (BP(~source)[\argPairs].notNil) {
 			~makeBP.(name);
 		} {
@@ -1103,6 +1136,7 @@ makeBP: { |name|
 					fdec: ~fdecCtl,
 					wet: ~wetCtl.asMap
 				];
+				~event.put(\distance, ~distCtl.asMap);
 			}	
 		)
 	));
@@ -1121,11 +1155,15 @@ makeBP: { |name|
 	parms = (
 		alwaysReset: true,
 		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
+		source: ~source,
 		reset: { ~pbindPreAction.reset },
 		postBufferLoad: {
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			};
+			~distCtl = BP(~source).distCtl;
+			~event.put(\distance, ~distCtl.asMap);
+
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
 			~argPairs = [ffreq: ~ffreqCtl.asMap];
 			NotificationCenter.notify(name, \ready);
@@ -1139,7 +1177,7 @@ makeBP: { |name|
 		},
 		baseIndices: #[1, 4, 7, 10],
 		baseAmp: 1 /* finger-amp */,
-		def: \bufGrainRLPFPan
+		def: \bufGrainRLPFPanDist
 	);
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
 
@@ -1171,16 +1209,17 @@ makeBP: { |name|
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
-		def: \bufGrainPanFmlet, //\bufGrainRLPFPan,
+		def: \bufGrainPanFmletDist, //\bufGrainRLPFPanDist,
 		chan: ~chan,
 		inChannels: 2,
-		copyCtls: #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl],
+		copyCtls: #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, distCtl],
 		ctlSource: \drum1,
 		postMCCreation: {
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			};
 			~copyCtls.do { |ckey| ckey.envirPut(BP(~ctlSource)[ckey]) };
+			~event.put(\distance, ~distCtl.asMap);
 		},
 		postBufferLoad: BP(\drum1).v[\postBufferLoad],
 // 		free: {},
@@ -1230,7 +1269,7 @@ makeBP: { |name|
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPan);
+	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPanDist);
 	~source = #[drum1, drum3];
 	~alwaysReset = true;
 
@@ -1257,11 +1296,13 @@ PR(\abstractProcess).clone {
 			~fmltDcyCtl = GenericGlobalControl(\fmltDcy, nil, 0.1, #[0.01, 1, \exp]);
 			~ostFiltCtl = GenericGlobalControl(\ostFiltProb, nil, 0.1);
 			~ost2AmpCtl = GenericGlobalControl(\ost2Amp, nil, 0, \amp);
+			~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
 		} {
-			#[accWetCtl, fmltWetCtl, fmltDcyCtl, ostFiltCtl, ost2AmpCtl].do { |k|
+			#[accWetCtl, fmltWetCtl, fmltDcyCtl, ostFiltCtl, ost2AmpCtl, distCtl].do { |k|
 				k.envirPut(BP(~ctlSource)[k]);
-			}
+			};
 		};
+		~event.put(\distance, ~distCtl.asMap);
 	};
 
 	~freeCleanup = {
@@ -1314,7 +1355,7 @@ PR(\abstractProcess).clone {
 		),
 		ostFilt: Plazy { |ev|
 			Pbindf(~gestures[\ost],
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\wet, Pif(Pbinop('and', ~ostFiltCtl.asPattern.coin, Pkey(\bufIndex) <= 0),
 					~fmltWetCtl, 0),
 				\ffreq, BPStream(\ostFiltFreq),
@@ -1323,7 +1364,7 @@ PR(\abstractProcess).clone {
 		},
 		ostFilt2: Plazy {
 			Pbind(
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\delta, Pn(0.25, 12), //Pseq(#[0.25, 0.25, 0.5, 0.5], 2),
 				\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
 					Pseq(#[0, 1, 0, 0, 1, 1], inf)
@@ -1348,7 +1389,7 @@ PR(\abstractProcess).clone {
 		ostFiltIn: Plazy { |ev|
 			var	numBars = ~numBarsStream.next(ev);
 			Pbindf(Pn(~gestures[\ost], numBars),
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\wet, Env([0, ~fmltWetCtl.value], [numBars * 3]),
 				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
 				\fdec, ~fmltDcyCtl
@@ -1357,7 +1398,7 @@ PR(\abstractProcess).clone {
 		ostFiltOut: Plazy { |ev|
 			var	numBars = ~numBarsStream.next(ev);
 			Pbindf(Pn(~gestures[\ost], numBars),
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\wet, Env([~fmltWetCtl.value, 0], [numBars * 3]),
 				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
 				\fdec, ~fmltDcyCtl
@@ -1366,7 +1407,7 @@ PR(\abstractProcess).clone {
 		ostFiltSwell: Plazy { |ev|
 			var	numBars = ~numBarsStream.next(ev);
 			Pbindf(Pn(~gestures[\ost], numBars),
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\wet, Env([0, ~fmltWetCtl.value, 0], (numBars * 1.5) ! 2),
 				\ffreq, Env([52 * rrand(10, 18), 208].rotate(2.rand), [numBars * 3], \exp),
 				\fdec, ~fmltDcyCtl
@@ -1377,8 +1418,8 @@ PR(\abstractProcess).clone {
 			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
 			Ppar(pats.collect { |pat|
 				Pbindf(pat,
-					\instrument, Pseq([\bufGrainPanFmlet,
-						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+					\instrument, Pseq([\bufGrainPanFmletDist,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmletDist, \rest)
 				]))
 			})
 		},
@@ -1389,8 +1430,8 @@ PR(\abstractProcess).clone {
 			var pats = ~nhighList.(ev), prob = rrand(0.4, 0.8);
 			Ppar((pats.collect { |pat|
 				Pbindf(pat,
-					\instrument, Pseq([\bufGrainPanFmlet,
-						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmlet, \rest)
+					\instrument, Pseq([\bufGrainPanFmletDist,
+						Pif(Pwhite(0.0, 1.0, inf) < prob, \bufGrainPanFmletDist, \rest)
 				]))
 			}) ++ ~accEvent.(ev))
 		},
@@ -1415,7 +1456,7 @@ PR(\abstractProcess).clone {
 				}
 				<>
 				Pbind(
-					\instrument, \bufGrainPanFmlet,
+					\instrument, \bufGrainPanFmletDist,
 					\delta, 0.25,
 					\flag, 0,
 					\num, Psmartstutter(Pfunc(_.value),
@@ -1607,7 +1648,7 @@ PR(\abstractProcess).clone {
 		~lastSubdivTime = thisThread.beats;
 		{ |i|
 			Pbind(
-				\instrument, \bufGrainPanFmlet,
+				\instrument, \bufGrainPanFmletDist,
 				\delta, Pn(factor / n, n),
 				\bufIndex, Pxrand((1..4), inf),
 				\hpFreq, Pif(Pbinop('==', Pkey(\bufIndex), 3), -1, 276),
@@ -1631,7 +1672,7 @@ PR(\abstractProcess).clone {
 
 	~accEvent = { |ev, delta(Pn(0.1, 1))|
 		Pbind(
-			\instrument, \bufGrainPanFmlet,
+			\instrument, \bufGrainPanFmletDist,
 			\delta, delta,
 			\bufIndex, 0,
 			\amp, 1,
