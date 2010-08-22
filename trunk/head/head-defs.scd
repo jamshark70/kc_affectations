@@ -465,7 +465,10 @@ PR(\hs1).clone {
 	} => BP(name)
 }, type: \bp) => Fact(\hstrig);
 
-(make: { |name|
+(
+transitionStates: 5,
+//partials: ,	// you can override
+make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
 		chan: BP(\mstClock).chan2,
@@ -474,6 +477,11 @@ PR(\hs1).clone {
 		event: (eventKey: \monoSupport),
 		userprep: {
 			~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
+			~makeFormantTable.();
+			~fmtBus = Bus.control(s, ~partials.size);
+		},
+		userfree: {
+			~fmtBus.free
 		},
 		delta: Pexprand(0.1, 0.9, inf), // Pexprand(1.0, 4.0, inf),
 		formant: Plazy { Pxrand(~fmtKeys, inf) },
@@ -513,7 +521,99 @@ PR(\hs1).clone {
 		recvEventNotify: { |node, event|
 			~node = node;
 		},
-	 	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) }
+	 	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) },
+
+		transitionStates: ~transitionStates,
+		partials: ~partials,
+		makeFormantTable: {
+			~fmtAmps = IdentityDictionary.new;
+			~partials ?? { ~partials = 32.midicps * (2..32) };
+			Routine {
+				var	current, f1, f2;
+				~fmtKeys.do { |key|
+					~fmtAmps.put(key, current = IdentityDictionary.new);
+					current.put(key, ~calcFormantResp.(FormantTable.at(key), ~partials));
+					~fmtKeys.do { |key2|
+						if(key != key2) {
+							// have we already calculated this transition, but in reverse?
+							if(~fmtAmps.tryPerform(\at, key2).tryPerform(\at, key).notNil) {
+								current.put(key2, ~fmtAmps[key2][key].reverse)
+							} {
+								f1 = FormantTable.at(key);
+								f2 = FormantTable.at(key2);
+								current.put(key2,
+									{	|i|
+										~calcFormantResp.(f1.blend(f2, i / (~transitionStates - 1)),
+											~partials);
+									} ! ~transitionStates
+								)
+							}
+						}
+					};
+					if(thisThread.isKindOf(Routine)) { 0.004.wait };
+				};
+				"fmtAmps ready".postln;
+			}.play(AppClock)
+		},
+
+		calcFormantResp: { |fmttable, freqs|
+			var	resp = 0 ! freqs.size;
+			fmttable.flop.do { |flt|
+				resp = resp + (flt[1] * ~calcFiltResp.(flt[0], flt[2], freqs));
+			};
+			resp
+		},
+		calcFiltResp: { |center, bw, freq|
+			var w0, sin_w0, alpha, a0, b0rz, b1, b2, sr, a1, a2, cos_w0, w, sin_w, cos_w, out;
+			sr  = 44100;
+			w0 = pi * 2 * center / 44100;
+			sin_w0 = w0.sin;
+			cos_w0 = w0.cos;
+			alpha = sin_w0 * sinh(0.34657359027997 * bw * w0 / sin_w0);
+			b0rz = (1 + alpha).reciprocal;
+			a0 = alpha * b0rz;
+			b1 = cos_w0 * 2 * b0rz;
+			b2 = (1 - alpha) * b0rz.neg;
+		
+			a1 = 0.0;
+			a2 = a0.neg;
+			b1 = b1.neg;
+			b2 = b2.neg;
+		
+			out = freq.asArray.collect { |freq|
+				w = 2pi * freq / 44100;
+				sin_w = w.sin;
+				cos_w = w.cos;
+			
+				sqrt(
+					squared(
+						(a0 * squared(cos_w))
+						- (a0 * squared(sin_w))
+						+ (a1 * cos_w) 
+						+ a2
+					)
+					+ squared(
+						(2 * a0 * cos_w * sin_w)
+						+ (a1 * (sin_w))
+					)
+				)
+				/ 
+				sqrt(
+					squared(
+						squared(cos_w)
+						- squared(sin_w)
+						+ (b1 * cos_w)
+						+ b2
+					)
+					+ squared(
+						(2 * cos_w * sin_w)
+						+ (b1 * sin_w)
+					)
+				)
+			};
+			if(freq.size == 0) { out[0] } { out }
+		}
+			
 	));
 }, type: \bp) => Fact(\formantfx1);
 
