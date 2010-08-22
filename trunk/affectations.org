@@ -18,7 +18,9 @@
 ** Head [0/2]
 *** TODO [#A] [5/7] combine harmonics, vocalization and drums
 **** TODO [1/4] Reverb
-***** TODO drones - esp. hswp
+***** TODO [0/2] drones - esp. hswp
+****** TODO Play out amplitude curves (use Sensitivity!)
+****** TODO Redo hsd synths to use amp curves
 ***** TODO harmonies
 ***** DONE drums (bring drums forward from back of space?)
 ****** Spatialization makes drums quieter - fix
