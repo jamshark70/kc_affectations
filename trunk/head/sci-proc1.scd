@@ -4,6 +4,8 @@ Library.put(\chucklib, \midiSearches, #["remote"]); BP.loadGui;
 #[glrvbmc, glrvb, lcrvbmc, lcrvb, master].do({ |obj| obj.envirGet.free; obj.envirPut(nil) });
 s.waitForBoot(e { (Document.current.path.dirname +/+ "head-defs.scd").debug("loading").loadPath });
 
+~master => MCG(7);
+
 
 SynthDescLib.global.browse;
 Object.browse;
@@ -588,8 +590,8 @@ Fact(\hstrig) => BP(\hstrig);
 PR(\hsSweep) => BP(\hswp);
 
 PR(\trajectories) => BP(\traj);
-PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
 Fact(\formantfx1) => BP(\fmt);
+PR(\hsDrone).chuck(BP(\hsd), nil, (maxTop: 40));
 
 BP(\cpt).free;
 PR(\counterpoint).chuck(BP(\cpt), nil, (master: ~master));
@@ -1323,3 +1325,20 @@ p.sustain = Pswitch1([
 ], Pwrand(#[0, 1], #[0.7, 0.3], inf));
 
 p.quant = 1;
+
+
+// demo formant amps
+w.tryPerform(\close);
+w = ResizeFlowWindow("test", Rect(900, 200, 400, 300));
+x = MultiSliderView(w, w.view.bounds.insetBy(2, 2));
+x.indexThumbSize_(x.bounds.width / BP(\fmt).fmtBus.numChannels - 2).gap_(2).value_(0 ! BP(\fmt).fmtBus.numChannels);
+w.recursiveResize.front;
+
+KrBusWatcher.register(BP(\fmt).fmtBus);
+u.remove;
+u = Updater(BP(\fmt).fmtBus, { |obj, data|
+	defer { x.value = data }
+});
+
+KrBusWatcher.unregister(BP(\fmt).fmtBus);
+KrBusWatcher.newFrom(s).updateFreq_(8);
