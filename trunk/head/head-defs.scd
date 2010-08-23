@@ -155,6 +155,8 @@ PR(\abstractProcess).clone {
 	~numEv = Pfunc { |ratio| ratio } * Pwhite(1.5, 4) * Pseries(1, 0.02, inf);
 
 	~prep = {
+		~ampCtl = GenericGlobalControl(\amp, nil, 0.2, \amp);
+
 		~clImport.();
 		~procInit.();
 
@@ -178,8 +180,10 @@ PR(\abstractProcess).clone {
 
 	~freeCleanup = {
 		~removeGResponder.();
+		~ampCtl.free;
 		~procFree.();
 	};
+	~useGui = { |vpi| ~ampCtl => VP(vpi) };
 
 	~stopCleanup = {
 		~activeRatios = Set.new;
@@ -264,14 +268,17 @@ PR(\abstractProcess).clone {
 				~oneStream.(ratio, numEv = ~numEvStream.next(ratio).asInteger,
 					[	amp: ~makeAmpPattern.(numEv),
 						panCtr: rrand(ratio / ~high - 0.4, ratio / ~high) * #[-1, 1].choose,
-						panWidth: (1 - Pkey(\panCtr).abs) * (ratio / ~high)
+						panWidth: (1 - Pkey(\panCtr).abs) * (ratio / ~high),
+						distance: ~makeDistPattern.(numEv)
 					]),
 				0.1);
 			~streamHook.(stream, ratio);
 		};
 	};
 
-	~makeAmpPattern = { |numEv| Pgeom.fromEndpoints(1, rrand(0.02, 0.18), numEv) };
+//	~makeAmpPattern = { |numEv| Pgeom.fromEndpoints(1, rrand(0.02, 0.18), numEv) };
+	~makeAmpPattern = { ~ampCtl.asMap };
+	~makeDistPattern = { |numEv| Pgeom.fromEndpoints(5, rrand(16.0, 20.0), numEv) };
 
 	~streamHook = { |stream, ratio|
 		~activeRatios.add(ratio);
@@ -309,11 +316,13 @@ PR(\hs1).clone {
 		~lowhCtl = GenericGlobalControl(\lowh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
 
+		~ampCtl.value = 0.185;
+
 		// see pattern for sync with master clock
 		~quant = NilTimeSpec.new;
 	};
 	~procFree = { [~lowhCtl, ~tophCtl].free };
-	~useGui = { |vpi| ~lowhCtl => VP(vpi); ~tophCtl => VP(vpi) };
+	~useGui = { |vpi| ~lowhCtl => VP(vpi); ~tophCtl => VP(vpi); ~ampCtl => VP(vpi) };
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
@@ -347,7 +356,7 @@ PR(\hs1).clone {
 									\egRateMul, i,
 									\egBuf, ~egbuf,
 									// empirically, unity gain is about 4dB too loud
-									\amp, -4.dbamp,
+									\amp, ~ampCtl.asMap, // -4.dbamp,
 									\delta, Pkey(\egRateMul).reciprocal * Pkey(\numHold),
 									\sustain, Pkey(\delta) * (1 - (0.5 / Pkey(\numHold))),
 									\panCtr, panGen.next(num),
@@ -393,7 +402,7 @@ PR(\hs1).clone {
 		~tophCtl.removeDependant(currentEnvironment);
 		[~tophCtl, ~offsetCtl, ~sawCtl].free
 	};
-	~useGui = { |vpi| ~tophCtl => VP(vpi); ~offsetCtl => VP(vpi); ~sawCtl => VP(vpi) };
+	~useGui = { |vpi| ~tophCtl => VP(vpi); ~offsetCtl => VP(vpi); ~sawCtl => VP(vpi); ~ampCtl => VP(vpi) };
 	~makeGResponder = 0;
 	~removeGResponder = 0;
 
@@ -420,7 +429,7 @@ PR(\hs1).clone {
 					panCtr: 0,
 					panWidth: ratio / ~tophCtl.value,
 					// when ~sawCtl hits 1.0, output should be a sawtooth spectrum
-					amp: Pnaryop('blend', 1.0, [ratio.reciprocal, ~sawCtl]),
+					amp: Pnaryop('blend', 1.0, [ratio.reciprocal, ~sawCtl]) * ~ampCtl,
 					ampFilt: ~fmtMaps[ratio - ~minTop],
 					filtSensBus: BP(~fmtProc).sensCtl.index,
 					filtMul: ~filtMul,
@@ -512,11 +521,11 @@ make: { |name|
 		fadeOut: 8,
 		preparePlay: {
 			~fmtBus.setn(1 ! ~partials.size);
-			~sensCtl.automate(\ctlEnv, [connect: 0, env: Env(#[0, 1], [~fadeIn], 1.6)],
+			~sensCtl.automate(\ctlEnv, [connect: 0, env: Env(#[0, 1], [~fadeIn], 0)],
 				~chan.fadergroup, \addToHead)
 		},
 		doFadeOut: {
-			~sensCtl.automate(\ctlEnv, [connect: 1, env: Env(#[1, 0], [~fadeOut], -1.6)],
+			~sensCtl.automate(\ctlEnv, [connect: 1, env: Env(#[1, 0], [~fadeOut], 0)],
 				~chan.fadergroup, \addToHead);
 			~event.copy.putAll((
 				instrument: \ctlPoint, chan: nil,
@@ -1155,7 +1164,7 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 
 // s.doWhenBooted {
 // 	1.0.wait;
-	#[bufGrainPanFmlet, bufGrainRLPFPan, partial1bgated].do { |key|
+	#[bufGrainPanFmlet, bufGrainRLPFPan, partial1bgated, simpleLPCfxPan].do { |key|
 		\addRvbOut.eval((key ++ "Dist").asSymbol, SynthDescLib.at(key).def.func).add;
 	};
 // };
@@ -1386,6 +1395,9 @@ makeBP: { |name|
 			};
 			~copyCtls.do { |ckey| ckey.envirPut(BP(~ctlSource)[ckey]) };
 			~event.put(\distance, ~distCtl.asMap);
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\distFar, 20);
 		},
 		postBufferLoad: BP(\drum1).v[\postBufferLoad],
 // 		free: {},
@@ -1469,6 +1481,9 @@ PR(\abstractProcess).clone {
 			};
 		};
 		~event.put(\distance, ~distCtl.asMap);
+		~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+			.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+			.put(\distFar, 20);
 	};
 
 	~freeCleanup = {
@@ -1887,11 +1902,11 @@ PR(\abstractProcess).clone {
 
 
 (
-keys: #[master, glrvbmc],
+keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		master: ~master, rvbmc: ~glrvbmc,
+		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		dir: topEnvironment[\dir] ?? { Document.current.path.dirname.dirname +/+ "samples/feet" },
 		lpcPath: "words-ana3.lpc.aif",
 		labelPath: "words-labels.txt",
@@ -1907,6 +1922,10 @@ make: { |name|
 				buf.sine1Msg(amps)
 			});
 	
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+				.put(\distFar, 20);
+
 			~lpcb = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
 			~pt = TabFileReader.read(~dir +/+ ~labelPath);
 			~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
@@ -1939,10 +1958,12 @@ make: { |name|
 			}
 		},
 	
-		lpcDef: \simpleLPCfxPan,
+		lpcDef: \simpleLPCfxPanDist,
 		lpcStart: Pkey(\ptstart), // Pwhite(Pkey(\ptstart), Pkey(\ptend) - Pkey(\time), inf),
 		lpcEnd: Pkey(\ptend), // Pkey(\start) + Pkey(\time),
-		lpcPan: Pwhite(-1.0, 1.0, inf),
+// 		lpcPan: Pwhite(-1.0, 1.0, inf),
+		lpcPan: sin(Ptime() * (2pi / rrand(8.8, 11.1))),
+		lpcDist: sin(Ptime() * (2pi / rrand(6.8, 10.1))).linlin(-1, 1, 5, 20),
 		lpcAtt: 0.05,
 		lpcDec: 0.05,
 	
@@ -1958,9 +1979,11 @@ make: { |name|
 				// \time should be populated by sanitizeEvent
 				\amp, 1,
 				\pan, BPStream(\lpcPan),
+				\distance, BPStream(\lpcDist),
 				\attack, BPStream(\lpcAtt),
 				\decay, BPStream(\lpcDec)
-			) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev) ?? { ev } }
+			) <> Pfunc { |ev| ~sanitizeEvent4lpc.(ev, (distFar: \distFar,
+				glrvbout: \glrvbout, lcrvbout: \lcrvbout)) ?? { ev } }
 		},
 		objects: { (
 			wtblip: (
