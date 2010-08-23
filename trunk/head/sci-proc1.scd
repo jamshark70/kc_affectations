@@ -579,8 +579,8 @@ BP(\mstClock).chan.startRecord(thisProcess.platform.recordingsDir +/+ "harmonics
 // general init
 
 (
-BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } };
-BP(\mstClock).free;
+BP.all.do { |bp| if(#[mstClock, traj].includes(bp.collIndex).not) { bp.free } };
+BP(#[mstClock, traj]).free;
 
 Fact(\mstClock) => BP(\mstClock);
 
@@ -644,7 +644,13 @@ d = DDWTimer.new;
 BP.all.do(_.reset);
 
 NotificationCenter.notify(\notes, \go, 0);  // tell drum process to move ahead
-o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+c = 2;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	if((c = c - 1) <= 0) { r.remove };
+	s.sendMsg(\n_trace, m[1])
+}).add;
+
 o.remove;
 
 (
@@ -722,7 +728,7 @@ var	drumLevel = -7.dbamp,
 	
 
 		gcAutoSynthCmd: (gc: BP(\drum1).distCtl, name: \ctlEnv, outName: \outbus, 
-			connect: 0, time: 36, env: Env(#[20, 5], #[1], 4)),
+			connect: 0, time: 36, env: Env(#[20, 5], #[1], 1)),
 		bpCmd: (name: \drum1, quant: `nil, prepareBP: { |bp|
 			bp.bar = Pseq(#[3, 0], inf);
 		}),
@@ -1173,7 +1179,7 @@ t = TLSequenceIterator([
 				{	var	up = rrand(0.1, 0.3);
 					PR(\mixerAutoSynthCmd).copy.putAll((
 						mixer: BP(\int).chan, name: \ctlEnv, outName: \outbus,
-						connect: 0, time: ~bpDur, env: Env(#[-24, -8.5, -24].dbamp, [up, 1-up], \exp)
+						connect: 0, time: ~bpDur, env: Env(#[-16, -2.5, -16].dbamp, [up, 1-up], \exp)
 					))
 				},
 				{	(if((~count = ~count + 1) < ~repeats) { ~bpDur }
@@ -1228,16 +1234,17 @@ t = TLSequenceIterator([
 	}),
 	\cmdSync,
 
-	#[chan, chan2].collect { |key, i|
-		PR(\mixerAutoSynthCmd).copy.putAll((
-			mixer: BP(\mstClock)[key], name: \ctlPoint, outName: \outbus,
-			value: 0, time: 32, curve: -2.1,
-			stopAction: if(i == 0) {
-				// this branch must return a function, not run the action
-				{ BP(#[mstClock, hs, hstrig, hswp, hsd, fmt]).stop }
-			}
-		))
-	}
+	gcAutoSynthCmd: (gc: BP(\hsd).ampCtl, name: \ctlPoint, outName: \outbus,
+		value: 0, time: 32, curve: -2.1),
+	mixerAutoSynthCmd: (mixer: BP(\mstClock).chan, name: \ctlPoint, outName: \outbus,
+		value: 0, time: 32, curve: -2.1,
+		stopAction: {
+			BP(#[mstClock, hs, hstrig, hswp, hsd, fmt]).stop
+		}
+	),
+
+	{ 32 - BP(\fmt).fadeOut },
+	{ BP(\fmt).doFadeOut; 0 }
 
 // 	{ rrand(6.0, 9.0) },
 // 	funcCmd: (func: { ~iterator.stop })
@@ -1325,6 +1332,24 @@ p.sustain = Pswitch1([
 ], Pwrand(#[0, 1], #[0.7, 0.3], inf));
 
 p.quant = 1;
+
+(
+
+t = t2;
+t.play(argClock: ~clock108);
+)
+
+	#[chan, chan2].collect { |key, i|
+		PR(\mixerAutoSynthCmd).copy.putAll((
+			mixer: BP(\mstClock)[key], name: \ctlPoint, outName: \outbus,
+			value: 0, time: 32, curve: -2.1,
+			stopAction: if(i == 0) {
+				// this branch must return a function, not run the action
+				{ BP(#[mstClock, hs, hstrig, hswp, hsd, fmt]).stop }
+			}
+		))
+	}
+
 
 
 // demo formant amps
