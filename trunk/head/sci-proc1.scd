@@ -653,6 +653,8 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
 
 o.remove;
 
+MixerRecorder.dir = thisProcess.platform.recordingsDir;
+
 (
 var	drumLevel = -7.dbamp,
 	waitForNotesCmd = PR(\funcCmd).copy.putAll((
@@ -850,7 +852,7 @@ var	drumLevel = -7.dbamp,
 		\cmdSync,
 		{ "synced".debug; 6 },
 	
-		36,
+		18,
 		loopCmd: (repeats: 2,
 			qphase: Pseq(#[1.25, 0.75], inf).asStream,
 			acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
@@ -861,7 +863,7 @@ var	drumLevel = -7.dbamp,
 						bp.override(\gest, pat);
 					};
 					BP(\drum8).quant = [-1, ~qphase.next];
-					24
+					rrand(3, 5) * 6
 				}
 			]
 		),
@@ -887,7 +889,7 @@ var	drumLevel = -7.dbamp,
 			cmds: [
 				{	var	// both 7+8 use the same random seed
 						pat = Pseed(Pn(Date.seed, 1), Pseq([
-							Pif(Ptime() < rrand(8, 15), Pseq([\randsync, ~acc], 1)),
+							Pif(Ptime() < rrand(8, 11), Pseq([\randsync, ~acc], 1)),
 							\randquant
 						], 1));
 					BP(#[drum7, drum8]).do { |bp|
@@ -895,7 +897,7 @@ var	drumLevel = -7.dbamp,
 						bp.override(\gest, pat);
 					};
 					BP(\drum8).quant = -1;
-					rrand(3, 6) * 6
+					rrand(2, 4) * 6
 				}
 			]
 		),
@@ -935,7 +937,7 @@ var	drumLevel = -7.dbamp,
 					}
 				),
 				\sync,
-				{ if(~repeats > 1) { rrand(18, 48) } { 0 } }
+				{ if(~repeats > 1) { rrand(12, 24) } { 0 } }
 			]
 		),
 		\cmdSync,
@@ -956,7 +958,7 @@ var	drumLevel = -7.dbamp,
 			], inf);
 			36
 		},
-	
+
 	// 	36,
 	//	funcCmd: (func: { ~iterator.stop })
 	//	{ BP.all.stop; 8 },
@@ -970,7 +972,8 @@ t = TLSequenceIterator([
 	{	BP(\hs).low_(2).high_(24);
 		#[chan, chan2].do { |key| BP(\mstClock)[key].level = -15.dbamp };
 		if(d.class == DDWTimer) { d.reset };
-		0
+		~master.startRecord;
+		1
 	},
 	bpCmd: (name: \mstClock/*, prepareBP: { |bp|
 		bp.tempoCtl.value = 0.1;
@@ -1036,6 +1039,7 @@ t = TLSequenceIterator([
 // 	},
 	bpCmd: (name: \hsd, prepareBP: { |bp|
 		bp.debug.tophCtl.value = 2;
+		bp.ampCtl.value = 0.2;
 	}),
 	gcAutoSynthCmd: (
 		gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
@@ -1244,10 +1248,18 @@ t = TLSequenceIterator([
 	),
 
 	{ 32 - BP(\fmt).fadeOut },
-	{ BP(\fmt).doFadeOut; 0 }
+	{ BP(\fmt).doFadeOut; 0 },
+
+	48,
+	mixerAutoSynthCmd: (mixer: ~master, name: \ctlPoint, outName: \outbus,
+		value: 0, time: 32, curve: -2.1),
+	\cmdSync,
 
 // 	{ rrand(6.0, 9.0) },
-// 	funcCmd: (func: { ~iterator.stop })
+	funcCmd: (func: {
+		~master.stopRecord;
+		~iterator.stop;
+	})
 ]).play(argClock: SystemClock)
 )
 
