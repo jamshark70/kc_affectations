@@ -15,17 +15,17 @@
 ** Arms
 *** Axial
 *** Locomotive
-** Head [0/2]
-*** TODO [#A] [5/7] combine harmonics, vocalization and drums
-**** TODO [1/4] Reverb
-***** TODO [2/3] drones - esp. hswp
+** Head [1/2]
+*** DONE [#A] [6/6] combine harmonics, vocalization and drums
+**** DONE [4/4] Reverb
+***** DONE [3/3] drones - esp. hswp
 ****** DONE Play out amplitude curves (use Sensitivity!)
 ****** DONE Redo hsd synths to use amp curves
-****** TODO Recheck levels
-***** TODO harmonies
+****** DONE Recheck levels
+***** DONE harmonies
 ***** DONE drums (bring drums forward from back of space?)
 ****** Spatialization makes drums quieter - fix
-***** TODO Spatialize: push \int to back of space
+***** DONE Spatialize: push \int to back of space
 **** DONE Tighten drone pacing - tentatively done
 **** DONE [3/3] When/how to add drums?
 ***** DONE Doublecheck drum pacing
