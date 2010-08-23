@@ -34,7 +34,8 @@ SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, 
 
 
 // harmonic series drones
-SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
+SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1, ampFilt = 1,
+	filtSensBus = 0, filtMul = 1,
 	egRate = 1, egRateMul = 1, egSusPt = 0.5, egBuf,
 	panWidth = 0, panCtr = 0, gate = 1|
 	var	sig = FSinOsc.ar(freq, 0, amp),
@@ -43,10 +44,12 @@ SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1,
 		notReachedSusPt = BinaryOpUGen('==', sign(egSusPt - posTest), swRate.sign),
 		egpos = Sweep.kr(1, swRate * (((gate <= 0) + notReachedSusPt) > 0)),
 		eg = BufRd.kr(1, egBuf, egpos * BufFrames.ir(egBuf), loop: 0, interpolation: 2),
-		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0);
+		pan = LFNoise1.kr(swRate, panWidth, panCtr).clip(-1.0, 1.0),
+		sens = In.kr(filtSensBus, 1),
+		postamp = ampFilt * sens.linlin(0, 1, 1, filtMul);
 	LocalOut.kr(egpos);
 	FreeSelf.kr(egpos >= 1.0);
-	OffsetOut.ar(outbus, Pan2.ar(sig * eg, pan));
+	OffsetOut.ar(outbus, Pan2.ar(sig * eg, pan, postamp));
 }).add;
 
 
@@ -364,6 +367,8 @@ PR(\hs1).clone {
 PR(\hs1).clone {
 	~minTop = 2;
 	~maxTop = 40;
+	~filtMul = 12.5.dbamp;
+	~fmtProc = \fmt;
 	~trajectoryKey = \traj;
 	~procInit = {
 		~tophCtl = GenericGlobalControl(\numh, nil, ~minTop, [~minTop, ~maxTop, \lin, 1]);
@@ -371,13 +376,23 @@ PR(\hs1).clone {
 		// 0 is a dummy value
 		~hStreams = Array.newClear(~maxTop + 1).overWrite(0 ! ~minTop);
 
+		if(BP.exists(~fmtProc)) {
+			~fmtBus = BP(~fmtProc).fmtBus;
+			~fmtMaps = { |i| ("c" ++ (~fmtBus.index + i)).asSymbol } ! ~fmtBus.numChannels;
+		} {
+			"BP(%) not found - formant buses not available".format(~fmtProc.asCompileString).warn;
+		};
+
 		~offsetCtl = GenericGlobalControl(\offset, nil, 0.5, #[0, 0.5]);
 		~sawCtl = GenericGlobalControl(\sawPct, nil, 0);
 
 		// see pattern for sync with master clock
 		~quant = NilTimeSpec.new;
 	};
-	~procFree = { [~tophCtl, ~offsetCtl, ~sawCtl].free };
+	~procFree = {
+		~tophCtl.removeDependant(currentEnvironment);
+		[~tophCtl, ~offsetCtl, ~sawCtl].free
+	};
 	~useGui = { |vpi| ~tophCtl => VP(vpi); ~offsetCtl => VP(vpi); ~sawCtl => VP(vpi) };
 	~makeGResponder = 0;
 	~removeGResponder = 0;
@@ -388,6 +403,7 @@ PR(\hs1).clone {
 	};
 	~stopCleanup = {
 		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
+		BP(~trajectoryKey).notUsedBy(~collIndex);
 	};
 
 	// inherit asPattern from hs1:
@@ -405,6 +421,9 @@ PR(\hs1).clone {
 					panWidth: ratio / ~tophCtl.value,
 					// when ~sawCtl hits 1.0, output should be a sawtooth spectrum
 					amp: Pnaryop('blend', 1.0, [ratio.reciprocal, ~sawCtl]),
+					ampFilt: ~fmtMaps[ratio - ~minTop],
+					filtSensBus: BP(~fmtProc).sensCtl.index,
+					filtMul: ~filtMul,
 					#[pan, distance], ~trajStream.next
 				]),
 				sync
@@ -474,21 +493,58 @@ make: { |name|
 		chan: BP(\mstClock).chan2,
 		isFx: true,
 		alwaysReset: true,
-		event: (eventKey: \monoSupport),
+// 		event: (eventKey: \monoSupport),
+		event: (eventKey: \polySynthPlayer),
 		userprep: {
 			~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
-			~makeFormantTable.();
-			~fmtBus = Bus.control(s, ~partials.size);
+			~makeEnvTable.();
+			~fmtBus = Bus.control(s, ~partials.size).setn(1 ! ~partials.size);
+			~sensCtl = GenericGlobalControl(\sensitivity, nil, 0);
+			~event.put(\chan, nil)	// needed for kr synth chooser
+				.put(\target, ~chan.fadergroup).put(\addAction, \addToHead);
 		},
 		userfree: {
-			~fmtBus.free
+			[~fmtBus, ~sensCtl].free
 		},
 		delta: Pexprand(0.1, 0.9, inf), // Pexprand(1.0, 4.0, inf),
 		formant: Plazy { Pxrand(~fmtKeys, inf) },
 		fadeIn: 12,
 		fadeOut: 8,
+		preparePlay: {
+			~fmtBus.setn(1 ! ~partials.size);
+			~sensCtl.automate(\ctlEnv, [connect: 0, env: Env(#[0, 1], [~fadeIn], 1.6)],
+				~chan.fadergroup, \addToHead)
+		},
+		doFadeOut: {
+			~sensCtl.automate(\ctlEnv, [connect: 1, env: Env(#[1, 0], [~fadeOut], -1.6)],
+				~chan.fadergroup, \addToHead);
+			~event.copy.putAll((
+				instrument: \ctlPoint, chan: nil,
+				bus: ~fmtBus.index + (0 .. (~fmtBus.numChannels - 1)),
+				value: 1, time: ~fadeOut, immediateOSC: true,
+				target: ~chan.synthgroup, addAction: \addBefore
+			)).play;
+		},
+		stopCleanup: { ~doFadeOut.() },
 		objects: (
-			fmt: (
+			fmtAmps: (
+				def: SynthDef(\ctlEnv, { |outbus, levelScale = 1, levelBias = 0, time = 1, connect = 1,
+							sens = 1|
+						var	env = \env.kr(0 ! 40), sig;	// enough for 10 breakpoints
+						env[0] = Select.kr(connect > 0, [env[0], In.kr(outbus, 1)]);
+						sig = EnvGen.kr(env, 1, levelScale, levelBias, time, doneAction: 2);
+						ReplaceOut.kr(outbus, (sig - 1) * sens + 1);
+					}),
+				args: [
+					bus: Plazy { Pn(~fmtBus.index + (0 .. (~fmtBus.numChannels - 1)), inf) },
+					key2: BPStream(\formant),
+					key1: Pdelay(Pkey(\key2)),
+					env: Pfunc { |ev| ~fmtAmps[ev[\key1]].tryPerform(\at, ev[\key2]) },
+					time: Pkey(\delta) * Pwhite(0.4, 0.8, inf),
+					sens: Plazy { Pn(~sensCtl.asMap, inf) }
+				]
+			) //,
+/*			fmt: (
 				def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1,
 						amp = 1, fadeIn = 5, fadeOut = 5|
 					var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
@@ -517,35 +573,39 @@ make: { |name|
 					fadeOut: BPStream(\fadeOut)
 				]
 			)
+*/
 		),
-		recvEventNotify: { |node, event|
-			~node = node;
-		},
-	 	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) },
+// 		recvEventNotify: { |node, event|
+// 			~node = node;
+// 		},
+// 	 	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) },
 
 		transitionStates: ~transitionStates,
 		partials: ~partials,
-		makeFormantTable: {
+		makeEnvTable: {
 			~fmtAmps = IdentityDictionary.new;
 			~partials ?? { ~partials = 32.midicps * (2..32) };
 			Routine {
 				var	current, f1, f2;
 				~fmtKeys.do { |key|
 					~fmtAmps.put(key, current = IdentityDictionary.new);
-					current.put(key, ~calcFormantResp.(FormantTable.at(key), ~partials));
+					current.put(key, 
+						~asOneAmpEnv.(~calcFormantResp.(FormantTable.at(key), ~partials)));
 					~fmtKeys.do { |key2|
 						if(key != key2) {
 							// have we already calculated this transition, but in reverse?
 							if(~fmtAmps.tryPerform(\at, key2).tryPerform(\at, key).notNil) {
-								current.put(key2, ~fmtAmps[key2][key].reverse)
+								current.put(key2, ~fmtAmps[key2][key].collect { |env|
+									env.copy.levels_(env.levels.reverse)
+								})
 							} {
 								f1 = FormantTable.at(key);
 								f2 = FormantTable.at(key2);
 								current.put(key2,
-									{	|i|
+									~asTransitionEnv.({	|i|
 										~calcFormantResp.(f1.blend(f2, i / (~transitionStates - 1)),
 											~partials);
-									} ! ~transitionStates
+									} ! ~transitionStates)
 								)
 							}
 						}
@@ -555,7 +615,13 @@ make: { |name|
 				"fmtAmps ready".postln;
 			}.play(AppClock)
 		},
-
+		asOneAmpEnv: { |fmtAmps|
+			fmtAmps.collect { |amp| Env(amp ! 2, #[1]) }
+		},
+		asTransitionEnv: { |ampMatrix|
+			var	time = (1 ! (ampMatrix.size - 1)).normalizeSum;
+			ampMatrix.flop.collect { |ampcurve| Env(ampcurve, time) }
+		},
 		calcFormantResp: { |fmttable, freqs|
 			var	resp = 0 ! freqs.size;
 			fmttable.flop.do { |flt|
