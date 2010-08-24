@@ -224,3 +224,17 @@ p.oneWalkerPattern = { |gesture, i, parms|
 // 				\amps, parms[\amps] ?? { [~defaultKlankAmps] },
 // 				\decays, parms[\decays] ?? { [~defaultKlankDecays] }
 // 			)
+
+
+	~wt = #[squareAmps, sawtoothAmps, triangleAmps].collect { |selector|
+		\makeWavetables.eval(8, s, 2048, nil, { |nh|
+			var	a = Array.perform(selector, nh), i = (0, 2 .. a.size-1).scramble;
+			if(selector != \triangleAmps) {
+				i.keep((i.size * rrand(0.1, 0.2)).asInteger).do { |ind| a[ind] = 0 }
+			} {
+				i.keep((i.size * rrand(0.3, 0.6)).asInteger)
+				.do { |ind| a[ind] = a[ind] * rrand(3.0, 9.0) }
+			};
+			a
+		});
+	};
