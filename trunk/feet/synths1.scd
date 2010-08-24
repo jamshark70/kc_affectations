@@ -1,5 +1,4 @@
 
-
 ChuckableBrowser.newWindow;
 SynthDescLib.global.browse;
 Object.browse;
@@ -7,6 +6,8 @@ s.queryAllNodes;
 
 MIDIPort.init([2]); //([1]);
 MIDIPort.resetAll;
+
+\makeEmptyMixer8.eval;
 
 TempoClock.tempo = 110/60;
 
@@ -780,3 +781,44 @@ a = VC(\wp).env.target.levelAuto(\ctlEnv, [env: Env(#[-27, -15, -27].dbamp, #[5,
 VC(\wp).env.target.watch(\level);
 
 VC(\wp).env.target.stopWatching;
+
+
+
+// improving waterpad sound
+// assumes feet-defs loaded
+
+v = VC(\waterpad).v;
+v.trace;
+
+k = VoicerMIDISocket(0, VP(0).v);
+
+k.noteOnArgsPat = Pbind(
+	\fenv_sens, 0.8,
+	\fenv_vsens, 0,
+	\fenv_tscale, Pkey(\velocity).linexp(0, 127, 15.0, 2.0),
+	\advance, Pdiff(Ptime()) >= 1.2,
+//	\ffreq, Pclutch(Pexprand(80, 600, inf).trace(prefix: "ffreq: "), Pkey(\advance)),
+	\pan, Pseq(#[-1, 1], inf),
+	\bufbase, Pclutch(Prand(VC(\waterpad).env.wt.collect(_.first), inf).trace(prefix: "ffreq: "), Pkey(\advance))
+);
+
+// decouple ffreq?
+v.unmapGlobal(\ffreq);
+v.unmapGlobal(\rq);
+
+PeakMonitor(VC(\waterpad).env.target);
+PeakMonitor(~master);
+VC(\waterpad).env.ch.synth.trace;
+
+z = VC(\waterpad).env.target.newPostSend(~glrvbmc, -10.dbamp);
+g = GenericGlobalControl(\l, nil, z.level, \amp); g.gui;
+u.remove;
+u = Updater(g, { |obj, what|
+	if(what.isKindOf(Dictionary) and: { what[\what] == \value }) {
+		z.level = obj.value
+	}
+});
+
+g.releaseDependants; g.free;
+
+z.level
