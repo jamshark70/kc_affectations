@@ -1432,7 +1432,7 @@ type: \bp) => Fact(\brook);
 
 // water chords
 (
-keys: #[master, glrvbmc],
+keys: #[master, glrvbmc, lcrvbmc],
 numCombs: 10,
 cFundamental: 67.midicps,
 cStep: 67.midicps / 4,	// i.e., 67.midicps is 4th partial, next comb will be 5th
@@ -1448,12 +1448,13 @@ make: { |name|
 		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap]);
 	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1]]);
 	
-	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1|
+	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
 		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate]),
 			glatch = Latch.kr(gate, gate),
 			feg = EnvGen.kr(fenv, gate, timeScale: fenv_tscale);
 		feg = (feg - 1) * Sensitivity.kr(1, glatch, fenv_vsens) * fenv_sens + 1;
-		RLPF.ar(sig, (ffreq * feg).clip(20, 18000), rq)
+		sig = RLPF.ar(sig, (ffreq * feg).clip(20, 18000), rq);
+		Pan2.ar(sig, pan)
 	}, [#[0, 1], \freq, \myrq, EnvSpec(Env.one), #[0, 1], #[0, 1], #[0.1, 10, \exp]]);
 
 	// note, this is a mono -> stereo effect
@@ -1479,7 +1480,7 @@ make: { |name|
 	~target = MixerChannel(name, s, 2, 2, level: -27.dbamp, outbus: ~master, completionFunc: { |chan|
 //		~mono2Stereo = chan.playfx('1to2');
 		StaticEQ(1, \eq, 589.41, -6.457.dbamp, 1, \hishelf, 6947.785, 2.047.dbamp, 1).play(chan);
-		~ch = chan.playfx(Instr("busfx.chorus2"), #[0, 1, 2, 3, 0.0040240867741694, 0.11364637357074, 0.0036090192987437, 1.1344639929904, 0.72629173909809]);
+		~ch = chan.playfx(Instr("busfx.chorus2"), #[0, 2, 2, 3, 0.0040240867741694, 0.11364637357074, 0.0036090192987437, 1.1344639929904, 0.72629173909809]);
 		~ch.doWhenPlaying { ~ch.synth.moveToTail(chan.effectgroup) };
 	});
 	~combsMC = MixerChannel(name ++ "comb", s, 2, 2, level: ~target.level * ~cLevelRatio, outbus: ~master, completionFunc: { |chan|
@@ -1487,23 +1488,26 @@ make: { |name|
 	});
 	~target.doWhenReady {
 		~target.newPreSend(~combsMC, 0);
-		~target.newPostSend(~glrvbmc, 0.75);
+		~target.newPostSend(~glrvbmc, 0.21);
+		~target.newPostSend(~lcrvbmc, 0.98);
 	};
 
 	~levelSync = Updater(~target.controls[\level], e { |levelCtl, parms|
 		if(parms[\what] == \value) { ~combsMC.level = levelCtl.value * ~cLevelRatio }
 	});
 
-	~wt = \makeWavetables.eval(8, s, 2048, nil, { |nh|
-		var	a = Array.squareAmps(nh), i = (0, 2 .. a.size-1).scramble;
-		i.keep((i.size * rrand(0.1, 0.2)).asInteger).do { |ind| a[ind] = 0 };
-		a
-	});
+	~wt = #[squareAmps, sawtoothAmps].collect { |selector|
+		\makeWavetables.eval(8, s, 2048, nil, { |nh|
+			var	a = Array.perform(selector, nh), i = (0, 2 .. a.size-1).scramble;
+			i.keep((i.size * rrand(0.1, 0.2)).asInteger).do { |ind| a[ind] = 0 };
+			a
+		});
+	};
 	~bigdelay = Buffer.alloc(s, 44100, 1);
 	~littledelays = Buffer.allocConsecutive(~numCombs, s, (s.sampleRate / ~cFundamental).roundUp);
-	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0], \sin), /*vtimespec: #[1, 1, exp].asSpec,*/ detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
-	out.mapGlobal(\ffreq, nil, 400, \freq);
-	out.mapGlobal(\rq, nil, 1, \myrq);
+	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: ~wt.first.first.bufnum, numbufs: `(~wt.first.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin), fenv_tscale: (3.5+4.0), detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
+// 	out.mapGlobal(\ffreq, nil, 400, \freq);
+// 	out.mapGlobal(\rq, nil, 1, \myrq);
 	out.mapGlobal(\clevel, nil, 1, \amp);
 	out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
 	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
@@ -1587,6 +1591,7 @@ PR(\arpeg1).clone {
 	BP(name).free;
 	\newCh.eval(name, \arpeg1PreInsert, \macroRh, MBM(0)[\waterch], nil, Pwhite(16, 22, inf), \waterch, \blockNum, nil, \g);
 	BP(name).child.makeChordPattern = { Pclutch(Pseq(~chords, inf), Pdelay(Pkey(\numNotes) >= 7)) };
+	// MicRh accesses this
 	BP(name).child.gatePat = Pn(Pgeom(0.1, (10 ** (1/9)).reciprocal, { rrand(5, 10) }));
 	BP(name).child.argPairs = [fenv_tscale: Pexprand(0.8, 1.8, inf)];
 	BP(name).child[\reset] = BP(name).child[\reset] <> {
