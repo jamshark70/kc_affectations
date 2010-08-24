@@ -590,7 +590,7 @@ PR(\abstractProcess).clone {
 	};
 
 	~top = Pwhite(36, 44, inf);
-	~numNotes = 2;
+	~numNotes = Pwrand(#[2, 3], #[0.8, 0.2], inf);
 	~intervals = Pexprand(1, 6, inf).round;
 	~degree = Pkey(\top) -.x Pseries(0, Plazy { |ev| Pfin(ev[\numNotes], ~intervals) }, inf)
 		.clump(Pkey(\numNotes));
@@ -598,7 +598,7 @@ PR(\abstractProcess).clone {
 	~bufbase = Plazy { Prand(~bufBases, inf) };
 	~amp = Pexprand(0.5, 1, inf);
 	~delta = 4 * Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf);
-	~sustain = Pexprand(1.7, 4.2, inf);
+	~sustain = Pexprand(2.2, 5.6, inf); //Pexprand(1.7, 4.2, inf);
 	~gate = 0.1;
 	~ffreq = Pexprand(90.0, 400.0, inf);
 	~rq = 0.4;
@@ -626,11 +626,6 @@ PR(\abstractProcess).clone {
 			\pan, BPStream(\pan)
 		)
 	};
-
-// 	// maybe re-adapt from Fact(\int) later
-// 	~degToCps = Pfunc { |ev|
-// 		ev[\mode].asMode.cps(ev[\degree])
-// 	};
 
 	// process needs buffer info from VC chucked in
 	~bindVC = { |vc|
