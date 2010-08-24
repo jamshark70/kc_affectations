@@ -1,20 +1,31 @@
 * Schedules
 ** Meet with Lorne
    SCHEDULED: <2010-08-24 Tue 21:00>
+
 * For showing
   DEADLINE: <2010-08-31 Tue>
 ** Misc [2/2]
 *** DONE Email Lorne re: Linux setup, video times
 *** DONE Email ateam re: my schedule
+
 ** Feet [1/1]
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** Optional [0/3]
 **** TODO [#B] improve sound for axial chords
-**** TODO [#B] better chords
+***** use ffreq, rq and pitch registers to hit different timbres
+***** connect filter properties with pitch
+***** interject footstep processing for variety (avoid monochromatic fail)
+***** DONE different wavetable sets
+**** TODO [#B] [1/3] better chords
+***** DONE simpler chords - recent choreography has more trigger points
+***** TODO more distinct pitch contour for top
+***** TODO chromaticism (other modes)
 **** TODO [#C] Differentiate locomotive themes
+
 ** Arms
 *** Axial
 *** Locomotive
+
 ** Head [1/2]
 *** DONE [#A] [6/6] combine harmonics, vocalization and drums
 **** DONE [4/4] Reverb
