@@ -1,3 +1,7 @@
+* Essentials
+** TODO [#A] Check in bindVC changes! NOW!!!
+   DEADLINE: <2010-08-25 Wed 10:00>
+
 * Schedules
 ** Meet with Lorne
    SCHEDULED: <2010-08-24 Tue 21:00>
@@ -12,14 +16,18 @@
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** Optional [0/3]
 **** TODO [#B] improve sound for axial chords
-***** use ffreq, rq and pitch registers to hit different timbres
+***** use ffreq, rq (and fenv_sens) and pitch registers to hit different timbres
 ***** connect filter properties with pitch
 ***** interject footstep processing for variety (avoid monochromatic fail)
 ***** DONE different wavetable sets
 **** TODO [#B] [1/3] better chords
 ***** DONE simpler chords - recent choreography has more trigger points
-***** TODO more distinct pitch contour for top
+***** TODO simulate arpeggiation - start with low pitches, rise
+****** lower notes should favor cleaner intervals
+****** at bottom, choose a root note and calculate 'top' accordingly
 ***** TODO chromaticism (other modes)
+****** whole chords
+****** color notes within a chord
 **** TODO [#C] Differentiate locomotive themes
 
 ** Arms
