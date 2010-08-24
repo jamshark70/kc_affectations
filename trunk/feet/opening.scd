@@ -1392,7 +1392,7 @@ t = TLSequenceIterator([
 	{	BP(\st).chordN = 1;
 		20
 	},
-/*
+
 	bpCmd: (name: \waterch, dur: 36, prepareBP: { |bp|
 		bp.reset;
 		BP(\st).stop(0);
@@ -1406,7 +1406,7 @@ t = TLSequenceIterator([
 	16,
 	mixerAutoSynthCmd: (mixer: ~master, name: \ctlPoint, outName: \outbus,
 		value: 0, time: 20, curve: -2.1, stopAction: { BP(\st).stop }),
-*/
+
 	\cmdSync,
 	{ "over".debug; BP.all.stop;
 //		~master.stopRecord;
