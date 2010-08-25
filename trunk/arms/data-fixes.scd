@@ -120,18 +120,57 @@ a.free;
 a.trace;
 
 f = { |n = 5|
-	SynthDef("data" ++ n, { |buf, outbus, frameRate = 30, avgTime = 0.2, loop = 0|
-		var	trig = Impulse.kr(30),
+	SynthDef("data" ++ n, { |buf, outbus, frameRate = 30, loop = 0|
+		var	//trig = Impulse.kr(30),
 			fr = BufFrames.ir(buf),
-			end = fr + (10000 * (loop <= 0)),
+			notLoop = loop <= 0,
+			end = fr + (10000 * notLoop),
 			ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
-			data = BufRd.kr(n, buf, ph, 0, interpolation: 1),
+			data = BufRd.kr(n, buf, ph, 0, interpolation: 2);//,
+
+// data.poll(Impulse.kr(0), "2");
+//data.debug("data");
+	
+		Out.kr(outbus, data);
+//		FreeSelf.kr(notLoop * (ph >= fr));
+	}).add;
+
+	SynthDef("datafixer" ++ n, { |bus, avgTime = 0.2|
+		var	data = In.kr(bus, n),
 			avgSize = (avgTime * ControlRate.ir).trunc;
 	
-		data[n-1] = RunningSum.kr(data[n-1], avgSize) / avgSize;
-		4.do { |i| data[i] = data[i].madd(0.5, 0.5) };
-	
-		Out.ar(outbus, data);
+		data[n-1] = RunningSum.kr(data[n-1], avgSize) / avgSize / 20;
+
+		(n-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
+		ReplaceOut.kr(bus, data);
 	}).add;
 };
 
+f.();
+
+k = Bus.control(s, 5);
+KrBusWatcher.register(k);
+KrBusWatcher.newFrom(s).updateFreq_(10);
+u.remove;
+u = Updater(k, { |obj, data|
+	defer { z.value = data };
+});
+
+b.free;
+b = Buffer.readAndQuery(s, d +/+ "hands-1_data2.wav");
+
+a = Synth(\data5, [buf: b, loop: 1, outbus: k]);
+c = Synth.after(a, \datafixer5, [bus: k]);
+a.free;
+c.free;
+
+KrBusWatcher.unregister(k);
+
+
+a = {
+	var	sig = In.kr(k, 5);
+	sig = sig.madd(0.5, 0.5);
+	Silent.ar(1)
+}.play;
+
+a.free;
