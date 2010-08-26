@@ -32,7 +32,16 @@
 
 ** Arms
 *** Axial
-*** Locomotive
+*** Locomotive [0/2]
+**** TODO tweak rotSpeed parms to have an audible effect
+***** position?
+***** note density
+**** TODO x/y ranges for timbre, pitch
+**** armsCh process notes
+***** ./arms/sounds.scd
+***** don't play directly! use spawnChild to start a new chord
+***** wrote startAuto function to read rotation speed from lorne's data
+
 
 ** Head [1/2]
 *** DONE [#A] [6/6] combine harmonics, vocalization and drums
