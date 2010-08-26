@@ -4,7 +4,7 @@
 
 s.waitForBoot {
 
-	~master ?? { ~master = MixerChannel(\feetM, s, 2, 2, level: 1) };
+	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
 	
 	// don't want reverb on netbook
 	if(Window.screenBounds.height > 600) {

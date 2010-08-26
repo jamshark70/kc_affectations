@@ -20,6 +20,7 @@ MIDIPort.resetAll;
 
 s.waitForBoot {
 	(thisProcess.nowExecutingPath.dirname.dirname +/+ "feet/feet-defs.scd").loadPath;
+	0.1.wait;	// seems to be necessary to prevent duplicate reverbs
 	(thisProcess.nowExecutingPath.dirname +/+ "arms-defs1.scd").loadPath;
 };
 
@@ -996,7 +997,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time
@@ -1186,7 +1187,7 @@ PR(\armsChord).startAuto = {
 	var	proportion = rrand(0.2, 0.7);
 	s.makeBundle(nil, {
 		~rotSpeed.automate({
-			In.kr(BP(\di).bus.index+4, 1).linlin(0, 1, 0.1, 1.9)
+			In.kr(BP(\di).bus.index+4, 1).linlin(0, 1, 0.1, 1.0)
 		}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
 		~angle.automate({
 			// leaky integrator is not leaky if coef == 1
@@ -1202,6 +1203,7 @@ PR(\armsChord).startAuto = {
 };
 
 
+Fact(\armsChordVC) => VC(\ac);
 
 BP(\acDisp).free;
 PR(\armsChord) => BP(\acDisp);
@@ -1216,10 +1218,30 @@ BP(\acDisp).dur = PR(\armsChord).dur;
 BP(\acDisp).dur = BP(\acDisp).dur + 0.2;
 BP(\acDisp).dur = BP(\acDisp).dur.trace(prefix: "dur: ");
 
-BP(\acDisp).spawnChild
- => VP(0);
+p.maxRotSpeed = 1;
+
+p.dur.postcs
+
+p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.7, 0.06);
+p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
+	var	rs2 = rs.linexp(0.1, ~maxRotSpeed, 0.7, 0.06);
+	if(rs > (~maxRotSpeed * 0.42)) { rs2 * 0.5 } { rs2 }
+});
+
+BP(\di).play;
+u = Updater(BP(\di), { |obj, what, more|
+	if(more == \stopped) {
+		u.remove;
+		BP(BP(\acDisp).lastSpawned).stop;
+	};
+});
+BP(\acDisp).spawnChild => VP(1);
+//BP(BP(\acDisp).lastSpawned) => MT(1);
+
 
 BP(BP(\acDisp).lastSpawned).rotSpeed.value
+
+BP(\di).stop;
 
 (
 Proto {

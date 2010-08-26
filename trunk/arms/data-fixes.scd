@@ -216,6 +216,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 	path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
 	userprep: {
 		~buf = Buffer.readAndQuery(s, ~path);
+		~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 		SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
 			var	fr = BufFrames.ir(buf),
 				dur = fr / frameRate,
@@ -228,12 +229,16 @@ PR(\dataIn).chuck(BP(\di), nil, (
 			Out.kr(outbus, data);
 		}).add;
 	
-		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2|
+		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1|
 			var	data = In.kr(bus, ~numCh),
-				avgSize = (avgTime * ControlRate.ir).trunc;
+				avgSize = (avgTime * ControlRate.ir).trunc,
+				peak;
 		
-			data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / 20;
-	
+			data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
+			peak = Peak.kr(data.last);
+			peak.poll(stop, "peak was");
+			FreeSelf.kr(stop);
+
 			(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
 			ReplaceOut.kr(bus, data);
 		}).add;
@@ -257,7 +262,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		});
 	},
 	userfree: {
-		~buf.free;
+		[~buf, ~maxVel].free;
 		~closeWin.();
 	},
 	preparePlay: {
@@ -268,7 +273,8 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		KrBusWatcher.unregister(~bus);
 		s.listSendBundle(nil, [
 			[error: -1],
-			~fixer.tryPerform(\freeMsg),
+			// ~fixer.tryPerform(\freeMsg),
+			~fixer.tryPerform(\setMsg, \stop, 1),
 			~player.tryPerform(\freeMsg),
 			[error: -2]
 		].select(_.notNil));
@@ -287,8 +293,8 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		Pseq([
 			(
 				instrument: ("datafixer" ++ ~numCh).asSymbol,
-				bus: ~bus, avgTime: ~avgTime ? 0.2, addAction: \addToHead,
-				delta: 0.0005, collIndex: ~collIndex
+				bus: ~bus, avgTime: ~avgTime ? 0.2, maxVel: ~maxVel.asMap,
+				delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 			),
 			Pfuncn {
 				(
@@ -312,3 +318,14 @@ PR(\dataIn).chuck(BP(\di), nil, (
 0 => BP(\di);
 )
 
+
+// get raw max velocity (5th channel)
+f = SoundFile.openRead(topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav");
+f.readData(z = FloatArray.newClear(f.numFrames * f.numChannels));
+f.close;
+
+z.clump(5).flop.last.maxItem
+// 18.136728286743
+
+BP(\di).maxVel.spec_(#[0, 20, lin]).value_(9);
+BP(\di).maxVel.gui;
