@@ -20,7 +20,7 @@ MIDIPort.resetAll;
 
 s.waitForBoot {
 	(thisProcess.nowExecutingPath.dirname.dirname +/+ "feet/feet-defs.scd").loadPath;
-	0.1.wait;	// seems to be necessary to prevent duplicate reverbs
+	2.0.wait;	// seems to be necessary to prevent duplicate reverbs
 	(thisProcess.nowExecutingPath.dirname +/+ "arms-defs1.scd").loadPath;
 };
 
@@ -901,7 +901,10 @@ PR(\abstractProcess).clone {
 		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83]
 	);
 
-	~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+	// ~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+	~row = Plazy {
+		Pwhite(0, Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99), inf).collect(_.asInteger)
+	};
 	~chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }; // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
 	~chordItem = Pfunc { |ev|
 		if(ev[\chord] != ~lastChord) {
@@ -948,6 +951,11 @@ PR(\abstractProcess).clone {
 	~prep = {
 		~angle = GenericGlobalControl(\angle, ~angleBus.asBus(\control), 0, [0, 2pi]);
 		~rotSpeed = GenericGlobalControl(\rotSpeed, ~rotSpeedBus.asBus(\control), 0, [0, ~maxRotSpeed]);
+		~yxRatio = GenericGlobalControl(\yxRatio, ~yxRatioBus.asBus(\control), 0, [0, BP(\di).maxRatio.value]);
+		~speedMul ?? {
+			~speedMul = GenericGlobalControl(\speedMul, nil, 12, #[0.1, 10, exp]);
+			~freeSpeedMul = true;
+		};
 		KrBusWatcher.newFrom(s).updateFreq = 8;
 		~initChords.();
 	};
@@ -958,6 +966,7 @@ PR(\abstractProcess).clone {
 		parms = (
 			angleBus: Bus.control(s, 1 /*, name + "angle"*/),
 			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
+			yxRatioBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
 			shouldFreeGCs: true,
 			initChords: {
 				~fullCh = self[\fullCh];
@@ -997,7 +1006,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time
@@ -1066,18 +1075,20 @@ PR(\abstractProcess).clone {
 
 	~stopCleanup = {
 		s.makeBundle(0.1, {
-			[~angle, ~rotSpeed].do { |gc| gc.stopAuto.stopWatching }
+			[~angle, ~rotSpeed, ~yxRatio].do { |gc| gc.stopAuto.stopWatching }
 		});
 	};
 
 	~freeCleanup = {
 		if(~shouldFreeGCs ? true) {
-			[~angle, ~rotSpeed].free;
+			[~angle, ~rotSpeed, ~yxRatio].free;
 		};
+		if(~freeSpeedMul ? false) { ~speedMul.free };
 	};
 
 	~useGui = { |vpi|
-		[~angle, ~rotSpeed].do { |gc| gc => VP(vpi) };
+		[~angle, ~rotSpeed, ~yxRatio].do { |gc| gc => VP(vpi) };
+		if(~freeSpeedMul ? false) { ~speedMul => VP(vpi) };
 	};
 
 
@@ -1086,13 +1097,14 @@ PR(\abstractProcess).clone {
 		Pseq([
 			// workaround scel indent bug
 			'Pfuncn'.asClass.new { |ev|
-				[~angle, ~rotSpeed].do(_.watch);
+				[~angle, ~rotSpeed, ~yxRatio].do(_.watch);
 				~startAuto.();
 				Event.silent(0)
 			},
 			Pbind(
 				\angle, ~angle,
 				\rotSpeed, ~rotSpeed,
+				\yxRatio, ~yxRatio,
 				\radius, BPStream(\radius),
 				\pan, Pkey(\angle).cos * Pkey(\radius),
 				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
@@ -1187,11 +1199,14 @@ PR(\armsChord).startAuto = {
 	var	proportion = rrand(0.2, 0.7);
 	s.makeBundle(nil, {
 		~rotSpeed.automate({
-			In.kr(BP(\di).bus.index+4, 1).linlin(0, 1, 0.1, 1.0)
+			In.kr(BP(\di).bus.index + 4, 1).linlin(0, 1, 0.1, 1.0)
 		}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
-		~angle.automate({
+		~angle.automate({ |speedMul = 1|
 			// leaky integrator is not leaky if coef == 1
-			Integrator.kr(~rotSpeed.kr * ControlDur.ir, 1).wrap(0, 2pi);
+			Integrator.kr(~rotSpeed.kr * speedMul * ControlDur.ir, 1).wrap(0, 2pi);
+		}, [speedMul: ~speedMul.asMap], ~rotSpeed.autoSynth, \addAfter);
+		~yxRatio.automate({
+			In.kr(BP(\di).bus.index + 7, 1)
 		}, nil, ~rotSpeed.autoSynth, \addAfter);
 	});
 	OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
@@ -1223,10 +1238,21 @@ p.maxRotSpeed = 1;
 p.dur.postcs
 
 p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.7, 0.06);
+
+p.durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
 p.dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
-	var	rs2 = rs.linexp(0.1, ~maxRotSpeed, 0.7, 0.06);
-	if(rs > (~maxRotSpeed * 0.42)) { rs2 * 0.5 } { rs2 }
+	// var	rs2 = rs.linexp(0.1, ~maxRotSpeed, 0.7, 0.06);
+	// if(rs > (~maxRotSpeed * 0.38)) { rs2 * 0.5 } { rs2 }
+	~durxfer.at(rs)
 });
+p.bpsKeys = p.bpsKeys ++ #[durxfer];
+
+// don't like that...
+p.row = Plazy {
+	Pwhite(0, Pkey(\yxRatio) * 2.99, inf).collect(_.asInteger)
+};
+p.row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+
 
 BP(\di).play;
 u = Updater(BP(\di), { |obj, what, more|
@@ -1235,13 +1261,24 @@ u = Updater(BP(\di), { |obj, what, more|
 		BP(BP(\acDisp).lastSpawned).stop;
 	};
 });
-BP(\acDisp).spawnChild => VP(1);
+BP(\acDisp).spawnChild => VP(2);
 //BP(BP(\acDisp).lastSpawned) => MT(1);
 
+BP(BP(\acDisp).lastSpawned).angle.autoSynth.trace;
+BP(BP(\acDisp).lastSpawned).yxRatio.autoSynth.trace;
+
+BP(BP(\acDisp).lastSpawned).yxRatio.spec = #[0, 1];
 
 BP(BP(\acDisp).lastSpawned).rotSpeed.value
 
+p.speedMul.spec = #[1, 50, \exp];
+
 BP(\di).stop;
+
+VP(2).v.controlProxies[2].inspect
+VP(2).v.clearControlProxies;
+
+p.bpsKeys = #[ radius, chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed ]
 
 (
 Proto {
@@ -1270,7 +1307,7 @@ p.addChord(\em, #[g, 52, 59, 60, 67, 69, 74, 78, 79, 83, 93]);
 p.addChord(\am, #[g, 45, 54, 55, 62, 64, 72, 76, 83]);
 p.addChord(\g, #[g, 43, 52, 57, 59, 66, 67, 74, 76, 84]);
 
-p.chord = Pn(Pshuf(p.fullCh.keys.asArray, 1), inf).trace(prefix: "chord: ");
+p.chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf).trace(prefix: "chord: ") };
 p.copyProc = { |name ((~collIndex ++ UniqueID.next).asSymbol)|
 		var	self = currentEnvironment, parms;
 		BP(name).free;

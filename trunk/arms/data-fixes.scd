@@ -182,8 +182,9 @@ Proto {
 	~numCh = 1;
 	~iMadeBus = false;
 	~prep = {
+		~outCh ?? { ~outCh = ~numCh };
 		~bus ?? {
-			~bus = Bus.control(s, ~numCh);
+			~bus = Bus.control(s, max(~numCh, ~outCh));
 			~iMadeBus = true;
 		};
 		~userprep.();
@@ -213,10 +214,13 @@ BP(\di).free;
 PR(\dataIn).chuck(BP(\di), nil, (
 	alwaysReset: true,
 	numCh: 5,
+	outCh: 8,
 	path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
 	userprep: {
 		~buf = Buffer.readAndQuery(s, ~path);
 		~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
+		~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
+
 		SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
 			var	fr = BufFrames.ir(buf),
 				dur = fr / frameRate,
@@ -224,22 +228,27 @@ PR(\dataIn).chuck(BP(\di), nil, (
 				end = fr + (10000 * notLoop),
 				stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
 				ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
-				data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 2);
+				data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
 	
 			Out.kr(outbus, data);
 		}).add;
-	
-		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1|
+
+		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
 			var	data = In.kr(bus, ~numCh),
 				avgSize = (avgTime * ControlRate.ir).trunc,
 				peak;
 		
 			data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
-			peak = Peak.kr(data.last);
-			peak.poll(stop, "peak was");
 			FreeSelf.kr(stop);
 
 			(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
+			// w/o copy, 'data' has 3 more elements than In.kr created
+			// this causes In.kr to create 8 OutputProxies where 5 would be correct
+			data = data.copy.add(data[1] - data[0]).add(data[3] - data[2]);
+			data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
+			// peak = Peak.kr(data.last);
+			// peak.poll(stop, "peak was");
+			
 			ReplaceOut.kr(bus, data);
 		}).add;
 
@@ -250,7 +259,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 			~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
 				.onClose_(e { ~closeWin.() });
 			~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
-				.indexThumbSize_(100/~numCh - 4).gap_(4).value_(0 ! ~numCh);
+				.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
 			~win.recursiveResize.front;
 			
 //			KrBusWatcher.register(~bus);
@@ -262,11 +271,11 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		});
 	},
 	userfree: {
-		[~buf, ~maxVel].free;
+		[~buf, ~maxVel, ~maxRatio].free;
 		~closeWin.();
 	},
 	preparePlay: {
-		~bus.setn(0 ! ~numCh);
+		~bus.setn(0 ! ~outCh);
 		KrBusWatcher.register(~bus)
 	},
 	stopCleanup: {
@@ -280,7 +289,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		].select(_.notNil));
 		~fixer = nil;
 		~player = nil;
-		~bus.setn(0 ! ~numCh);
+		~bus.setn(0 ! ~outCh);
 	},
 	recvEventNotify: { |node, ev|
 		if(ev[\instrument].asString.contains("fixer")) {
@@ -293,7 +302,8 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		Pseq([
 			(
 				instrument: ("datafixer" ++ ~numCh).asSymbol,
-				bus: ~bus, avgTime: ~avgTime ? 0.2, maxVel: ~maxVel.asMap,
+				bus: ~bus, avgTime: ~avgTime ? 0.2,
+				maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
 				delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 			),
 			Pfuncn {
@@ -317,6 +327,12 @@ PR(\dataIn).chuck(BP(\di), nil, (
 ));
 0 => BP(\di);
 )
+
+
+s.makeBundle(nil, {
+	#[player, fixer].do { |key| BP(\di)[key].trace }
+});
+
 
 
 // get raw max velocity (5th channel)
