@@ -1,3 +1,4 @@
+ChuckableBrowser.newWindow;
 
 Dialog.getPaths { |paths| p = paths[0].postcs };
 "/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/arms/hands-1_data.txt"
@@ -166,7 +167,6 @@ c.free;
 
 KrBusWatcher.unregister(k);
 
-
 a = {
 	var	sig = In.kr(k, 5);
 	sig = sig.madd(0.5, 0.5);
@@ -174,3 +174,141 @@ a = {
 }.play;
 
 a.free;
+
+
+(
+Proto {
+	~event = (eventKey: \singleSynthPlayNotify);
+	~numCh = 1;
+	~iMadeBus = false;
+	~prep = {
+		~bus ?? {
+			~bus = Bus.control(s, ~numCh);
+			~iMadeBus = true;
+		};
+		~userprep.();
+	};
+	~freeCleanup = {
+		if(~iMadeBus) { ~bus.free };
+		~userfree.();
+	};
+	
+	~asPattern = {
+		~userPat.() <> ~busyWaitPat.()
+	};
+	~userPat = Pfunc { |ev| ev };
+	~busyWaitPat = {
+		Pn((instrument: \rest, delta: 1), inf)
+	};
+} => PR(\dataIn);
+)
+
+topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| t.debug("node started at") }).add;
+
+(
+BP(\di).free;
+PR(\dataIn).chuck(BP(\di), nil, (
+	alwaysReset: true,
+	numCh: 5,
+	path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
+	userprep: {
+		~buf = Buffer.readAndQuery(s, ~path);
+		SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
+			var	fr = BufFrames.ir(buf),
+				dur = fr / frameRate,
+				notLoop = loop <= 0,
+				end = fr + (10000 * notLoop),
+				stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
+				ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
+				data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 2);
+	
+			Out.kr(outbus, data);
+		}).add;
+	
+		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2|
+			var	data = In.kr(bus, ~numCh),
+				avgSize = (avgTime * ControlRate.ir).trunc;
+		
+			data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / 20;
+	
+			(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
+			ReplaceOut.kr(bus, data);
+		}).add;
+
+		~visualizer.();
+	},
+	visualizer: {
+		defer(e {
+			~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
+				.onClose_(e { ~closeWin.() });
+			~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
+				.indexThumbSize_(100/~numCh - 4).gap_(4).value_(0 ! ~numCh);
+			~win.recursiveResize.front;
+			
+//			KrBusWatcher.register(~bus);
+			KrBusWatcher.newFrom(s).updateFreq_(10);
+			~upd = Updater(~bus, e { |obj, data|
+				var ms = ~ms;
+				defer { ms.value = data };
+			});
+		});
+	},
+	userfree: {
+		~buf.free;
+		~closeWin.();
+	},
+	preparePlay: {
+		~bus.setn(0 ! ~numCh);
+		KrBusWatcher.register(~bus)
+	},
+	stopCleanup: {
+		KrBusWatcher.unregister(~bus);
+		s.listSendBundle(nil, [
+			[error: -1],
+			~fixer.tryPerform(\freeMsg),
+			~player.tryPerform(\freeMsg),
+			[error: -2]
+		].select(_.notNil));
+		~fixer = nil;
+		~player = nil;
+		~bus.setn(0 ! ~numCh);
+	},
+	recvEventNotify: { |node, ev|
+		if(ev[\instrument].asString.contains("fixer")) {
+			~fixer = node;
+		} {
+			~player = node;
+		};
+	},
+	userPat: {
+		Pseq([
+			(
+				instrument: ("datafixer" ++ ~numCh).asSymbol,
+				bus: ~bus, avgTime: ~avgTime ? 0.2, addAction: \addToHead,
+				delta: 0.0005, collIndex: ~collIndex
+			),
+			Pfuncn {
+				(
+					instrument: ("data" ++ ~numCh).asSymbol,
+					buf: ~buf, bus: ~bus, loop: 0,
+					delta: ~buf.numFrames / 30,
+					target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
+				).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
+			}
+		], 1)
+	},
+	closeWin: {
+		var	win = ~win;
+		win !? {
+			defer(e { win.onClose_(nil).close });
+			KrBusWatcher.unregister(~bus);
+			~upd.remove;
+		};
+	}
+));
+0 => BP(\di);
+)
+
