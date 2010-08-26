@@ -901,7 +901,7 @@ PR(\abstractProcess).clone {
 	);
 
 	~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
-	~chord =Pn(Pshuf(p.fullCh.keys.asArray, 1), inf); // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
+	~chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }; // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
 	~chordItem = Pfunc { |ev|
 		if(ev[\chord] != ~lastChord) {
 			~lastChord = ev[\chord];
@@ -1183,24 +1183,23 @@ p.patKeys = #[radius, chord, chordItem, row, midinote, gate, mod_lev, dur, susta
 
 ();
 PR(\armsChord).startAuto = {
-		var	proportion = rrand(0.2, 0.7);
-		s.makeBundle(nil, {
-			~rotSpeed.automate({
-				EnvGen.kr(Env(#[0.04, 1.9, 0.02], [proportion, 1 - proportion], \sin),
-					timeScale: rrand(14.0, 32.0), doneAction: 2)
-			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
-			~angle.automate({
-				// leaky integrator is not leaky if coef == 1
-				Integrator.kr(~rotSpeed.kr * ControlDur.ir, 1).wrap(0, 2pi);
-			}, nil, ~rotSpeed.autoSynth, \addAfter);
-		});
-		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
-			resp.remove;
-			if(BP.exists(~collIndex)) {
-				BP(~collIndex).stop(0);
-			};
-		}).add;
-	};
+	var	proportion = rrand(0.2, 0.7);
+	s.makeBundle(nil, {
+		~rotSpeed.automate({
+			In.kr(BP(\di).bus.index+4, 1).linlin(0, 1, 0.1, 1.9)
+		}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
+		~angle.automate({
+			// leaky integrator is not leaky if coef == 1
+			Integrator.kr(~rotSpeed.kr * ControlDur.ir, 1).wrap(0, 2pi);
+		}, nil, ~rotSpeed.autoSynth, \addAfter);
+	});
+	OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+		resp.remove;
+		if(BP.exists(~collIndex)) {
+			BP(~collIndex).stop(0);
+		};
+	}).add;
+};
 
 
 
@@ -1217,7 +1216,10 @@ BP(\acDisp).dur = PR(\armsChord).dur;
 BP(\acDisp).dur = BP(\acDisp).dur + 0.2;
 BP(\acDisp).dur = BP(\acDisp).dur.trace(prefix: "dur: ");
 
-BP(\acDisp).spawnChild => VP(0);
+BP(\acDisp).spawnChild
+ => VP(0);
+
+BP(BP(\acDisp).lastSpawned).rotSpeed.value
 
 (
 Proto {
