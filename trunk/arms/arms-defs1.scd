@@ -449,3 +449,402 @@ free: {
 	)
 } => ArpegPat(\armsCh);
 
+
+
+// locomotive theme chords
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote, distNear: 5, distFar: 20, midi: false);
+	~alwaysReset = true;
+
+	~chords = (
+		// each is mode name (symbol), then midinotes
+		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83]
+	);
+
+	~chordTime = Pwhite(3.5, 8.0, inf);
+	// ~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
+	~row = Plazy {
+		Pwhite(0, Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99), inf).collect(_.asInteger)
+	};
+	~chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }; // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
+	~chordItem = Pfunc { |ev|
+		if(ev[\chord] != ~lastChord) {
+			~lastChord = ev[\chord];
+			// force reset - this makes Plazy reevaluate and grab other chord item
+			~makeStreamForKey.(\midinote);
+		};
+		~fullCh[~lastChord]
+	};
+	~midinote = \patRejectLastN.eval(Plazy { |ev|
+		var	arpeg = ~arpegStream.next(ev);
+		Pswitch1(ev[\chordItem][\hierarchy].collect { |row|
+			ArpegPat(arpeg).asPattern(row)
+		}, Pkey(\row))
+	}, 1);
+	~arpeg = \armsCh;
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 0.6, 4);
+// 	~gate = 0.2;
+
+	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
+	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
+// 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
+
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
+
+	~durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
+	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
+		~durxfer.at(rs)
+	});
+
+	~sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
+// 	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
+// 	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
+	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.5, 1);
+// 	~attScale = max(0.1, Pkey(\rotSpeed)).reciprocal * 0.2;
+	~decScale = Pkey(\attackTimeScale);
+
+	~maxRotSpeed = 1;
+	~maxRotSpeed_ = { |speed = 1|
+		if(speed != ~maxRotSpeed) {
+			~maxRotSpeed = speed;
+			~rotSpeed.spec = [0, speed];  // asSpec is automatic
+		};
+		currentEnvironment
+	};
+	~speedThresh = 0.15;
+	~angleBus = 3997;
+	~rotSpeedBus = 4000;
+
+	~prep = {
+		~angle = GenericGlobalControl(\angle, ~angleBus.asBus(\control), 0, [0, 2pi]);
+		~rotSpeed = GenericGlobalControl(\rotSpeed, ~rotSpeedBus.asBus(\control), 0, [0, ~maxRotSpeed]);
+		~yxRatio = GenericGlobalControl(\yxRatio, ~yxRatioBus.asBus(\control), 0, [0, BP(\di).maxRatio.value]);
+		~speedMul ?? {
+			~speedMul = GenericGlobalControl(\speedMul, nil, 12, #[0.1, 10, exp]);
+			~freeSpeedMul = true;
+		};
+		KrBusWatcher.newFrom(s).updateFreq = 8;
+		~initChords.();
+		~makeStreamForKey.(\chordTime);
+	};
+
+	~copyProc = { |name ((~collIndex ++ UniqueID.next).asSymbol)|
+		var	self = currentEnvironment, parms;
+		BP(name).free;
+		parms = (
+			angleBus: Bus.control(s, 1 /*, name + "angle"*/),
+			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
+			yxRatioBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
+			shouldFreeGCs: true,
+			initChords: {
+				~fullCh = self[\fullCh];
+			},
+			chord: (~chordStream ?? { ~makeStreamForKey.(\chord) }).next
+		);
+		// this is so I can change patterns in the dispatcher
+		// and they get spawned thru to the children
+		~bpsKeys.do { |key| parms[key] = key.envirGet };
+		PR(\armsChord).chuck(BP(name), nil, parms);
+		~event[\voicer] => BP(name)	// should return BP
+	};
+
+	~spawnChild = { |quant = 0|
+		var bp = ~copyProc.(),
+			lastSpawned = ~lastSpawned,
+			upd = Updater(bp, e { |obj, what, more|
+				if(more == \stopped) {
+					upd.remove;
+					if(~lastSpawned == bp.collIndex) { ~lastSpawned = nil };
+					if(BP.exists(bp.collIndex)) {
+						bp.free;
+					};
+				}
+			});
+		// this is a moderately obscene hack
+		if(lastSpawned.notNil) {
+			// ctlPoint uses replaceOut, will overwrite "real" autoSynth
+			Synth(\ctlPoint, [outbus: BP(lastSpawned).rotSpeed.bus, value: 0, time: ~killOldProcTime],
+				BP(lastSpawned).rotSpeed.autoSynth, \addAfter);
+			thisThread.clock.sched(~killOldProcTime - 0.01, {
+				if(BP.exists(lastSpawned)) {
+					BP(lastSpawned).rotSpeed.stopAuto
+				};
+				nil
+			});
+		};
+		~lastSpawned = bp.collIndex;
+		bp.play(quant);
+	};
+	~killOldProcTime = 1.4;
+
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer];
+
+	// dispatcher will override this to pull prepared fullCh dictionary,
+	// rather than rebuilding every time
+	~initChords = {
+		~fullCh = IdentityDictionary.new;
+		~chords.tryPerform(\keysValuesDo, { |key, value|
+			~addChord.(key, value)
+		});
+	};
+
+	~addChord = { |key, value|
+		~fullCh.put(key, ~expandChord.(value))
+	};
+
+	~expandChord = { |array, adds = #[-7, 0, 7]|
+		var	mapped = array[1..].mapMode(array[0]),
+			result = (mode: array[0], orig: mapped, allSort: (mapped +.x adds).removeDups.sort,
+			hierarchy: adds +.t mapped);
+		result.put(\hierarchyDict,
+			result[\hierarchy].collectAs({ |row, i| i.asSymbol -> row },
+				IdentityDictionary)
+		)
+		.put(\sortWithLevels, result[\hierarchy].collect { |row, i|
+			row.collect { |item| [item, i] }
+		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
+	};
+
+	~startAuto = {
+		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+		s.makeBundle(nil, {
+			~rotSpeed.automate({
+				In.kr(BP(\di).bus.index + 4, 1).linlin(0, 1, 0.1, 1.0)
+					* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
+						timeScale: time, doneAction: 2)
+			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
+			~angle.automate({ |speedMul = 1|
+				// leaky integrator is not leaky if coef == 1
+				Integrator.kr(~rotSpeed.kr * speedMul * ControlDur.ir, 1).wrap(0, 2pi);
+			}, [speedMul: ~speedMul.asMap], ~rotSpeed.autoSynth, \addAfter);
+			~yxRatio.automate({
+				In.kr(BP(\di).bus.index + 7, 1)
+			}, nil, ~rotSpeed.autoSynth, \addAfter);
+		});
+		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+			resp.remove;
+			if(BP.exists(~collIndex)) {
+				BP(~collIndex).stop(0);
+			};
+		}).add;
+	};
+
+	~stopCleanup = {
+		s.makeBundle(0.1, {
+			[~angle, ~rotSpeed, ~yxRatio].do { |gc| gc.stopAuto.stopWatching }
+		});
+	};
+
+	~freeCleanup = {
+		if(~shouldFreeGCs ? true) {
+			[~angle, ~rotSpeed, ~yxRatio].free;
+		};
+		if(~freeSpeedMul ? false) { ~speedMul.free };
+	};
+
+	~useGui = { |vpi|
+		[~angle, ~rotSpeed, ~yxRatio].do { |gc| gc => VP(vpi) };
+		if(~freeSpeedMul ? false) { ~speedMul => VP(vpi) };
+	};
+
+
+	~asPattern = {
+		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
+		Pseq([
+			// workaround scel indent bug
+			'Pfuncn'.asClass.new { |ev|
+				[~angle, ~rotSpeed, ~yxRatio].do(_.watch);
+				~startAuto.();
+				Event.silent(0)
+			},
+			Pbind(
+				\angle, ~angle,
+				\rotSpeed, ~rotSpeed,
+				\yxRatio, ~yxRatio,
+				\radius, BPStream(\radius),
+				\pan, Pkey(\angle).cos * Pkey(\radius),
+				\distance, (Pkey(\angle).sin * Pkey(\radius)).linlin(-1, 1, Pkey(\distNear), Pkey(\distFar)),
+				\chord, if(~chord.isSymbol) { ~chord } { BPStream(\chord) },
+				\chordItem, BPStream(\chordItem),
+				\row, BPStream(\row),
+				\freq, BPStream(\midinote),
+				\mode, Pfunc { |ev| ev[\chordItem][\mode] },
+				\gate, BPStream(\gate),
+				\mod_lev, BPStream(\mod_lev),
+				\dur, BPStream(\dur),
+				\length, BPStream(\sustain),
+				\attackTimeScale, BPStream(\attScale),
+				\decayTimeScale, BPStream(\decScale)
+			) //.trace
+		])
+	};
+} => PR(\armsChord);
+
+
+// data in
+
+Proto {
+	~event = (eventKey: \singleSynthPlayNotify);
+	~numCh = 1;
+	~iMadeBus = false;
+	~prep = {
+		~outCh ?? { ~outCh = ~numCh };
+		~bus ?? {
+			~bus = Bus.control(s, max(~numCh, ~outCh));
+			~iMadeBus = true;
+		};
+		~userprep.();
+	};
+	~freeCleanup = {
+		if(~iMadeBus) { ~bus.free };
+		~userfree.();
+	};
+	
+	~asPattern = {
+		~userPat.() <> ~busyWaitPat.()
+	};
+	~userPat = Pfunc { |ev| ev };
+	~busyWaitPat = {
+		Pn((instrument: \rest, delta: 1), inf)
+	};
+} => PR(\dataIn);
+
+
+(keys: #[],
+make: { |name|
+	BP(name).free;
+	PR(\dataIn).chuck(BP(name), nil, (
+		alwaysReset: true,
+		numCh: 5,
+		outCh: 8,
+		bus: ~bus,
+		path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
+		userprep: {
+			~buf = Buffer.readAndQuery(s, ~path);
+			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
+			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
+	
+			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
+				var	fr = BufFrames.ir(buf),
+					dur = fr / frameRate,
+					notLoop = loop <= 0,
+					end = fr + (10000 * notLoop),
+					stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
+					ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
+					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
+		
+				Out.kr(outbus, data);
+			}).add;
+	
+			SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
+				var	data = In.kr(bus, ~numCh),
+					avgSize = (avgTime * ControlRate.ir).trunc,
+					peak;
+			
+				data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
+				FreeSelf.kr(stop);
+	
+				(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
+				// w/o copy, 'data' has 3 more elements than In.kr created
+				// this causes In.kr to create 8 OutputProxies where 5 would be correct
+				data = data.copy.add(data[1] - data[0]).add(data[3] - data[2]);
+				data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
+				// peak = Peak.kr(data.last);
+				// peak.poll(stop, "peak was");
+				
+				ReplaceOut.kr(bus, data);
+			}).add;
+	
+			~visualizer.();
+		},
+		visualizer: {
+			defer(e {
+				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
+					.onClose_(e { ~closeWin.() });
+				~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
+					.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
+				~win.recursiveResize.front;
+				
+	//			KrBusWatcher.register(~bus);
+				KrBusWatcher.newFrom(s).updateFreq_(10);
+				~upd = Updater(~bus, e { |obj, data|
+					var ms = ~ms;
+					defer { ms.value = data };
+				});
+			});
+		},
+		userfree: {
+			[~buf, ~maxVel, ~maxRatio].free;
+			~closeWin.();
+		},
+		preparePlay: {
+			~bus.setn(0 ! ~outCh);
+			KrBusWatcher.register(~bus)
+		},
+		stopCleanup: {
+			KrBusWatcher.unregister(~bus);
+			s.listSendBundle(nil, [
+				[error: -1],
+				// ~fixer.tryPerform(\freeMsg),
+				~fixer.tryPerform(\setMsg, \stop, 1),
+				~player.tryPerform(\freeMsg),
+				[error: -2]
+			].select(_.notNil));
+			~fixer = nil;
+			~player = nil;
+			~bus.setn(0 ! ~outCh);
+		},
+		recvEventNotify: { |node, ev|
+			if(ev[\instrument].asString.contains("fixer")) {
+				~fixer = node;
+			} {
+				~player = node;
+			};
+		},
+		userPat: {
+			Pseq([
+				(
+					instrument: ("datafixer" ++ ~numCh).asSymbol,
+					bus: ~bus, avgTime: ~avgTime ? 0.2,
+					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
+					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
+				),
+				Pfuncn {
+					(
+						instrument: ("data" ++ ~numCh).asSymbol,
+						buf: ~buf, bus: ~bus, loop: 0,
+						delta: ~buf.numFrames / 30,
+						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
+					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
+				}
+			], 1)
+		},
+		closeWin: {
+			var	win = ~win;
+			win !? {
+				defer(e { win.onClose_(nil).close });
+				KrBusWatcher.unregister(~bus);
+				~upd.remove;
+			};
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\dataIn);
+
+(
+delta: Pwhite(2.5, 6.0, inf),
+make: { |name|
+	var	self = currentEnvironment;
+	BP(name).free;
+	Proto {
+		~quant = NilTimeSpec.new;
+		~delta = self[\delta];
+		~asPattern = {
+			Pbind(
+				\play, { BP(\acDisp).spawnChild },
+				\delta, BPStream(\delta)
+			)
+		}
+	} => BP(name);
+}, type: \bp) => Fact(\acTrig);
