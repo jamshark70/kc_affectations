@@ -898,7 +898,10 @@ PR(\abstractProcess).clone {
 
 	~chords = (
 		// each is mode name (symbol), then midinotes
-		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83]
+		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83],
+		em: #[g, 52, 59, 60, 67, 69, 74, 78, 79, 83, 93],
+		am: #[g, 45, 54, 55, 62, 64, 72, 76, 83],
+		g: #[g, 43, 52, 57, 59, 66, 67, 74, 76, 84]
 	);
 
 	// ~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);

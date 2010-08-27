@@ -453,13 +453,34 @@ free: {
 
 // locomotive theme chords
 
+SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5|
+	ReplaceOut.kr(outbus,
+		In.kr(inbus, 1).linlin(0, 1, 0.1, 1.0)
+			* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
+				timeScale: time, doneAction: 2)
+	);
+}).add;
+
+SynthDef(\angleAuto, { |speedMul = 1, outbus|
+	// leaky integrator is not leaky if coef == 1
+	ReplaceOut.kr(outbus, Integrator.kr(In.kr(outbus, 1) * speedMul * ControlDur.ir, 1).wrap(0, 2pi));
+}).add;
+
+SynthDef(\yxRatioAuto, { |inbus, outbus|
+	ReplaceOut.kr(outbus, In.kr(inbus, 1))
+}).add;
+
+
 PR(\abstractProcess).clone {
 	~event = (eventKey: \voicerNote, distNear: 5, distFar: 20, midi: false);
 	~alwaysReset = true;
 
 	~chords = (
 		// each is mode name (symbol), then midinotes
-		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83]
+		c_ish: #[g, 48, 55, 57, 64, 66, 74, 81, 83],
+		em: #[g, 52, 59, 60, 67, 69, 74, 78, 79, 83, 93],
+		am: #[g, 45, 54, 55, 62, 64, 72, 76, 83],
+		g: #[g, 43, 52, 57, 59, 66, 67, 74, 76, 84]
 	);
 
 	~chordTime = Pwhite(3.5, 8.0, inf);
@@ -609,18 +630,16 @@ PR(\abstractProcess).clone {
 	~startAuto = {
 		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
 		s.makeBundle(nil, {
-			~rotSpeed.automate({
-				In.kr(BP(\di).bus.index + 4, 1).linlin(0, 1, 0.1, 1.0)
-					* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
-						timeScale: time, doneAction: 2)
-			}, nil, ~chan.tryPerform(\fadergroup), \addToHead);
-			~angle.automate({ |speedMul = 1|
-				// leaky integrator is not leaky if coef == 1
-				Integrator.kr(~rotSpeed.kr * speedMul * ControlDur.ir, 1).wrap(0, 2pi);
-			}, [speedMul: ~speedMul.asMap], ~rotSpeed.autoSynth, \addAfter);
-			~yxRatio.automate({
-				In.kr(BP(\di).bus.index + 7, 1)
-			}, nil, ~rotSpeed.autoSynth, \addAfter);
+			~rotSpeed.automate(\rotSpeedAuto,
+				[inbus: BP(\di).bus.index + 4, time: time, proportion: proportion],
+				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+				\addToHead);
+			~angle.automate(\angleAuto,
+				[speedMul: ~speedMul.asMap],
+				~rotSpeed.autoSynth, \addAfter);
+			~yxRatio.automate(\yxRatioAuto, 
+				[inbus: BP(\di).bus.index + 7],
+				~rotSpeed.autoSynth, \addAfter);
 		});
 		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
 			resp.remove;
@@ -720,6 +739,7 @@ make: { |name|
 		outCh: 8,
 		bus: ~bus,
 		path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
+		playTestFile: true,
 		userprep: {
 			~buf = Buffer.readAndQuery(s, ~path);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
@@ -764,9 +784,12 @@ make: { |name|
 					.onClose_(e { ~closeWin.() });
 				~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
 					.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
-				~win.recursiveResize.front;
+				~win.recursiveResize;
+				~win.bounds = ~win.bounds
+					.right_(Window.screenBounds.right)
+					.bottom_(Window.screenBounds.bottom);
+				~win.front;
 				
-	//			KrBusWatcher.register(~bus);
 				KrBusWatcher.newFrom(s).updateFreq_(10);
 				~upd = Updater(~bus, e { |obj, data|
 					var ms = ~ms;
@@ -812,7 +835,7 @@ make: { |name|
 				),
 				Pfuncn {
 					(
-						instrument: ("data" ++ ~numCh).asSymbol,
+						instrument: if(~playTestFile) { ("data" ++ ~numCh).asSymbol } { \rest },
 						buf: ~buf, bus: ~bus, loop: 0,
 						delta: ~buf.numFrames / 30,
 						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex

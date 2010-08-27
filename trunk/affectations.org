@@ -32,13 +32,13 @@
 
 ** Arms
 *** Axial
-*** Locomotive [0/3]
+*** Locomotive [1/3]
 **** TODO tweak rotSpeed parms to have an audible effect
 ***** position?
 ***** note density
 ***** close...
 **** TODO x/y ranges for timbre, pitch
-**** TODO Clean up loose tests
+**** DONE Clean up loose tests
 **** armsCh process notes
 ***** ./arms/sounds.scd
 ***** don't play directly! use spawnChild to start a new chord
