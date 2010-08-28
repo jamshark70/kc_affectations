@@ -8,10 +8,11 @@
 
 * For showing
   DEADLINE: <2010-08-31 Tue>
-** Misc [2/2]
+** Misc [2/3]
 *** DONE Email Lorne re: Linux setup, video times
 *** DONE Email ateam re: my schedule
 
+*** TODO drum8 stopped in a test? why?
 ** Feet [1/1]
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** Optional [0/3]
