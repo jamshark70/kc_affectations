@@ -441,7 +441,8 @@ make: { |name|
 					if(what == \n_end) {
 						obj.removeDependant(ufunc);
 						self[\activeSynths].remove(obj);
-						if(self[\isPlaying].not and: { self[\activeSynths].isEmpty }) {
+						if(self[\isPlaying].not and: { self[\activeSynths].isEmpty
+								and: { BP.exists(self[\trajectoryKey]) } }) {
 							BP(self[\trajectoryKey]).notUsedBy(self.collIndex);
 						};
 					}

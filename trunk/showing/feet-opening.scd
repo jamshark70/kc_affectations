@@ -1,4 +1,4 @@
-// arms interaction code for showing, 31 Aug 2010
+// feet, opening section code for showing, 31 Aug 2010
 
 if(MCG.exists(0).not) {
 	\makeEmptyMixer8.eval;

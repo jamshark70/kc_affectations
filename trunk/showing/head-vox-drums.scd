@@ -5,7 +5,7 @@ if(MCG.exists(0).not) {
 };
 
 s.waitForBoot {
-	if(Fact.exists(\opening).not) {
+	if(PR.exists(\hs1).not) {
 		// (thisProcess.nowExecutingPath.dirname.dirname +/+ "feet/feet-defs.scd").loadPath;
 		// 2.0.wait;	// seems to be necessary to prevent duplicate reverbs
 		(thisProcess.nowExecutingPath.dirname.dirname +/+ "head/head-defs.scd").loadPath;
@@ -16,7 +16,9 @@ s.waitForBoot {
 
 	Fact(\mstClock) => BP(\mstClock);
 	
-	PR(\hs1) => BP(\hs);
+	PR(\hs1).chuck(BP(\hs), nil, (
+		makeGResponder: 0, removeGResponder: 0
+	));
 	Fact(\hstrig) => BP(\hstrig);
 	
 	PR(\hsSweep) => BP(\hswp);

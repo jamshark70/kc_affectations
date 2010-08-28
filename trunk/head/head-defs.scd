@@ -1227,9 +1227,9 @@ make: { |name|
 			} ! (~baseIndices.size + 1)		
 		},
 		postBufferLoad: {
-			if(~iMadeMixer ? false) {
-				~chan.newPostSend(~rvbmc, 0.391);
-			};
+// 			if(~iMadeMixer ? false) {
+// 				~chan.newPostSend(~rvbmc, 0.391);
+// 			};
 			~fdecCtl ?? { ~fdecCtl = GenericGlobalControl(\fdec, nil, 0.5,  #[0.01, 1.0, exp]) };
 			~ffLowCtl ?? { ~ffLowCtl = GenericGlobalControl(\fLow, nil, 2, #[1, 32, \lin, 1]) };
 			~ffRangeCtl ?? { ~ffRangeCtl = GenericGlobalControl(\fRange, nil, 8, #[0, 32, \lin, 1]) };
