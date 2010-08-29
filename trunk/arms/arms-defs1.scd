@@ -833,14 +833,14 @@ make: { |name|
 					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
-				Pfuncn {
+				Pfuncn({
 					(
 						instrument: if(~playTestFile) { ("data" ++ ~numCh).asSymbol } { \rest },
 						buf: ~buf, bus: ~bus, loop: 0,
 						delta: ~buf.numFrames / 30,
 						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
-				}
+				}, if(~playTestFile) { 1 } { inf })
 			], 1)
 		},
 		closeWin: {
