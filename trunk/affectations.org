@@ -1,10 +1,14 @@
+#+STARTUP: hidestars
+
 * Essentials
-** TODO [#A] Check in bindVC changes! NOW!!!
+** DONE [#A] Check in bindVC changes! NOW!!!
    DEADLINE: <2010-08-25 Wed 10:00>
+
 
 * Schedules
 ** Meet with Lorne
    SCHEDULED: <2010-08-24 Tue 21:00>
+
 
 * For showing
   DEADLINE: <2010-08-31 Tue>
@@ -68,3 +72,27 @@
 **** DONE Why are notes so quiet compared to drone?
 **** DONE Merge formants into drone
 *** TODO [#C] LPC for face/section start
+
+
+* For premiere
+** Feet
+
+
+** Arms
+
+
+** Head
+*** Face dance
+**** Sounds [0/6]
+***** TODO Bloops
+***** TODO Creaking (eye rolls)
+***** TODO Low buzzes, analog-y (tongue rolls in mouth)
+***** TODO Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
+***** TODO Tongue comes out, open mouth: start vocalization
+***** TODO Smile and other emotions: vocal chatter
+
+
+** Torso
+
+
+** Body
