@@ -173,6 +173,12 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
 		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
 	} => Func(\addRvbOut);
+
+	topEnvironment[\rvbEvent] = ().proto_((
+		glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels },
+		lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels },
+		distFar: 20
+	));
 	
 	Proto {
 		~prep = { |args|
