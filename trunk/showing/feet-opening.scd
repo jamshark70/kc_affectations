@@ -81,6 +81,7 @@ s.waitForBoot {
 
 		~seq = TLSequenceIterator([
 			{	topEnvironment[\master].level = ~mVol.value.dbamp;
+//				topEnvironment[\master].startRecord(thisProcess.platform.recordingsDir +/+ "feet4showing.aiff");
 				1
 			},
 			bpCmd: (name: \op, dur: 35, prepareBP: { |bp|
@@ -162,7 +163,10 @@ s.waitForBoot {
 			mixerAutoSynthCmd: (mixer: topEnvironment[\master], name: \ctlPoint, outName: \outbus,
 				value: 0, time: 20, curve: -2.1),
 			\cmdSync,
-			funcCmd: (func: { ~iterator.stop })
+			funcCmd: (func: {
+//				topEnvironment[\master].stopRecord;
+				~iterator.stop;
+			})
 		]);
 	};
 	~feetGui.prep;
