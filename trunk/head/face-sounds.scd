@@ -61,29 +61,70 @@ a = m.play {
 	SinOsc.ar(freq, 0, preAmp).distort * postAmp
 };
 
-d = \addRvbOut.eval(\dsinbloop, { |freq1 = 50, freq2 = 900, time = 1, amp1 = 1, amp2 = 1,
+d = \addRvbOut.eval(\dsinbloop, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
 	normAmp = 0.5, pan1 = 0, pan2 = 0|
-	var	freq = XLine.kr(freq1, freq2, time),
+	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+			timeScale: time),
 		preAmp = Line.kr(amp1, amp2, time),
+		sig = XFade2.ar(SinOsc.ar(freq), BPF.ar(PinkNoise.ar, freq * noiseFmul, rq, noisePreamp),
+			noiseBlend.madd(2, -1), preAmp),
 		pan = Line.kr(pan1, pan2, time),
 		postAmp = normAmp / preAmp * (preAmp+1),
 		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
 		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
-	Pan2.ar(SinOsc.ar(freq, 0, preAmp).distort, pan, postAmp * eg)
+	Pan2.ar(sig.distort, pan, postAmp * eg)
 }).add;
 
-m.play(~rvbEvent.copy.putAll((
+d = \addRvbOut.eval(\doscbloop, { |bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+	normAmp = 0.5, pan1 = 0, pan2 = 0|
+	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+			timeScale: time),
+		preAmp = Line.kr(amp1, amp2, time),
+// 		sig = XFade2.ar(COsc.ar(bufnum, freq, ExpRand(0.5, 9.0)),
+// 			BPF.ar(PinkNoise.ar, freq * noiseFmul, rq, noisePreamp),
+// 			noiseBlend.madd(2, -1), preAmp),
+		sig = BPF.ar(COsc.ar(bufnum, freq, ExpRand(0.5, 9.0)), freq, rq, noisePreamp),
+		pan = Line.kr(pan1, pan2, time),
+		postAmp = normAmp / preAmp * (preAmp+1),
+		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+	Pan2.ar(sig.distort, pan, postAmp * eg)
+}).add;
+
+n.play(~rvbEvent.copy.putAll((
 	instrument: \dsinbloop, time: 2,
 	freq1: 100, freq2: 500,
 	amp1: 3, amp2: 12, distance: 18, pan1: -0.8, pan2: 0.8
 )));
 
-p = m.play(Pbind(
+e = n.play(~rvbEvent.copy.putAll((
+	instrument: \dsinbloop, time: 2,
+	freq1: 100, freq2: 500, fHoldPct: 0.8, fcurve: 2.1,
+	noiseBlend: 0.1, noiseFmul: 5, noisePreamp: 20,
+	amp1: 3, amp2: 12, distance: 18 //, pan1: -0.8, pan2: 0.8
+)));
+
+c = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05, { "done".postln });
+
+e = n.play(~rvbEvent.copy.putAll((
+	instrument: \doscbloop, time: 2, bufnum: c, normAmp: 3,
+	freq1: 100, freq2: 500, fHoldPct: 0.8, fcurve: 2.1,
+	noiseBlend: 0.1, noiseFmul: 5, noisePreamp: 20, rq: 0.1,
+	amp1: 3, amp2: 12, distance: 18 //, pan1: -0.8, pan2: 0.8
+)));
+
+s.sendMsg(\n_trace, e[\id].first);
+
+p = n.play(Pbind(
 	\instrument, \dsinbloop,
 	\delta, Pwrand(#[0.25, 0.5, 0.75], #[0.5, 0.35, 0.15], inf),
-	\time, Pkey(\delta) * 0.8,
+	\time, 0.2, // Pkey(\delta) * 0.8,
+	\fHoldPct, Pwhite(0.2, 0.8, inf),
 	\freq1, Pexprand(150, 400, inf),
 	\freq2, Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+	\fcurve, 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
 	\amp1, Pexprand(0.7, 1.4, inf),
 	\amp2, Pkey(\amp1) * Pwhite(3.0, 7.0, inf),
 	\distance, sin(Ptime() * (2pi / 10)),
@@ -95,6 +136,25 @@ p.stop;
 
 
 // Creaking (eye rolls)
+
+g = GenericGlobalControl(\rt, nil, 0.07, #[0.05, 1, \exp]); g.gui;
+
+// fail
+a = m.play {
+	var	sig = WhiteNoise.ar,
+		freq = LFNoise1.kr(0.5).linexp(-1, 1, 600, 1400),
+		trig = Impulse.ar(58),
+		amp = EnvGen.ar(Env.perc(), gate: trig, timeScale: 12.reciprocal * 0.8);
+	sig = DynKlank.ar(`[
+		{ exprand(0.8, 1.25) },
+		1 ! 5, g.kr ! 5
+	], sig, freqscale: freq);
+	Limiter.ar(sig) * amp
+}.play;
+
+a.free;
+
+
 
 // Low buzzes, analog-y (tongue rolls in mouth)
 
@@ -131,6 +191,8 @@ g.stopWatching.stopAuto;
 g.dump;
 
 // Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
+
+
 
 // Tongue comes out, open mouth: start vocalization
 
