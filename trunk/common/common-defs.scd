@@ -45,6 +45,13 @@ s.waitForBoot {
 	}).add;
 
 	Library.put(\affectations, \commonLoaded, true);
+
+	topEnvironment[\rvbEvent] = ().proto_((
+		glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+		lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
+		distFar: 20
+	));
+	
 };
 
 
@@ -174,12 +181,6 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
 	} => Func(\addRvbOut);
 
-	topEnvironment[\rvbEvent] = ().proto_((
-		glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels },
-		lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels },
-		distFar: 20
-	));
-	
 	Proto {
 		~prep = { |args|
 			if(args.respondsTo(\keysValuesDo)) {
