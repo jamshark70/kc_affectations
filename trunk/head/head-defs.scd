@@ -93,7 +93,7 @@ make: { |name|
 			#[glrvb, lcrvb].do { |rvb|
 				var	rvbmc = (rvb ++ "mc").asSymbol.envirGet;
 				~event.put((rvb ++ "out").asSymbol,
-					rvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels });
+					rvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels });
 				[~chan, ~chan2].do { |mc|
 					rvbmc.tryPerform(\receivesSignalFrom, mc);
 				};
@@ -1209,8 +1209,8 @@ make: { |name|
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			};
-			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
-				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
 				.put(\distFar, 20);
 			~pbindPreAction = Routine(~calcBar);
 			~bases = { |i|
@@ -1395,8 +1395,8 @@ makeBP: { |name|
 			};
 			~copyCtls.do { |ckey| ckey.envirPut(BP(~ctlSource)[ckey]) };
 			~event.put(\distance, ~distCtl.asMap);
-			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
-				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
 				.put(\distFar, 20);
 		},
 		postBufferLoad: BP(\drum1).v[\postBufferLoad],
@@ -1481,8 +1481,8 @@ PR(\abstractProcess).clone {
 			};
 		};
 		~event.put(\distance, ~distCtl.asMap);
-		~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
-			.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+		~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
+			.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
 			.put(\distFar, 20);
 	};
 
@@ -1922,8 +1922,8 @@ make: { |name|
 				buf.sine1Msg(amps)
 			});
 	
-			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
-				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.numOutputBusChannels })
+			~event.put(\glrvbout, ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
+				.put(\lcrvbout, ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels })
 				.put(\distFar, 20);
 
 			~lpcb = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);

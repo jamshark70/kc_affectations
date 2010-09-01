@@ -6,8 +6,6 @@
 
 
 * Schedules
-** Meet with Lorne
-   SCHEDULED: <2010-08-24 Tue 21:00>
 
 
 * For showing
@@ -83,12 +81,17 @@
 
 ** Head
 *** Face dance
-**** Sounds [0/6]
+**** Sounds [1/6]
 ***** TODO Bloops
 ***** TODO Creaking (eye rolls)
 ***** TODO Low buzzes, analog-y (tongue rolls in mouth)
-***** TODO Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
+***** DONE Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
 ***** TODO Tongue comes out, open mouth: start vocalization
+      What should I do?
+      Where should I go?
+      Why is it this way, and not that?
+      Who is listening?
+      Who is watching?
 ***** TODO Smile and other emotions: vocal chatter
 
 

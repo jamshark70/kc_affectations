@@ -13,8 +13,8 @@ ChuckableBrowser.newWindow;
 (Document.current.path.dirname +/+ "head-defs.scd").loadPath;
 topEnvironment[\dir] = Document.current.path.dirname.dirname +/+ "samples/feet";
 
-m = MixerChannel(\test1, s, 1, 2, level: 0.1);
-n = MixerChannel(\test2, s, 2, 2, level: 0.1);
+m = MixerChannel(\test1, s, 1, 2/*, level: 0.1*/);
+n = MixerChannel(\test2, s, 2, 2/*, level: 0.1*/);
 m => MCG(0); n => MCG(1);
 
 [m, n].do { |mx|
@@ -302,7 +302,7 @@ g = [
 
 w = ResizeFlowWindow("test", Rect(900, 100, 350, 300));
 g.do { |gc|
-	StaticText(w, 120@20).string_(gc.name);
+	StaticText(w, 120@20).string_(gc.name).align_(\right);
 	gc.gui(w);
 	w.startRow;
 };
@@ -322,9 +322,25 @@ g[0].watch.automate { SinOsc.kr(LFNoise1.kr(0.5).range(0.1, 0.8)) };
 g[0].watch.automate { SinOsc.kr(0.5) };
 g[1].watch.automate { SinOsc.kr(0.08, 0.5pi).range(5, 20) };
 
-g.do { |gc| gc.stopWatching.stopAuto };
+a = {
+	var	angle = Phasor.kr(0, 2pi / 8 * ControlDur.ir, 0, 2pi),
+		radius = SinOsc.kr(0.329843287).range(0.3, 1.0);
+	[g, [
+		(angle.cos * radius),
+		(angle.sin * radius).linlin(-1, 1, 20, 5)
+	]].flop.do { |pair| Out.kr(pair[0].bus, pair[1]) };
+	Silent.ar(1)
+}.play;
 
-p = m.play(Pbind(
+a.trace;
+a.free;
+
+g.do(_.watch);
+
+g.do { |gc| gc.stopWatching.stopAuto };
+a.free;
+
+p = n.play(Pbind(
 	\chan, m,
 	\instrument, \bufGrainPanFiltDist,
 	\pan, g[0].asMap,
@@ -335,8 +351,8 @@ p = m.play(Pbind(
 	\start, Pswitch1([
 		Pwhite(516826, (516826 + 97978) - (Pkey(\time) * 44100), inf),
 		Pwhite(3276, (3276 + 488489) - (Pkey(\time) * 44100), inf),
-	], Pwrand(#[0, 1], #[0.9, 0.1], inf)),
-	\rate, -1, // Prand(#[-1, 1], inf),
+	], Pwrand(#[0, 1], #[0.5, 0.5], inf)),
+	\rate, Prand(#[-1, 1], inf),
 	\start, Pif(Pkey(\rate) < 0, Pkey(\start) + (Pkey(\time) * 44100), Pkey(\start)),
 	\time, Pkey(\time) - 0.25,
 	\attack, 0.1, \decay, 0.15,
@@ -345,8 +361,109 @@ p = m.play(Pbind(
 
 p.stop;
 
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
 TempoClock.default.clear;
 
+(1379..1380).do(s.sendMsg(\n_free, _));
+
+(
+BP(\wet).free;
+PR(\basicSynthChooser).chuck(BP(\wet), nil, (
+	alwaysReset: true,
+	event: (eventKey: \singleSynthPlayNotify).proto_(topEnvironment[\rvbEvent].proto),
+	inChannels: 2,
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\glrvbmc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+	bufdir: topEnvironment[\sampleDir],
+	bufpath: "head/slurpy.aiff",
+	userprep: {
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~buf = Buffer.readAndQuery(s, ~bufdir +/+ ~bufpath);
+		~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+		~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
+		~xymaps = [~panCtl, ~distCtl].collect(_.asMap);
+		~fastProbCtl = GenericGlobalControl(\fastProb, nil, 0);
+	},
+	useGui: { |vpi|
+		[~panCtl, ~distCtl, ~fastProbCtl].do { |gc| gc => VP(vpi) };
+	},
+	userfree: {
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		};
+		[~buf, ~panCtl, ~distCtl, ~fastProbCtl].free;
+	},
+	preparePlay: {
+		~stage = 0;
+		~autoSynth ?? {
+			~autoSynth = {
+				var	angle = Phasor.kr(0, -2pi / 8 * ControlDur.ir, 0, 2pi),
+					radius = SinOsc.kr(0.329843287).range(0.3, 1.0);
+				Out.kr(~panCtl.bus, angle.cos * radius);
+				Out.kr(~distCtl.bus, (angle.sin * radius).linlin(-1, 1, 20, 5));
+				Silent.ar(1)
+			}.play(~chan.fadergroup, addAction: \addToHead);
+		};
+	},
+	stopCleanup: {
+		~autoSynth !? {
+			~autoSynth.free;
+			~autoSynth = nil;
+		}
+	},
+	lastTrig: {
+		~stage = ~stage + 1;
+	},
+	recvEventNotify: {
+		if(~stage > 0) { ~stage = ~stage + 1 };
+	},
+	objects: (
+		bgpan: (
+			def: \bufGrainPanFiltDist,
+			args: [
+				#[pan, distance], Plazy { Pn(~xymaps, inf) },
+				\bufnum, Plazy { Pn(~buf, inf) },
+				\time, Pwhite(0.8, 1.8, inf),
+				\overlap, Pwhite(2.0, 5.0, inf),
+				\delta, Pkey(\time) / Pkey(\overlap),
+				\start, Plazy { Pif(
+					Pwhite(0.0, 1.0, inf) < ~fastProbCtl,
+					Pwhite(3276, (3276 + 488489) - (Pkey(\time) * ~buf.sampleRate), inf),
+					Pwhite(516826, (516826 + 97978) - (Pkey(\time) * ~buf.sampleRate), inf)
+				) },
+				\rate, Prand(#[-1, 1], inf),
+				\attack, 0.1, \decay, 0.15,
+				\ffreq, 15000,
+				\datafixes, Pfunc { |ev|
+					switch(~stage)
+					{ 0 } {
+						if(ev[\rate] < 0) { ev[\start] = ev[\start] + (ev[\time] * ~buf.sampleRate) };
+						ev[\time] = ev[\time] - ev[\attack] - ev[\decay];
+						0
+					}
+					{ 1 } {
+						ev.putAll((
+							start: 516826, time: 165436 / ~buf.sampleRate - 0.25,
+							rate: 1
+						));
+						0
+					}
+					{ nil };	// all other stages: stop now
+				}
+			]
+		)
+	),
+	reset: Func(\resetBPStreams).v
+));
+0 => BP(\wet);
+)
+
 // Tongue comes out, open mouth: start vocalization
+
 
 // Smile and other emotions: vocal chatter
