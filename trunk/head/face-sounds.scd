@@ -28,6 +28,9 @@ m => MCG(0); n => MCG(1);
 PeakMonitor(m);
 PeakMonitor(n);
 
+[~glrvb, ~lcrvb].do(_.run(false));
+[~glrvb, ~lcrvb].do(_.run(true));
+
 
 // Bloops
 
@@ -192,7 +195,89 @@ g.dump;
 
 // Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
 
+// eq out electric hum from sample
+b.free;
+b = Buffer.readAndQuery(s, "~/SCServer/trax/orig-kc/slurpy-norm.aiff".standardizePath);
 
+a = m.play { PlayBuf.ar(1, b, /*1, Impulse.kr(1.9), 519799,*/ loop: 1) };
+a.free;
+
+a.trace;
+
+c = m.playfx(Instr("busfx.brickwall", { |bus, numCh, wipe = 0|
+	var	sig = In.ar(bus, numCh),
+	fft = FFT({ LocalBuf(2048, 1) } ! numCh, sig);
+	fft = PV_BrickWall(fft, wipe);
+	IFFT(fft)
+}, [\audiobus, \numChannels, \bipolar]), [0, 1, KrNumberEditor(0.0001, #[0.0001, 0.1, \exp])]);
+c.gui;
+
+c.run(false);
+c.run(true);
+
+Instr("busfx.chorus").openFile
+
+MultiEQ(1).edit(m);
+
+s.freqscope;
+PeakMonitor(m);
+
+m.stopRecord;
+MixerRecorder.dir = thisProcess.platform.recordingsDir;
+
+a = LPCAna(topEnvironment[\sampleDir] +/+ "head/slurpy.aiff");
+a.ana(50, 2000, 0.25);
+a.saveToFiles(topEnvironment[\sampleDir] +/+ "head/slurpy.lpc");
+
+a.pchcps;
+
+b.free;
+b = Buffer.readAndQuery(s, topEnvironment[\sampleDir] +/+ "head/slurpy.lpc.aif");
+f = SoundFile.openRead(topEnvironment[\sampleDir] +/+ "head/slurpy.aiff");
+c = f.numFrames;
+f.close;
+
+y = LPCFile(topEnvironment[\sampleDir] +/+ "head/slurpy.lpc");
+y.pchcps;
+y.loadToBuffer;
+y.nrmerr.maxItem
+
+b.getn(0, 100, _.postln);
+
+z.free;
+z = m.play { |amp = 1|
+	var	freq, rms, err,
+		phase = Phasor.ar(0, 1 / c, 0, 1),
+		sig;
+	#freq, rms, err = LPCVals.ar(y.buffer, phase);
+	err = err.clip(0, 1);
+ 	sig = Blip.ar(freq, 100, (1 - err) * 0.4) + WhiteNoise.ar(err);
+ 	LPCSynth.ar(b, sig, phase, rms) * amp;
+//	SinOsc.ar(freq, 0, 0.1)
+}.play;
+
+z.set(\amp, 100)
+
+z.trace
+
+z.free;
+
+s.sendMsg(\n_free, 1011);
+
+(Document.current.path.dirname.dirname +/+ "feet/feet-defs.scd").loadPath;
+
+SynthDef(\blip, { |outbus, freq = 440, numh = 100, amp = 1, gate = 1|
+	var eg = EnvGen.kr(Env.adsr, gate, doneAction: 2);
+	Out.ar(outbus, Blip.ar(freq, min(20000 / freq, numh), amp))
+}).add;
+
+~lpcEv = (instrument: \simpleLPCfxPan, target: m.effectgroup, /*inbus: bus,*/ bus: m.inbus,
+	lpcbuf: b, voxdur: c/44100, start: 0, end: c/44100, time: c/44100,
+	hpf: 20, lpf: 6000);
+
+e = (instrument: \blip, freq: 60.midicps * [1, 5/4, 3/2], sustain: c/44100, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: ~lpcEv.copy, amp: 20);
+
+g = e.copy.play;
 
 // Tongue comes out, open mouth: start vocalization
 
