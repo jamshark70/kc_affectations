@@ -27,6 +27,7 @@ m => MCG(0); n => MCG(1);
 
 PeakMonitor(m);
 PeakMonitor(n);
+PeakMonitor(~master);
 
 [~glrvb, ~lcrvb].do(_.run(false));
 [~glrvb, ~lcrvb].do(_.run(true));
@@ -278,6 +279,73 @@ SynthDef(\blip, { |outbus, freq = 440, numh = 100, amp = 1, gate = 1|
 e = (instrument: \blip, freq: 60.midicps * [1, 5/4, 3/2], sustain: c/44100, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: ~lpcEv.copy, amp: 20);
 
 g = e.copy.play;
+
+// already in feet-defs
+\addRvbOut.eval(\bufGrainPanFiltDist, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
+		attack = 0.001, decay = 0.02, outbus, ffreq = 2000|
+	var sig;
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+		* EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+	sig = LPF.ar(sig, ffreq);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+}).add;
+
+// long slurp: 516826 + 165436
+// fast slurps: 3276 + 488489
+
+b = Buffer.readAndQuery(s, topEnvironment[\sampleDir] +/+ "head/slurpy.aiff");
+
+g = [
+	GenericGlobalControl(\pan, nil, 0, \bipolar),
+	GenericGlobalControl(\distance, nil, 5, #[5, 20])
+];
+
+w = ResizeFlowWindow("test", Rect(900, 100, 350, 300));
+g.do { |gc|
+	StaticText(w, 120@20).string_(gc.name);
+	gc.gui(w);
+	w.startRow;
+};
+w.recursiveResize.front;
+
+e = (
+	instrument: \bufGrainPanFiltDist, pan: g[0].asMap, distance: g[1].asMap,
+	bufnum: b, start: 516826, time: 165436/44100, ffreq: 15000,
+	chan: m
+)
+.proto_(~rvbEvent.proto)
+.parent_(ProtoEvent(\singleSynthPlayer).v.parent)
+.play;
+
+KrBusWatcher.newFrom(s).updateFreq = 8;
+g[0].watch.automate { SinOsc.kr(LFNoise1.kr(0.5).range(0.1, 0.8)) };
+g[0].watch.automate { SinOsc.kr(0.5) };
+g[1].watch.automate { SinOsc.kr(0.08, 0.5pi).range(5, 20) };
+
+g.do { |gc| gc.stopWatching.stopAuto };
+
+p = m.play(Pbind(
+	\chan, m,
+	\instrument, \bufGrainPanFiltDist,
+	\pan, g[0].asMap,
+	\distance, g[1].asMap,
+	\bufnum, b,
+	\time, Pwhite(0.8, 1.8, inf),
+	\delta, Pkey(\time) * Pwhite(0.25, 0.55, inf),
+	\start, Pswitch1([
+		Pwhite(516826, (516826 + 97978) - (Pkey(\time) * 44100), inf),
+		Pwhite(3276, (3276 + 488489) - (Pkey(\time) * 44100), inf),
+	], Pwrand(#[0, 1], #[0.9, 0.1], inf)),
+	\rate, -1, // Prand(#[-1, 1], inf),
+	\start, Pif(Pkey(\rate) < 0, Pkey(\start) + (Pkey(\time) * 44100), Pkey(\start)),
+	\time, Pkey(\time) - 0.25,
+	\attack, 0.1, \decay, 0.15,
+	\ffreq, 15000
+), (protoEvent: ProtoEvent(\singleSynthPlayer).copy.proto_(~rvbEvent.proto)));
+
+p.stop;
+
+TempoClock.default.clear;
 
 // Tongue comes out, open mouth: start vocalization
 
