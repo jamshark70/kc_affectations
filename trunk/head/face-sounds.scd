@@ -28,6 +28,8 @@ m => MCG(0); n => MCG(1);
 PeakMonitor(m);
 PeakMonitor(n);
 PeakMonitor(~master);
+PeakMonitor(~glrvbmc);
+
 
 [~glrvb, ~lcrvb].do(_.run(false));
 [~glrvb, ~lcrvb].do(_.run(true));
@@ -480,12 +482,11 @@ e = ().proto_(d).parent_(ProtoEvent(\polySynthBusLock).v.parent);
 
 SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
 	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
-	normAmp = 0.5, pan1 = 0, pan2 = 0, beats = 0.1|
+	normAmp = 0.5, beats = 0.1|
 	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
 			timeScale: time),
 		preAmp = Line.kr(amp1, amp2, time),
 		sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, noisePreamp),
-		pan = Line.kr(pan1, pan2, time),
 		postAmp = normAmp / preAmp * (preAmp+1),
 		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
 		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
@@ -522,10 +523,10 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| /*r.remove;*/ s.sendMsg(\n_tra
 (
 BP(\sw).free;
 PR(\basicSynthChooser).chuck(BP(\sw), nil, (
-	event: (eventKey: \polySynthBusLock),
+	event: (eventKey: \polySynthBusLock).proto_(topEnvironment[\rvbEvent].proto),
 	dir: topEnvironment[\sampleDir],
 	path: "head/questions1.aiff",
-	labelPath: "head/questions1-labels.txt",
+	labelPath: { ~dir +/+ "head/questions1-labels.txt" },
 	lpcPath: "head/questions1.lpc.aif",
 
 	master: topEnvironment[\master],
@@ -536,7 +537,7 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		var	sf;
 		~lpcbuf = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
 		~readLabels.();
-		sf = SoundFile.openRead(s, ~dir +/+ ~path);
+		sf = SoundFile.openRead(~dir +/+ ~path);
 		if(sf.notNil) {
 			~voxdur = sf.duration;
 			sf.close;
@@ -545,30 +546,99 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		};
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
-		};		
+		};
+		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+		~pitchbufs = \makeWavetables.eval(8, s, 2048, 48, { |numh| 1 ! numh });
 	},
 	userfree: {
-		[~lpcbuf].free;
+		[~lpcbuf, ~noisebuf, ~pitchbufs].free;
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
-		};		
+		};
 	},
+
+	delta: Pwhite(3.0, 6.0, inf),
+	sustain: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
+
+	freq1: Pexprand(80.0, 250.0, inf),
+	freq2: Pkey(\freq1),
+	fcurve: 0,
+	preamp: 9,
+	amp: 10.dbamp,
+	noiseenv: Env.linen(0.2, sustainTime: 0.45, releaseTime: 0.35),
+	pfreq: (Paccumbounce(32, 46, Prand(#[-2, -1, 1, 2], inf), inf) +.x Pseries(0, Pwhite(1, 4, 3)))
+		.clump(3)
+		.collect { |deg| Mode(\g).cps(deg) },
+
+	questionKeys: #["what", "where", "why", "who"],
+	coords: Plazy {
+		var	items = ~pts.select { |pt|
+				~questionKeys.includesEqual(pt[\id])
+			};
+		items.do { |item| item.postln; };
+		Prand(items, inf).collect { |item| [item[\start], item[\end]] }
+	},
+	lpchpf: 20,
+	lpclpf: 15000,
+	dist: Pwhite(5.0, 20.0, inf),
+	pan: Pwhite(-1.0, 1.0, inf),
+	lpcEv: Pbind(
+		\instrument, \simpleLPCfxPanDist,
+		\lpcbuf, Plazy { Pn(~lpcbuf, inf) },
+		\voxdur, Plazy { Pn(~voxdur, inf) },
+		#[start, end], BPStream(\coords),
+		\hpf, BPStream(\lpchpf),
+		\lpf, BPStream(\lpclpf),
+		\distance, BPStream(\dist),
+		\pan, BPStream(\pan)
+	),
 
 	objects: (
 		noisy: (
 			def: \oscbloop1,
 			args: [
 				bufnum: Plazy { Pn(~noisebuf, inf) },
-				
-				lpcEv: Pbind(
-				) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
+				freq1: BPStream(\freq1),
+				freq2: BPStream(\freq2),
+				fcurve: BPStream(\fcurve),
+				time: BPStream(\sustain),
+				amp1: BPStream(\preamp),
+				amp2: Pkey(\amp1),
+				// omitted noise component
+				noiseBlend: 0,
+				normAmp: BPStream(\amp),
+				env: Pfunc { ~noiseenv },
+				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
 			]
-		) //,
-		// pitched: (
-		// 	def: ,
-		// 	args: []
-		// )
+		),
+		pitched: (
+			def: \oscbloop1,
+			args: [
+				freq1: BPStream(\pfreq),
+				freq2: Pkey(\freq1),
+				bufnum: Plazy { Pkey(\freq1).cpsmidi.linlin(48, 48+(12*7),
+					~pitchbufs.first.bufnum, ~pitchbufs.first.bufnum + ~pitchbufs.size - 1
+				) },
+				fcurve: BPStream(\fcurve),
+				time: BPStream(\sustain),
+				amp1: BPStream(\preamp),
+				amp2: Pkey(\amp1),
+				// omitted noise component
+				noiseBlend: 0,
+				normAmp: BPStream(\amp),
+				env: Pfunc { ~noiseenv },
+				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
+			]
+		)
 	),
+	sanitizeKeys: (time: \time),
+	sanitizeEvent: { |ev, keys(~sanitizeKeys)|
+		var	newEv = ().proto_(~event.proto);
+		keys.keysValuesDo { |k, v|
+			newEv[k] = ev[v];
+		};
+		newEv
+	},
 
 	readLabels: {
 		~pt = TabFileReader.read(~labelPath.());
@@ -582,6 +652,21 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		}
 	}
 ));
+0 => BP(\sw);
 )
+
+BP(\sw).triggerOneEvent(0);
+
+p = BP(\sw);
+p.sanitizeKeys.put(\debug, \debug);
+p.event.debug = false;
+
+p.delta = Pwhite(1.5, 3.0, inf);
+p.sustain = Pkey(\delta).linlin(1.5, 3.0, 5.0, 11.0);
+
+p.synth = Pwrand(#[noisy, pitched], #[0.1, 0.9], inf);
+p.pitchedrq
+
+p.noisyenv
 
 // Smile and other emotions: vocal chatter

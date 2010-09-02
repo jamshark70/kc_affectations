@@ -92,6 +92,7 @@
       Why is it this way, and not that?
       Who is listening?
       Who is watching?
+****** TODO Fatten pitched synth
 ***** TODO Smile and other emotions: vocal chatter
 
 
