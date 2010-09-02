@@ -80,7 +80,7 @@ d = \addRvbOut.eval(\dsinbloop, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1
 	Pan2.ar(sig.distort, pan, postAmp * eg)
 }).add;
 
-d = \addRvbOut.eval(\doscbloop, { |bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+SynthDef(\oscbloop, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
 	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
 	normAmp = 0.5, pan1 = 0, pan2 = 0|
 	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
@@ -94,8 +94,10 @@ d = \addRvbOut.eval(\doscbloop, { |bufnum, freq1 = 50, freq2 = 900, fcurve = 0, 
 		postAmp = normAmp / preAmp * (preAmp+1),
 		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
 		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
-	Pan2.ar(sig.distort, pan, postAmp * eg)
+	Out.ar(outbus, Pan2.ar(sig.distort, pan, postAmp * eg));
 }).add;
+
+\addRvbOut.eval(\doscbloop, SynthDescLib.at(\oscbloop).def.func).add;
 
 n.play(~rvbEvent.copy.putAll((
 	instrument: \dsinbloop, time: 2,
@@ -465,5 +467,121 @@ PR(\basicSynthChooser).chuck(BP(\wet), nil, (
 
 // Tongue comes out, open mouth: start vocalization
 
+a = LPCAna("~/Documents/temp/questions1.aiff".standardizePath);
+a.ana(50, 2000, 0.25);
+a.saveToFiles(topEnvironment[\sampleDir] +/+ "head/questions1.lpc");
+
+// use doscbloop above (w/ noise buffer == c)
+
+b = Buffer.readAndQuery(s, topEnvironment[\sampleDir] +/+ "head/questions1.lpc.aif");
+
+d = ~rvbEvent.proto.copy.put(\glrvbout, s.options.numOutputBusChannels).put(\lcrvbout, 8);
+e = ().proto_(d).parent_(ProtoEvent(\polySynthBusLock).v.parent);
+
+SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+	normAmp = 0.5, pan1 = 0, pan2 = 0, beats = 0.1|
+	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+			timeScale: time),
+		preAmp = Line.kr(amp1, amp2, time),
+		sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, noisePreamp),
+		pan = Line.kr(pan1, pan2, time),
+		postAmp = normAmp / preAmp * (preAmp+1),
+		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+	Out.ar(outbus, sig.distort * postAmp * eg);
+}).add;
+
+// ~lpcEv = (instrument: \simpleLPCfxPan, target: m.effectgroup, /*inbus: bus,*/ bus: m.inbus,
+// 	lpcbuf: b, voxdur: c/44100, start: 0, end: c/44100, time: c/44100,
+// 	hpf: 20, lpf: 6000);
+
+// e = (instrument: \blip, freq: 60.midicps * [1, 5/4, 3/2], sustain: c/44100, chan: m, parent: ProtoEvent(\polySynthBusLock).v.parent, collIndex: \dummy, lpcEv: ~lpcEv.copy, amp: 20);
+
+a = SoundFile.openRead(topEnvironment[\sampleDir] +/+ "head/questions1.aiff");
+z = a.duration;
+a.close;
+
+~blip = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(1 ! 30) });
+
+var f = 60.midicps * [1, 9/8, 4/3, 3/2];
+e.copy.putAll((
+	chan: n, instrument: \oscbloop1, bufnum: c, freq1: f, freq2: f * 3, time: 10,
+	normAmp: 20.dbamp, beats: 0.6,
+	env: [Env.linen(0.25, 0.35, 0.4)],
+	lpcEv: (
+		instrument: \simpleLPCfxPan, target: n.effectgroup, bus: n.inbus,
+		lpcbuf: b, voxdur: z, start: 117625/44100, end: 127959/44100, time: 10,
+		hpf: 20, lpf: 15000
+	)
+)).play;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| /*r.remove;*/ s.sendMsg(\n_trace, m[1]) }).add;
+
+(
+BP(\sw).free;
+PR(\basicSynthChooser).chuck(BP(\sw), nil, (
+	event: (eventKey: \polySynthBusLock),
+	dir: topEnvironment[\sampleDir],
+	path: "head/questions1.aiff",
+	labelPath: "head/questions1-labels.txt",
+	lpcPath: "head/questions1.lpc.aif",
+
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\glrvbmc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+
+	userprep: {
+		var	sf;
+		~lpcbuf = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
+		~readLabels.();
+		sf = SoundFile.openRead(s, ~dir +/+ ~path);
+		if(sf.notNil) {
+			~voxdur = sf.duration;
+			sf.close;
+		} {
+			"Could not read duration from %.".format(~dir +/+ ~path).warn;
+		};
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};		
+	},
+	userfree: {
+		[~lpcbuf].free;
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		};		
+	},
+
+	objects: (
+		noisy: (
+			def: \oscbloop1,
+			args: [
+				bufnum: Plazy { Pn(~noisebuf, inf) },
+				
+				lpcEv: Pbind(
+				) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
+			]
+		) //,
+		// pitched: (
+		// 	def: ,
+		// 	args: []
+		// )
+	),
+
+	readLabels: {
+		~pt = TabFileReader.read(~labelPath.());
+		~processLabels.();
+	},
+	processLabels: {
+		var temp;
+		~pts = ~pt.collect { |row|
+			temp = (id: row[2], start: row[0].asFloat, end: row[1].asFloat);
+			temp.put(\dur, temp[\end] - temp[\start])
+		}
+	}
+));
+)
 
 // Smile and other emotions: vocal chatter
