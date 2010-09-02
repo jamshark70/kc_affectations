@@ -85,9 +85,11 @@ s.waitForBoot {
 							~upd = Updater(~playingSeq, e { |obj, what|
 								if(what == \done) {
 									~upd.remove;
-									~goButton.value = 0;
-									~win.userCanClose = true;
-									~quitButton.enabled = true;
+									defer(e {
+										~goButton.value = 0;
+										~win.userCanClose = true;
+										~quitButton.enabled = true;
+									});
 								}
 							});
 						} {
@@ -118,9 +120,13 @@ s.waitForBoot {
 						~mVol.free;
 					};
 				};
-				~win.recursiveResize;
-				~win.bounds = ~win.bounds.center_(Window.screenBounds.center);
-				~win.front;
+				fork({
+					~win.recursiveResize;
+					0.1.wait;
+					~win.bounds = ~win.bounds.center_(Window.screenBounds.center);
+					0.1.wait;
+					~win.front;
+				}, AppClock);
 			}
 		};
 

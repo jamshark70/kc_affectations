@@ -68,9 +68,11 @@ BP.all.free;
 						~upd = Updater(BP(\di), e { |obj, what, more|
 							if(more == \stopped) {
 								~upd.remove;
-								~goButton.value = 0;
-								~win.userCanClose = true;
-								~quitButton.enabled = true;
+								defer(e {
+									~goButton.value = 0;
+									~win.userCanClose = true;
+									~quitButton.enabled = true;
+								});
 								BP.all.stop;
 							}
 						});
@@ -105,9 +107,13 @@ BP.all.free;
 				BP(#[acDisp, acTrig, di]).free;
 				VC(\ac).free;
 			};
-			~win.recursiveResize;
-			~win.bounds = ~win.bounds.center_(Window.screenBounds.center);
-			~win.front;
+			fork({
+				~win.recursiveResize;
+				0.1.wait;
+				~win.bounds = ~win.bounds.center_(Window.screenBounds.center);
+				0.1.wait;
+				~win.front;
+			}, AppClock);
 		};
 	};
 };
