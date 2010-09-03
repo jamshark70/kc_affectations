@@ -3,6 +3,8 @@
 MIDIPort.init([2]);
 MIDIPort.autoFreeSockets = false;
 
+BP.loadGui;
+
 MT(1).gui;
 
 ChuckableBrowser.newWindow;
@@ -24,6 +26,8 @@ m => MCG(0); n => MCG(1);
 };
 
 ~master => MCG(7);
+~glrvbmc => MCG(5);
+~lcrvbmc => MCG(6);
 
 PeakMonitor(m);
 PeakMonitor(n);
@@ -481,12 +485,12 @@ d = ~rvbEvent.proto.copy.put(\glrvbout, s.options.numOutputBusChannels).put(\lcr
 e = ().proto_(d).parent_(ProtoEvent(\polySynthBusLock).v.parent);
 
 SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
-	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+	amp1 = 1, amp2 = 1, rq = 1.0,
 	normAmp = 0.5, beats = 0.1|
 	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
 			timeScale: time),
 		preAmp = Line.kr(amp1, amp2, time),
-		sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, noisePreamp),
+		sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, preAmp),
 		postAmp = normAmp / preAmp * (preAmp+1),
 		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
 		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
@@ -520,6 +524,9 @@ e.copy.putAll((
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| /*r.remove;*/ s.sendMsg(\n_trace, m[1]) }).add;
 
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| /*r.remove;*/ { s.sendMsg(\n_trace, m[1]) }.defer(2.5) }).add;
+
+
 (
 BP(\sw).free;
 PR(\basicSynthChooser).chuck(BP(\sw), nil, (
@@ -549,9 +556,15 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		};
 		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
 		~pitchbufs = \makeWavetables.eval(8, s, 2048, 48, { |numh| 1 ! numh });
+		~pitchProb = GenericGlobalControl(\pitchProb, nil, 0);
+		~preAmp = GenericGlobalControl(\preAmp, nil, 0.1, #[0.05, 20, exp]);
+		~postAmp = GenericGlobalControl(\postAmp, nil, 1, #[0.05, 20, exp]);
+		~distBuses = Bus.control(s, 12);
+		~distBusPool = Pseq((0 .. 11) + ~distBuses.index, inf).asStream;
 	},
+	useGui: { |vpi| [~pitchProb, ~preAmp, ~postAmp].do { |gc| gc => VP(vpi) } },
 	userfree: {
-		[~lpcbuf, ~noisebuf, ~pitchbufs].free;
+		[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses].free;
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 		};
@@ -559,6 +572,7 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 
 	delta: Pwhite(3.0, 6.0, inf),
 	sustain: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
+	synth: Plazy { Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb, \pitched, \noisy) },
 
 	freq1: Pexprand(80.0, 250.0, inf),
 	freq2: Pkey(\freq1),
@@ -580,17 +594,29 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 	},
 	lpchpf: 20,
 	lpclpf: 15000,
-	dist: Pwhite(5.0, 20.0, inf),
-	pan: Pwhite(-1.0, 1.0, inf),
+// 	dist: Pwhite(5.0, 20.0, inf),
+	dist: Pfunc { |ev|
+		var	bus = ~distBusPool.next; //, start = rrand(10.0, 20.0);
+		// use event for server latency
+		(instrument: \ctlEnv, outbus: bus, group: ~chan.synthgroup, addAction: \addBefore,
+			env: Env(({ rrand(5.0, 20.0) } ! 2).debug("dist"), #[1]), connect: 0, time: ev[\time]
+		).play;
+		("c" ++ bus).asSymbol  // return map indicator
+	},
+	pan1: Pwhite(-1.0, 1.0, inf),
+	pan2: Pwhite(0.0, 1.0, inf) * Pkey(\pan1).sign.neg,
 	lpcEv: Pbind(
-		\instrument, \simpleLPCfxPanDist,
+		\instrument, \simpleLPCfxPan2Dist,
 		\lpcbuf, Plazy { Pn(~lpcbuf, inf) },
 		\voxdur, Plazy { Pn(~voxdur, inf) },
 		#[start, end], BPStream(\coords),
 		\hpf, BPStream(\lpchpf),
 		\lpf, BPStream(\lpclpf),
 		\distance, BPStream(\dist),
-		\pan, BPStream(\pan)
+		\pan1, BPStream(\pan1),
+		\pan2, BPStream(\pan2),
+		\amp, Plazy { Pn(~preAmp.asMap, inf) },
+		\postAmp, Plazy { Pn(~postAmp.asMap, inf) }
 	),
 
 	objects: (
@@ -604,8 +630,6 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 				time: BPStream(\sustain),
 				amp1: BPStream(\preamp),
 				amp2: Pkey(\amp1),
-				// omitted noise component
-				noiseBlend: 0,
 				normAmp: BPStream(\amp),
 				env: Pfunc { ~noiseenv },
 				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
@@ -623,9 +647,8 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 				time: BPStream(\sustain),
 				amp1: BPStream(\preamp),
 				amp2: Pkey(\amp1),
-				// omitted noise component
-				noiseBlend: 0,
 				normAmp: BPStream(\amp),
+				beats: Pkey(\freq1).explin(50, 1200, 0.1, 0.5),
 				env: Pfunc { ~noiseenv },
 				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
 			]
@@ -659,6 +682,7 @@ BP(\sw).triggerOneEvent(0);
 
 p = BP(\sw);
 p.sanitizeKeys.put(\debug, \debug);
+p.event.debug = true;
 p.event.debug = false;
 
 p.delta = Pwhite(1.5, 3.0, inf);
@@ -668,5 +692,77 @@ p.synth = Pwrand(#[noisy, pitched], #[0.1, 0.9], inf);
 p.pitchedrq
 
 p.noisyenv
+
+p.use {
+	p.synth = Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb, \pitched, \noisy);
+};
+
+p.pan = 0;
+
+p.pitchedbeats = Pkey(\freq1).explin(50, 1200, 1.8, 3.6);
+
+p.coords = Plazy {
+		var	items = ~pts.select { |pt|
+				~questionKeys.includesEqual(pt[\id])
+			};
+//		items.do { |item| item.postln; };
+		Prand(items, inf).collect { |item| item[\id].debug; [item[\start], item[\end]] }
+	};
+
+p.dist = Pfunc { |ev|
+		var	bus = ~distBusPool.next; //, start = rrand(10.0, 20.0);
+		// use event for server latency
+		(instrument: \ctlEnv, outbus: bus, group: ~chan.synthgroup, addAction: \addBefore,
+			env: Env(#[20, 5], #[1]), connect: 0, time: ev[\time]
+		).play;
+		("c" ++ bus).asSymbol  // return map indicator
+	};
+
+p.delta = Pwhite(0.3, 0.8, inf);
+p.sustain = Pkey(\delta).linlin(0.3, 0.8, 0.9, 2.4);
+
+p.sustain = Pkey(\delta) * 1.2;
+
+p.delta = Pwhite(0.1, 0.4, inf);
+p.sustain = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+
+
+p.coords = Plazy {
+		Prand(~pts, inf).collect { |item| item[\id].debug; [item[\start], item[\end]] }
+	};
+
+p.coords = Plazy {
+	Pn(Pser(~pts, { rrand(3, 7) }, { ~pts.size.rand }), inf)
+	.collect { |item| item[\id].debug; [item[\start], item[\end]] }
+};
+
+p.pfreq = (Paccumbounce(20, 39, Prand(#[-2, -1, 1, 2], inf), inf) +.x Pseries(0, Pwhite(1, 4, 3)))
+		.clump(3)
+		.collect { |deg| Mode(\g).cps(deg) };
+
+
+// stay within sentences only!
+p.coords = Prout {
+	var	items = Array.new, indices = Array.new, i, i2;
+	~pts.do { |pt, i|
+		if(~questionKeys.includesEqual(pt[\id])) {
+			items = items.add(pt);
+			indices = indices.add(i);
+		}
+	};
+	items.debug("items");
+	indices.debug("indices");
+	loop {
+		i = indices.size.rand;
+		i2 = (indices[i + 1] ? ~pts.size) - 1;
+		i = indices[i];
+		[~pts[i][\start], ~pts[i2][\end]].yield
+	}
+};
+
+p.delta = Pwhite(1.4, 3.2, inf);
+p.sustain = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+
+IdentityDictionary.findRespondingMethodFor('==')
 
 // Smile and other emotions: vocal chatter
