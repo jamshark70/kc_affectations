@@ -148,23 +148,132 @@ p.stop;
 
 
 // Creaking (eye rolls)
+// no time to synthesize! using samples (thank you freesound.org)
+b.free;
+b = (topEnvironment[\sampleDir] +/+ "head/norm-*").pathMatch
+.reject(_.contains("txt"))
+.collect { |path|
+	Buffer.readAndQuery(s, path);
+};
 
-g = GenericGlobalControl(\rt, nil, 0.07, #[0.05, 1, \exp]); g.gui;
+a = n.play {
+	PlayBuf.ar(2, b[1], rate: 0.25, doneAction: 2)
+};
 
-// fail
-a = m.play {
-	var	sig = WhiteNoise.ar,
-		freq = LFNoise1.kr(0.5).linexp(-1, 1, 600, 1400),
-		trig = Impulse.ar(58),
-		amp = EnvGen.ar(Env.perc(), gate: trig, timeScale: 12.reciprocal * 0.8);
-	sig = DynKlank.ar(`[
-		{ exprand(0.8, 1.25) },
-		1 ! 5, g.kr ! 5
-	], sig, freqscale: freq);
-	Limiter.ar(sig) * amp
-}.play;
+~pt = TabFileReader.read(b[1].path.splitext[0] ++ "-labels.txt");
+~pt.do { |row| 2.do { |i| row[i] = row[i].asFloat } };
 
-a.free;
+~pt.do(_.postln); ""
+
+\addRvbOut.eval(\bufGrain2Dist, SynthDescLib.at(\bufGrain2).def.func).add;
+
+i = 0;
+n.play((
+	instrument: \bufGrain2Dist, bufnum: b[1],
+	distance: 5, pan: 0, amp: 6.dbamp,
+	start: ~pt[i][0] * b[1].sampleRate, time: (~pt[i][1] - ~pt[i][0]) / (r ? 1),
+	rate: r
+).proto_(~rvbEvent.proto));
+
+// i = 1; r = 0.25; <<- almost vocal-like
+i = 4; r = 0.25;
+n.play((
+	instrument: \bufGrain2Dist, bufnum: b[1],
+	distance: 5, pan: 0, amp: 6.dbamp,
+	start: ~pt[i][1] * b[1].sampleRate, time: (~pt[i][1] - ~pt[i][0]) / (r ? 1),
+	rate: r.neg
+).proto_(~rvbEvent.proto));
+
+(8346..8345).do(s.sendMsg(\n_free, _))
+
+
+a = n.play {
+	var	sig = PlayBuf.ar(2, b[1], 0.25, startPos: ~pt[3][0] * 44100)
+		* EnvGen.kr(Env.linen(0.05, 0.9, 0.05), timeScale: (~pt[3][1] - ~pt[3][0]) / 0.25,
+			doneAction: 2);
+	PitchShift.ar(sig, pitchRatio: 4)
+};
+
+p = n.play(Pspawner({ |sp|
+	var	coords, pct, start, end;
+	loop {
+		coords = ~pt.choose[..1];
+		pct = rrand(0.04, 0.07);
+		start = (coords + [pct, pct.neg]).reduce(\rrand);
+		end = start + pct;
+		sp.seq(Pfin(rrand(8, 16), Pbind(
+			\instrument, \bufGrain2Dist,
+			\bufnum, b[1],
+			\distance, 5,
+			\pan, 0, //rrand(-0.5, 0.5),
+			\amp, 6.dbamp,
+			\rate, rrand(0.2, 0.5) * [
+//				1,
+				Pseq(#[1, -1], inf, 2.rand),
+				Prand(#[1, -1], inf),
+			].choose.trace,
+			\start, b[1].sampleRate * Pif(Pkey(\rate) > 0, start, end),
+			\time, pct / Pkey(\rate).abs,
+			\delta, Pkey(\time) + rrand(0.1, 0.15),
+			#[attack, decay], Pkey(\time) * #[0.1, 0.1],
+			\time, Pkey(\time) * 0.8
+		)));
+		sp.wait(rrand(0.5, 1.5));
+	}
+}), (protoEvent: (proto: ~rvbEvent.proto)));
+
+p.stop;
+
+TempoClock.clear;
+
+
+// this, with or without trailing creak - really quite promising
+
+~func = { |ev|
+	var	coords, pct, start, end, rate, num, startd = #[5, 20].choose;
+	coords = ~pt[2][..1];
+	rate = rrand(0.4, 0.75);
+	pct = rrand(0.1, 0.17) * rate;
+	start = (coords + [pct, pct.neg]).reduce(\rrand);
+	end = start + pct;
+	num = if(ev[\num].notNil) {
+		ev[\num].round(2)
+	} {
+		rrand(10, 18) * 2
+	};
+	Pseq([
+		Pbind(
+			\instrument, \bufGrain2Dist,
+			\bufnum, b[1].bufnum,
+			\distance, Pseries.fromEndpoints(startd, 25-startd, num),
+			\pan, 0, //rrand(-0.5, 0.5),
+			\amp, 10.dbamp,
+			\rate, rate * Pseq(#[1, -1], inf),
+			\start, b[1].sampleRate * Pif(Pkey(\rate) > 0, start, end),
+			\time, pct / Pkey(\rate).abs,
+			\delta, Pkey(\time),
+			#[attack, decay], Pkey(\time) * #[0.12, 0.12]
+		),
+		(
+			type: if(ev[\trail] ? false) { \note } { \rest },
+			instrument: \bufGrain2Dist,
+			bufnum: b[1].bufnum,
+			distance: 25-startd,
+			pan: 0, //rrand(-0.5, 0.5),
+			amp: 6.dbamp,
+			rate: rate,
+			start: b[1].sampleRate * start,
+			time: (1.5 - start) / rate,
+			delta: 1,
+			attack: 0.05,
+			decay: 0.05
+		)
+	], 1)
+};
+
+n.play(Plazy(~func), (protoEvent: (trail: false, num: 4, proto: ~rvbEvent.proto)));
+n.play(Plazy(~func), (protoEvent: (trail: true, num: 6, proto: ~rvbEvent.proto)));
+
 
 
 
