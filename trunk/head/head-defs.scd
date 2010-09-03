@@ -17,7 +17,7 @@ if(Mode.exists(\c).not) {
 };
 
 
-SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, attack = 0.05, decay = 0.05|
+SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, attack = 0.05, decay = 0.05, postAmp = 1|
 	var	src = In.ar(inbus, 1),
 		// note, ar because LPCVals.ar with .kr pos input is broken
 		pos = Line.ar(start, end, time) / voxdur,
@@ -27,9 +27,34 @@ SynthDef(\simpleLPCfxPan, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, 
 		eg = EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	sig = LPF.ar(sig, lpf);
 	sig = LeakDC.ar(sig);
-	Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), pan));
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), pan, postAmp));
 }).add;
 
+SynthDef(\simpleLPCfxPan2, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, pan2 = 0, attack = 0.05, decay = 0.05, postAmp = 1|
+	var	src = In.ar(inbus, 1),
+		// note, ar because LPCVals.ar with .kr pos input is broken
+		pos = Line.ar(start, end, time) / voxdur,
+ 		lpcv = LPCVals.ar(lpcbuf, pos),
+ 		noise = HPF.ar(WhiteNoise.ar(noiseMul), hpf),
+		sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
+		eg = EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
+	sig = LPF.ar(sig, lpf);
+	sig = LeakDC.ar(sig);
+	Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), Line.kr(pan, pan2, time), postAmp));
+}).add;
+
+SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+	amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+	normAmp = 0.5, beats = 0.1|
+	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+			timeScale: time),
+		preAmp = Line.kr(amp1, amp2, time),
+		sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, noisePreamp),
+		postAmp = normAmp / preAmp * (preAmp+1),
+		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+		eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+	Out.ar(outbus, sig.distort * postAmp * eg);
+}).add;
 
 
 
@@ -1164,7 +1189,7 @@ SynthDef(\bufGrainPanFmlet, { |start, time, bufnum, pan, rate = 1, amp = 1,
 
 // s.doWhenBooted {
 // 	1.0.wait;
-	#[bufGrainPanFmlet, bufGrainRLPFPan, partial1bgated, simpleLPCfxPan].do { |key|
+	#[bufGrainPanFmlet, bufGrainRLPFPan, partial1bgated, simpleLPCfxPan, simpleLPCfxPan2].do { |key|
 		\addRvbOut.eval((key ++ "Dist").asSymbol, SynthDescLib.at(key).def.func).add;
 	};
 // };
