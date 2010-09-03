@@ -557,39 +557,47 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
 		~pitchbufs = \makeWavetables.eval(8, s, 2048, 48, { |numh| 1 ! numh });
 		~pitchProb = GenericGlobalControl(\pitchProb, nil, 0);
-		~preAmp = GenericGlobalControl(\preAmp, nil, 0.1, #[0.05, 20, exp]);
-		~postAmp = GenericGlobalControl(\postAmp, nil, 1, #[0.05, 20, exp]);
+		~preAmp = GenericGlobalControl(\preAmp, nil, 1, #[0.05, 20, exp]);
+		~postAmp = GenericGlobalControl(\postAmp, nil, 2.1, #[0.05, 20, exp]);
 		~distBuses = Bus.control(s, 12);
 		~distBusPool = Pseq((0 .. 11) + ~distBuses.index, inf).asStream;
+		~xfscale = GenericGlobalControl(\xfscale, nil, 0.1, #[0.001, 0.4, exp]);
 	},
-	useGui: { |vpi| [~pitchProb, ~preAmp, ~postAmp].do { |gc| gc => VP(vpi) } },
+	useGui: { |vpi| [~pitchProb, ~preAmp, ~postAmp, ~xfscale].do { |gc| gc => VP(vpi) } },
 	userfree: {
-		[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses].free;
+		[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses, ~xfscale].free;
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 		};
 	},
 
-	delta: Pwhite(3.0, 6.0, inf),
-	sustain: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
+	delta: 1,
+	sustain: 1,
 	synth: Plazy { Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb, \pitched, \noisy) },
 
 	freq1: Pexprand(80.0, 250.0, inf),
-	freq2: Pkey(\freq1),
-	fcurve: 0,
+// 	freq2: Pkey(\freq1) * Prand(#[0.5, 2.0], inf),
+	noiseSlideProb: 0.35,
+	freq2: Pkey(\freq1) * Pif(Pfunc { ~noiseSlideProb.coin },
+		Pexprand(0.75, 1.33, inf), 1),
+	fHoldPct: Pwhite(0.15, 0.35, inf),
+	fHoldPct: Pwhite(0.35, 0.7, inf),
+	fcurve: Pwhite(2.7, 4.5, inf) * (Pkey(\freq2) - Pkey(\freq1)).sign,
+// 	fcurve: 0,
 	preamp: 9,
 	amp: 10.dbamp,
 	noiseenv: Env.linen(0.2, sustainTime: 0.45, releaseTime: 0.35),
-	pfreq: (Paccumbounce(32, 46, Prand(#[-2, -1, 1, 2], inf), inf) +.x Pseries(0, Pwhite(1, 4, 3)))
+	pfreq: (Paccumbounce(25, 39, Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+			+.x Pseries(0, Pwhite(1, 4, 3)))
 		.clump(3)
-		.collect { |deg| Mode(\g).cps(deg) },
+		.collect { |deg| Mode(\ab).cps(deg) },
+	pitchedSlideProb: 0.1,
 
 	questionKeys: #["what", "where", "why", "who"],
 	coords: Plazy {
 		var	items = ~pts.select { |pt|
 				~questionKeys.includesEqual(pt[\id])
 			};
-		items.do { |item| item.postln; };
 		Prand(items, inf).collect { |item| [item[\start], item[\end]] }
 	},
 	lpchpf: 20,
@@ -599,7 +607,7 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		var	bus = ~distBusPool.next; //, start = rrand(10.0, 20.0);
 		// use event for server latency
 		(instrument: \ctlEnv, outbus: bus, group: ~chan.synthgroup, addAction: \addBefore,
-			env: Env(({ rrand(5.0, 20.0) } ! 2).debug("dist"), #[1]), connect: 0, time: ev[\time]
+			env: Env(({ rrand(5.0, 20.0) } ! 2), #[1]), connect: 0, time: ev[\time]
 		).play;
 		("c" ++ bus).asSymbol  // return map indicator
 	},
@@ -616,7 +624,10 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 		\pan1, BPStream(\pan1),
 		\pan2, BPStream(\pan2),
 		\amp, Plazy { Pn(~preAmp.asMap, inf) },
-		\postAmp, Plazy { Pn(~postAmp.asMap, inf) }
+		\xfscale, Plazy { Pn(~xfscale.asMap, inf) },
+		\postAmp, Plazy { Pn(~postAmp.asMap, inf) },
+		// filter is sometimes still ringing when 'time' cuts it off
+		\time, Pkey(\time) + 0.1
 	),
 
 	objects: (
@@ -627,7 +638,9 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 				freq1: BPStream(\freq1),
 				freq2: BPStream(\freq2),
 				fcurve: BPStream(\fcurve),
-				time: BPStream(\sustain),
+				fHoldPct: BPStream(\fHoldPct),
+				delta: Pwhite(3.0, 6.0, inf),
+				time: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
 				amp1: BPStream(\preamp),
 				amp2: Pkey(\amp1),
 				normAmp: BPStream(\amp),
@@ -639,16 +652,21 @@ PR(\basicSynthChooser).chuck(BP(\sw), nil, (
 			def: \oscbloop1,
 			args: [
 				freq1: BPStream(\pfreq),
-				freq2: Pkey(\freq1),
+				freq2: Pif(Pfunc { ~pitchedSlideProb.coin },
+					BPStream(\pfreq), Pkey(\freq1)),
 				bufnum: Plazy { Pkey(\freq1).cpsmidi.linlin(48, 48+(12*7),
 					~pitchbufs.first.bufnum, ~pitchbufs.first.bufnum + ~pitchbufs.size - 1
 				) },
-				fcurve: BPStream(\fcurve),
-				time: BPStream(\sustain),
+				fcurve: Pfunc { |ev|
+					rrand(2.7, 4.5) * (ev[\freq1] - ev[\freq2]).sign
+				},
+				fHoldPct: BPStream(\fHoldPct),
+				delta: Pwhite(1.5, 4.0, inf),
+				time: Pkey(\delta) * Pwhite(1.4, 2.1, inf),
 				amp1: BPStream(\preamp),
 				amp2: Pkey(\amp1),
 				normAmp: BPStream(\amp),
-				beats: Pkey(\freq1).explin(50, 1200, 0.1, 0.5),
+				beats: Pkey(\freq1).explin(50, 1200, 1.8, 3.6),
 				env: Pfunc { ~noiseenv },
 				lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
 			]
@@ -718,6 +736,11 @@ p.dist = Pfunc { |ev|
 		("c" ++ bus).asSymbol  // return map indicator
 	};
 
+// ^^ ?? can't hear it
+g = GenericGlobalControl(\dist, nil, 20, #[20, 5]);
+g => VP(1);
+p.dist = g.asMap;
+
 p.delta = Pwhite(0.3, 0.8, inf);
 p.sustain = Pkey(\delta).linlin(0.3, 0.8, 0.9, 2.4);
 
@@ -726,9 +749,8 @@ p.sustain = Pkey(\delta) * 1.2;
 p.delta = Pwhite(0.1, 0.4, inf);
 p.sustain = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
 
-
 p.coords = Plazy {
-		Prand(~pts, inf).collect { |item| item[\id].debug; [item[\start], item[\end]] }
+		Pxrand(~pts, inf).collect { |item| item[\id].debug; [item[\start], item[\end]] }
 	};
 
 p.coords = Plazy {
@@ -736,7 +758,7 @@ p.coords = Plazy {
 	.collect { |item| item[\id].debug; [item[\start], item[\end]] }
 };
 
-p.pfreq = (Paccumbounce(20, 39, Prand(#[-2, -1, 1, 2], inf), inf) +.x Pseries(0, Pwhite(1, 4, 3)))
+p.pfreq = (Paccumbounce(25, 39, Prand(#[-2, -1, 1, 2], inf), inf) +.x Pseries(0, Pwhite(1, 4, 3)))
 		.clump(3)
 		.collect { |deg| Mode(\g).cps(deg) };
 
@@ -762,6 +784,26 @@ p.coords = Prout {
 
 p.delta = Pwhite(1.4, 3.2, inf);
 p.sustain = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+
+p.fHoldPct = Pwhite(0.15, 0.35, inf);
+p.freq2 = Pkey(\freq1) * Pif(Pwhite(0.0, 1.0, inf) < 0.4, Pexprand(0.75, 1.33, inf), 1);
+p.fcurve = Pwhite(2.7, 4.5, inf) * (Pkey(\freq2) - Pkey(\freq1)).sign;
+
+
+p.noisydelta = Pwrand(#[0.25, 0.5, 0.75], #[0.4, 0.3, 0.3], inf);
+p.noisytime = Pkey(\delta) * Pwhite(3.0, 7.0, inf) * 2;
+p.pitcheddelta = Pwrand(#[0.25, 0.5, 0.75], #[0.4, 0.3, 0.3], inf);
+p.pitchedtime = Pkey(\delta) * Pwhite(1.4, 2.5, inf);
+
+p.freq1 = Pwhite(12, 23, inf).collect { |p| Mode(\ab).cps(p) };
+p.freq2 = Pkey(\freq1);
+
+p.pitchedfcurve = Pfunc { |ev|
+					rrand(2.7, 4.5) * (ev[\freq1] - ev[\freq2]).sign
+				};
+
+p.synth = Pseq([Pn(\pitched, { rrand(5, 12) }), \noisy], inf);
+p.pitchedSlideProb = 0.3;
 
 IdentityDictionary.findRespondingMethodFor('==')
 
