@@ -148,6 +148,105 @@ p = n.play(Pbind(
 
 p.stop;
 
+(
+BP(\bl).free;
+PR(\basicSynthChooser).chuck(BP(\bl), nil, (
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\glrvbmc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+	userprep: {
+		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~event.proto = topEnvironment[\rvbEvent];
+	},
+	userfree: {
+		~noisebuf.free;
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		};
+	},
+	// synth: ,
+	delta: Pwhite(1.2, 2.3, inf),
+//	sustain: ,
+	objects: { (
+		sinb: (
+			def: \addRvbOut.eval(\dsinbloop, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+				amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+				normAmp = 0.5, pan = 0, pan2 = 0|
+				var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+						timeScale: time),
+					preAmp = Line.kr(amp1, amp2, time),
+					sig = XFade2.ar(SinOsc.ar(freq), BPF.ar(PinkNoise.ar, freq * noiseFmul, rq, noisePreamp),
+						noiseBlend.madd(2, -1), preAmp),
+					postAmp = normAmp / preAmp * (preAmp+1),
+					env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+					eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+				Pan2.ar(sig.distort, Line.kr(pan, pan2, time), postAmp * eg)
+			}),
+			args: [
+				distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
+				time: Pexprand(0.15, 0.75, inf),
+				freq1: Pexprand(150, 400, inf),
+				freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+				fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+				fHoldPct: Pwhite(0.2, 0.8, inf),
+				amp1: Pwhite(4.0, 8.0, inf),
+				amp2: Pkey(\amp1) * Pwhite(8.0, 20.0, inf),
+				noiseBlend: Pexprand(0.1, 0.4, inf),
+				noiseFmul: Pwhite(2.0, 5.0, inf),
+				noisePreamp: Pwhite(3.0, 9.0, inf),
+				rq: 1 - Pexprand(0.05, 0.95, inf),
+				normAmp: 0.8,
+				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+				// env: 
+			]
+		),
+		oscb: (
+			def: \addRvbOut.eval(\doscbloop, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+				amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+				normAmp = 0.5, pan = 0, pan2 = 0|
+				var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+						timeScale: time),
+					preAmp = Line.kr(amp1, amp2, time),
+					sig = BPF.ar(COsc.ar(bufnum, freq, ExpRand(0.5, 9.0)), freq, rq, preAmp),
+					postAmp = normAmp / preAmp * (preAmp+1),
+					env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+					eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+				Pan2.ar(sig.distort, Line.kr(pan, pan2, time), postAmp * eg)
+			}),
+			args: [
+				distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
+				time: Pexprand(0.15, 0.75, inf) * 3,
+				delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
+				freq1: Pexprand(90, 200, inf),
+				freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+				fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+				fHoldPct: Pwhite(0.2, 0.8, inf),
+				amp1: Pwhite(4.0, 8.0, inf),
+				amp2: Pkey(\amp1) * Pwhite(8.0, 20.0, inf),
+				noiseBlend: Pexprand(0.1, 0.4, inf),
+				noiseFmul: Pwhite(2.0, 5.0, inf),
+				noisePreamp: Pwhite(3.0, 9.0, inf),
+				rq: 1 - Pexprand(0.05, 0.95, inf),
+				normAmp: 0.8,
+				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+			]
+		)
+	) }
+));
+0 => BP(\bl);
+)
+
+BP(\bl).sinbamp2 = Pkey(\amp1) * Pwhite(8.0, 20.0, inf);
+
+p = BP(\bl);
+p.synth = \oscb;
+p.synth = Pwrand(#[sinb, oscb], #[0.8, 0.2], inf);
+
 
 // Creaking (eye rolls)
 // no time to synthesize! using samples (thank you freesound.org)
