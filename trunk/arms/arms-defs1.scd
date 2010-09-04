@@ -739,7 +739,7 @@ make: { |name|
 		outCh: 8,
 		bus: ~bus,
 		path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
-		playTestFile: true,
+		playTestFile: false,
 		userprep: {
 			~buf = Buffer.readAndQuery(s, ~path);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
