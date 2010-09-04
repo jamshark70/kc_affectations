@@ -285,20 +285,31 @@ PR(\abstractProcess).clone {
 
 	~coords = Plazy { Pn(~pt[2][..1], inf) };
 	~rate = Pwhite(0.4, 0.75, inf);
-	~pct = Pwhite(0.1, 0.17, inf) * Pkey(\rate);
+	~pct = Pwhite(0.1, 0.17, inf);
 	~start = Pfunc { |ev| (ev[\coords] + (ev[\pct] * #[1, -1])).reduce(\rrand) };
 	~end = Pkey(\start) + Pkey(\pct);
 	~trail = false;
 	~num = 2;
 	~gest = \squeaks;
+	~rest = Pwhite(1.5, 3.0, inf);
+	~dist = Pwhite(5.0, 20.0, inf);
+	~amp = 10.dbamp;
+	~delta = Pkey(\time);
+	~continuous = false;
+
+	#[master, glrvbmc, lcrvbmc].do { |key|
+		key.envirPut(topEnvironment[key]);
+	};
 
 	~prep = {
-		~chan = MixerChannel(~collIndex, s, 2, 2);
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~event.put(\chan, ~chan);
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 		};
 		~buf = Buffer.readAndQuery(s, ~dir +/+ ~path);
 		~readLabels.();
+		\addRvbOut.eval(\bufGrain2Dist, SynthDescLib.at(\bufGrain2).def.func).add;
 	};
 	~freeCleanup = {
 		#[glrvbmc, lcrvbmc].do { |key|
@@ -307,22 +318,44 @@ PR(\abstractProcess).clone {
 		[~buf, ~chan].free;
 	};
 	~gestures = (
-		squeak: {
+		squeak: { |ev| ~makeOne.(~parmsPatStream.next(ev).put(\num, #[2, 4].choose)) },
+		squeakfall: { |ev|
+			~makeOne.(~parmsPatStream.next(ev)
+				.put(\num, rrand(12, 24))
+				.put(\trail, true)
+			)
 		},
-		squeakfall: {
+		squeaks: { |ev|
+			var	n = rrand(1, 2) * 2, parms;
+			// n-1: revert to regular delta in last event
+			~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false, { "revert".debug });
+			parms = ~parmsPatStream.next(ev);
+			parms.put(\num, n)
+				.put(\rate, rrand(0.2, 0.5))
+				.put(\pct, rrand(0.4, 0.9) * parms[\rate])
+				.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
+			~makeOne.(parms);
 		},
-		squeaks: {
+		smoothsqueaks: { |ev|
+			var	n = rrand(2, 6) * 2, parms;
+			parms = ~parmsPatStream.next(ev);
+			parms.put(\num, n)
+				.put(\rate, rrand(0.4, 0.75))
+				.put(\pct, rrand(0.15, 0.35) * parms[\rate])
+				.put(\coords, ~pt[#[2, 3].choose][..1]);
+			~makeOne.(parms)
 		}
 	);
 	~asPattern = {
 		~gestStream ?? { ~makeStreamForKey.(\gest) };
+		~parmsPatStream ?? { ~makeStreamForKey.(\parmsPat) };
 		Pseq([
 			Plazy({ |ev|
 				var	g = ~gestStream.next(ev);
 				g !? { ~gestures[g].value(ev) }
 			}),
-			Pfin(1, BPStream(\rest))
-		], inf)
+			Pif(Pfuncn { ~continuous }, BPStream(\rest), 0)
+		], if(~continuous) { inf } { 1 })
 	};
 	~parmsPat = Plazy {
 		Pbind(
@@ -332,11 +365,12 @@ PR(\abstractProcess).clone {
 			\start, BPStream(\start),
 			\end, BPStream(\end),
 			\trail, BPStream(\trail),
-			\num, BPStream(\num).roundUp(2)
+			\num, BPStream(\num).roundUp(2),
+			\dist, BPStream(\dist)
 		)
 	};
 	~makeOne = { |parms|
-		var	coords, pct, start, end, rate, num, startd = #[5, 20].choose;
+		var	coords, pct, start, end, rate, num, dist, forwback;
 		parms.use {
 			coords = ~coords;
 			rate = ~rate;
@@ -344,31 +378,34 @@ PR(\abstractProcess).clone {
 			start = ~start;
 			end = ~end;
 			num = ~num;
+			dist = ~dist;
+			forwback = ~forwback;
 		};
 		Pseq([
 			Pbind(
-				\instrument, ~def,
+				\instrument, Pn(~def, num),
 				\bufnum, ~buf.bufnum,
-				\distance, Pseries.fromEndpoints(startd, 25-startd, num),
+				\distance, ~dist, // Pseries.fromEndpoints(startd, 25-startd, num),
 				\pan, 0, //rrand(-0.5, 0.5),
-				\amp, 10.dbamp,
-				\rate, rate * Pseq(#[1, -1], inf),
+				\amp, BPStream(\amp),
+				\rate, rate * Pseq(#[1, -1], inf, forwback ? 0),
 				\start, ~buf.sampleRate * Pif(Pkey(\rate) > 0, start, end),
 				\time, pct / Pkey(\rate).abs,
-				\delta, Pkey(\time),
+				\delta, BPStream(\delta),
 				#[attack, decay], Pkey(\time) * #[0.12, 0.12]
 			),
 			(
 				type: if(parms[\trail] ? false) { \note } { \rest },
 				instrument: ~def,
 				bufnum: ~buf.bufnum,
-				distance: 25-startd,
+				distance: dist, // 25-startd,
 				pan: 0, //rrand(-0.5, 0.5),
-				amp: 6.dbamp,
+				amp: ~ampStream.next,
+				// amp: 6.dbamp,
 				rate: rate,
 				start: ~buf.sampleRate * start,
 				time: (1.5 - start) / rate,
-				delta: 1,
+				delta: if(parms[\trail] ? false) { (1.5 - start) / rate } { 0 },
 				attack: 0.05,
 				decay: 0.05
 			)
@@ -381,6 +418,70 @@ PR(\abstractProcess).clone {
 } => PR(\creaks);
 )
 
+BP(\cr).free;
+PR(\creaks) => BP(\cr);
+0 => BP(\cr);
+
+p = BP(\cr);
+p.amp = 10.dbamp;
+
+p.play;
+p.listVars;
+
+p.gest = \squeak;
+p.gest = \squeaks;
+p.gest = \smoothsqueaks;
+p.gest = \squeakfall;
+
+
+p.gestures.squeak = { |ev| ~makeOne.(~parmsPatStream.next(ev).put(\num, #[2, 4].choose)) };
+p.gestures.squeaks = { |ev|
+	var	pat = ~gestures[\squeak].(ev);
+	Pseq([pat, rrand(0.12, 0.18)], rrand(2, 5))
+};
+
+p.gestures.squeaks = { |ev|
+	// var	pat = ~gestures[\squeak].(ev);
+	var	n = rrand(1, 2) * 2, parms;
+	parms = ~parmsPatStream.next(ev);
+	parms.put(\num, n)
+		.put(\rate, rrand(0.2, 0.5))
+		.put(\pct, rrand(0.4, 0.9) * parms[\rate])
+		.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
+	~makeOne.(parms);
+};
+
+p.gestures.smoothsqueaks = { |ev|
+	var	n = rrand(2, 6) * 2, parms;
+	parms = ~parmsPatStream.next(ev);
+	parms.put(\num, n)
+		.put(\rate, rrand(0.4, 0.75))
+		.put(\pct, rrand(0.15, 0.35) * parms[\rate])
+		.put(\coords, ~pt[#[2, 3].choose][..1]);
+	~makeOne.(parms)
+};
+
+p.gestures.squeakfall = { |ev|
+	~makeOne.(~parmsPatStream.next(ev)
+		.put(\num, rrand(12, 24))
+		.put(\trail, true)
+	)
+};
+
+
+p.gest = \smoothsqueaks;
+p.gest = \squeakfall;
+
+
+p.pct.postcs;
+p.pct = Pwhite(0.05, 0.09) * Pkey(\rate);
+
+p.coords.postcs;
+p.coords = Plazy { Pindex(~pt, Prand(#[0, 1, 3, 4], inf).trace, inf).collect(_[..1]) };
+
+p.pt.size
+
+PeakMonitor(BP(\cr).chan);
 
 
 // Low buzzes, analog-y (tongue rolls in mouth)
