@@ -3,6 +3,8 @@
 MIDIPort.init([2]);
 MIDIPort.autoFreeSockets = false;
 
+s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
+
 BP.loadGui;
 
 MT(1).gui;
@@ -274,6 +276,110 @@ TempoClock.clear;
 n.play(Plazy(~func), (protoEvent: (trail: false, num: 4, proto: ~rvbEvent.proto)));
 n.play(Plazy(~func), (protoEvent: (trail: true, num: 6, proto: ~rvbEvent.proto)));
 
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer).proto_(topEnvironment[\rvbEvent].proto);
+	~def = \bufGrain2Dist;
+	~dir = topEnvironment[\sampleDir];
+	~path = "head/norm-29690_HerbertBoland_Creak_3.wav";
+
+	~coords = Plazy { Pn(~pt[2][..1], inf) };
+	~rate = Pwhite(0.4, 0.75, inf);
+	~pct = Pwhite(0.1, 0.17, inf) * Pkey(\rate);
+	~start = Pfunc { |ev| (ev[\coords] + (ev[\pct] * #[1, -1])).reduce(\rrand) };
+	~end = Pkey(\start) + Pkey(\pct);
+	~trail = false;
+	~num = 2;
+	~gest = \squeaks;
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2);
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~buf = Buffer.readAndQuery(s, ~dir +/+ ~path);
+		~readLabels.();
+	};
+	~freeCleanup = {
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		};
+		[~buf, ~chan].free;
+	};
+	~gestures = (
+		squeak: {
+		},
+		squeakfall: {
+		},
+		squeaks: {
+		}
+	);
+	~asPattern = {
+		~gestStream ?? { ~makeStreamForKey.(\gest) };
+		Pseq([
+			Plazy({ |ev|
+				var	g = ~gestStream.next(ev);
+				g !? { ~gestures[g].value(ev) }
+			}),
+			Pfin(1, BPStream(\rest))
+		], inf)
+	};
+	~parmsPat = Plazy {
+		Pbind(
+			\coords, BPStream(\coords),
+			\rate, BPStream(\rate),
+			\pct, BPStream(\pct) * Pkey(\rate),
+			\start, BPStream(\start),
+			\end, BPStream(\end),
+			\trail, BPStream(\trail),
+			\num, BPStream(\num).roundUp(2)
+		)
+	};
+	~makeOne = { |parms|
+		var	coords, pct, start, end, rate, num, startd = #[5, 20].choose;
+		parms.use {
+			coords = ~coords;
+			rate = ~rate;
+			pct = ~pct;
+			start = ~start;
+			end = ~end;
+			num = ~num;
+		};
+		Pseq([
+			Pbind(
+				\instrument, ~def,
+				\bufnum, ~buf.bufnum,
+				\distance, Pseries.fromEndpoints(startd, 25-startd, num),
+				\pan, 0, //rrand(-0.5, 0.5),
+				\amp, 10.dbamp,
+				\rate, rate * Pseq(#[1, -1], inf),
+				\start, ~buf.sampleRate * Pif(Pkey(\rate) > 0, start, end),
+				\time, pct / Pkey(\rate).abs,
+				\delta, Pkey(\time),
+				#[attack, decay], Pkey(\time) * #[0.12, 0.12]
+			),
+			(
+				type: if(parms[\trail] ? false) { \note } { \rest },
+				instrument: ~def,
+				bufnum: ~buf.bufnum,
+				distance: 25-startd,
+				pan: 0, //rrand(-0.5, 0.5),
+				amp: 6.dbamp,
+				rate: rate,
+				start: ~buf.sampleRate * start,
+				time: (1.5 - start) / rate,
+				delta: 1,
+				attack: 0.05,
+				decay: 0.05
+			)
+		], 1)
+	};
+	~readLabels = {
+		~pt = TabFileReader.read(~dir +/+ ~path.splitext[0] ++ "-labels.txt");
+		~pt.do { |row| 2.do { |i| row[i] = row[i].asFloat } };
+	};
+} => PR(\creaks);
+)
 
 
 
