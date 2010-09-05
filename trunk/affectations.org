@@ -81,10 +81,12 @@
 
 ** Head
 *** Face dance
-**** Sounds [1/6]
-***** TODO Bloops
-***** TODO Creaking (eye rolls)
-***** TODO Low buzzes, analog-y (tongue rolls in mouth)
+**** Sounds [3/7]
+***** TODO Volume tuning
+***** DONE Bloops
+***** TODO Creaking (eye rolls) [0/1]
+****** TODO Creaks are too slow
+***** DONE Low buzzes, analog-y (tongue rolls in mouth)
 ***** DONE Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
 ***** TODO Tongue comes out, open mouth: start vocalization
       What should I do?

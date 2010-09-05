@@ -157,7 +157,7 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 	userprep: {
 		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
 		~sbufs = Buffer.allocConsecutive(6, s, 1024, 1, { |buf, i|
-			buf.chebyMsg((0 ! (i*2+1)).put(i*2, 1).put(0, -1).postln)
+			buf.chebyMsg((0 ! (i*2+1)).put(i*2, 1).put(0, -1))
 		});
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
@@ -172,6 +172,12 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 	},
 	// synth: ,
 	delta: Pwhite(1.2, 2.3, inf),
+	buzzEnv: [
+		Env.perc(0.05, 0.95),
+		Env.perc(0.95, 0.05),
+		Env(#[0, 1, 0.25, 1, 0], #[0.05, 0.2, 0.7, 0.05], #[4, -4, 4, -4]),
+		Env.linen(0.2, 0.4, 0.4)
+	],
 //	sustain: ,
 	objects: { (
 		sinb: (
@@ -204,7 +210,7 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 				normAmp: 0.8,
 				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
-				// env: 
+				env: Pfunc { ~buzzEnv.choose }
 			]
 		),
 		oscb: (
@@ -237,17 +243,24 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 				normAmp: 0.8,
 				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+				env: Pfunc { ~buzzEnv.choose }
 			]
 		),
 		buzz: (
 			def: \addRvbOut.eval(\lowbuzz, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1,
 					fHoldPct = 0, pwidth = 0.1, ffreqMul = 9,
 					chspeed = 0.448, chwidth = 0.005275, chdelay = 0.0681, chdecay = 0.75,
-					sbufbase, sbufi1, sbufi2, pan = 0, pan2 = 0, amp = 0.75|
+					sbufbase, sbufi1, sbufi2, useLine = 1,
+					pan = 0, pan2 = 0, amp = 0.75|
 				var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
 						timeScale: time),
 					sig = Pulse.ar(freq, pwidth),
-					sbufi = Line.kr(sbufi1, sbufi2, time),
+					sbufi = Select.kr(useLine > 0, [
+						// ~sbufs exists before this runs
+						SinOsc.kr(XLine.kr(Rand(9.0, 15.0), Rand(0.1, 0.5), time))
+							.range(0, ~sbufs.size-1.01),
+						Line.kr(sbufi1, sbufi2, time),
+					]),
 					sb1 = sbufi.round(2),
 					sbFrac2 = sbufi - sb1,
 					sb2 = sb1 + sbFrac2.sign,
@@ -258,22 +271,28 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 				sig = sig + CombL.ar(sig, 0.2, SinOsc.kr(chspeed, 0, chwidth, chdelay).min(0.1), chdecay);
 				pan = Line.kr(pan, pan2, time);
 				Pan2.ar(sig, pan, amp * EnvGen.kr(env, timeScale: time, doneAction: 2))
-			}),
+			}).add,
 			args: [
-				distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
-				time: Pexprand(0.15, 0.75, inf) * 3,
+				distance: Pwhite(5.0, 9.0, inf),
+				time: Pexprand(1.2, 2.7, inf),
 				delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
-				freq1: Pexprand(50, 110, inf),
-				freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+				freq1: Pexprand(45, 70, inf),
+				freq2: Pexprand(45, 70, inf),
 				pwidth: Pwhite(0.1, 0.4, inf),
 				fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
-				fHoldPct: Pwhite(0.2, 0.8, inf),
+				fHoldPct: Pif(Pkey(\freq1) > Pkey(\freq2), Pwhite(0.1, 0.4, inf),
+					Pwhite(0.6, 0.8, inf)),
+				ffreqMul: Pwhite(12.0, 36.0, inf),
 				amp: 0.8,
 				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
 				sbufbase: ~sbufs.first.bufnum,
 				sbufi1: Pwhite(0, ~sbufs.size - 1.01, inf),
-				sbufi2: Pwhite(0, ~sbufs.size - 1.01, inf)
+				sbufi2: Pwhite(0, ~sbufs.size - 1.01, inf),
+				sbufi1: Prand(#[0, 4.99], inf),
+				sbufi2: Pif(Pwhite(0.0, 1.0, inf) < 0.6, 4.99 - Pkey(\sbufi1), Pkey(\sbufi1)),
+				useLine: Pwhite(-0.5, 1.5, inf),  // 1/4 chance of wobbly
+				env: Pfunc { ~buzzEnv.choose }
 			]
 		)
 	) }
@@ -285,10 +304,39 @@ BP(\bl).sinbamp2 = Pkey(\amp1) * Pwhite(8.0, 20.0, inf);
 
 p = BP(\bl);
 p.synth = \oscb;
-p.synth = Pwrand(#[sinb, oscb], #[0.8, 0.2], inf);
+p.synth = Pwrand(#[sinb, oscb, buzz], #[0.75, 0.2, 0.05], inf);
+
+p.event.proto = ~rvbEvent.proto.copy.put(\glrvbamt, 0.25).put(\lcrvbamt, 0.17);
+
+p.synth = \buzz;
+p.buzzfreq1 = Pexprand(45, 70, inf);
+p.buzzfreq2 = Pexprand(45, 70, inf);
+p.buzzfHoldPct = Pif(Pkey(\freq1) > Pkey(\freq2), Pwhite(0.1, 0.4, inf), Pwhite(0.6, 0.8, inf));
+p.buzzdistance = Pwhite(5.0, 9.0, inf);
+p.buzzsbufi1 = Prand(#[0, 4.99], inf);
+p.buzzsbufi2 = Pif(Pwhite(0.0, 1.0, inf) < 0.6, 4.99 - Pkey(\sbufi1), Pkey(\sbufi1));
+p.buzzffreqMul = Pwhite(12.0, 36.0, inf);
+p.buzztime = Pexprand(1.2, 2.7, inf);
+
+g = GenericGlobalControl(\sbufi, nil, 0, #[0, 4.99]);
+p.buzzsbufi1 = g.asMap;
+p.buzzsbufi2 = g.asMap;
+
+g.automate { SinOsc.kr(LFNoise1.kr(0.4).range(0.25, 6.0)).range(0, 4.99) };
+g.free;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
 
 p.prepareForPlay.reset;
 p.triggerOneEvent(0);
+
+p.buzzuseLine = 0;
+p.buzzEnv[2] = Env(#[0, 1, 0.25, 1, 0], #[0.05, 0.2, 0.7, 0.05], #[4, -4, 4, -4]);
+p.buzzuseLine = Pwhite(-0.5, 1.5, inf);
+
+
+p.buzzdistance.postcs
 
 p.override(\synth, Pn(\oscb, 1));
 p.listVars
@@ -1299,3 +1347,78 @@ p.pitchedSlideProb = 0.3;
 IdentityDictionary.findRespondingMethodFor('==')
 
 // Smile and other emotions: vocal chatter
+
+
+// deploying
+(
+BP(#[faceDisp, bl, cr, wet, sw]).free;
+
+Fact(\bloops) => BP(\bl);
+Fact(\creaks) => BP(\cr);
+Fact(\slurps) => BP(\wet);
+Fact(\words) => BP(\sw);
+
+BP(\bl).prepareForPlay;
+)
+
+(
+Proto {
+	// override with non-gui
+	~prep = {
+		~w = ResizeFlowWindow(~collIndex, Rect(100, 100, 500, 500));
+		~gestures.pairsDo { |name, func, i|
+			Button(~w, 98@20)
+				.states_([[name]])
+				.action_(func.e);
+		};
+		~w.recursiveResize.front;
+		~w.onClose = e { BP(~collIndex).free };
+	};
+	~freeCleanup = { if(~w.isClosed.not) { ~w.onClose_(nil).close } };
+
+	~gestures = [
+		bloop: {
+			// BP(\bl).unOverride(\synth);
+			// BP(\bl).override(\synth, Pn(\sinb, 1));
+			BP(\bl).synth = \sinb;
+			BP(\bl).triggerOneEvent(0)
+		},
+		noise: {
+			// BP(\bl).unOverride(\synth);
+			// BP(\bl).override(\synth, Pn(\oscb, 1));
+			BP(\bl).synth = \oscb;
+			BP(\bl).triggerOneEvent(0)
+		},
+		buzz: {
+			// BP(\bl).unOverride(\synth);
+			// BP(\bl).override(\synth, Pn(\buzz, 1));
+			BP(\bl).synth = \buzz;
+			BP(\bl).triggerOneEvent(0)
+		},
+		squeak: {
+			BP(\cr).gest = \squeak;
+			BP(\cr).play;
+		},
+		squeaks: {
+			BP(\cr).gest = \squeaks;
+			BP(\cr).play;
+		},
+		smoothsqueaks: {
+			BP(\cr).gest = \smoothsqueaks;
+			BP(\cr).play;
+		},
+		squeakfall: {
+			BP(\cr).gest = \squeakfall;
+			BP(\cr).play;
+		},
+		wet: {
+			BP(\wet).fastProbCtl.value = 0.6;
+			BP(\wet).play(0);
+			BP(\wet).clock.sched(rrand(2.0, 5.0), { BP(\wet).stop(0); nil });
+		},
+		slowword: {
+			BP(\sw).triggerOneEvent(0);
+		}
+	];
+} => BP(\faceDisp);
+)

@@ -2061,24 +2061,33 @@ make: { |name|
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		master: topEnvironment[\master],
-		glrvbmc: topEnvironment[\glrvbmc],
-		lcrvbmc: topEnvironment[\lcrvbmc],
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
 		userprep: {
 			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+			~sbufs = Buffer.allocConsecutive(6, s, 1024, 1, { |buf, i|
+				buf.chebyMsg((0 ! (i*2+1)).put(i*2, 1).put(0, -1))
+			});
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			};
 			~event.proto = topEnvironment[\rvbEvent];
 		},
 		userfree: {
-			~noisebuf.free;
+			[~noisebuf, ~sbufs].free;
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 			};
 		},
 		// synth: ,
 		delta: Pwhite(1.2, 2.3, inf),
+		buzzEnv: [
+			Env.perc(0.05, 0.95),
+			Env.perc(0.95, 0.05),
+			Env(#[0, 1, 0.25, 1, 0], #[0.05, 0.2, 0.7, 0.05], #[4, -4, 4, -4]),
+			Env.linen(0.2, 0.4, 0.4)
+		],
 	//	sustain: ,
 		objects: { (
 			sinb: (
@@ -2111,7 +2120,7 @@ make: { |name|
 					normAmp: 0.8,
 					pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 					pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
-					// env: 
+					env: Pfunc { ~buzzEnv.choose }
 				]
 			),
 			oscb: (
@@ -2144,6 +2153,56 @@ make: { |name|
 					normAmp: 0.8,
 					pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 					pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+					env: Pfunc { ~buzzEnv.choose }
+				]
+			),
+			buzz: (
+				def: \addRvbOut.eval(\lowbuzz, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1,
+						fHoldPct = 0, pwidth = 0.1, ffreqMul = 9,
+						chspeed = 0.448, chwidth = 0.005275, chdelay = 0.0681, chdecay = 0.75,
+						sbufbase, sbufi1, sbufi2, useLine = 1,
+						pan = 0, pan2 = 0, amp = 0.75|
+					var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+							timeScale: time),
+						sig = Pulse.ar(freq, pwidth),
+						sbufi = Select.kr(useLine > 0, [
+							// ~sbufs exists before this runs
+							SinOsc.kr(XLine.kr(Rand(9.0, 15.0), Rand(0.1, 0.5), time))
+								.range(0, ~sbufs.size-1.01),
+							Line.kr(sbufi1, sbufi2, time),
+						]),
+						sb1 = sbufi.round(2),
+						sbFrac2 = sbufi - sb1,
+						sb2 = sb1 + sbFrac2.sign,
+						env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.02, 0.96, 0.02).asArray));
+					sig = LPF.ar(sig, (freq * ffreqMul).clip(20, 18000));
+					sig = Shaper.ar(sbufbase + [sb1, sb2], sig.clip(-1.0, 1.0));
+					sig = XFade2.ar(*(sig ++ [sbFrac2.abs.madd(2, -1)]));
+					sig = sig + CombL.ar(sig, 0.2, SinOsc.kr(chspeed, 0, chwidth, chdelay).min(0.1), chdecay);
+					pan = Line.kr(pan, pan2, time);
+					Pan2.ar(sig, pan, amp * EnvGen.kr(env, timeScale: time, doneAction: 2))
+				}),
+				args: [
+					distance: Pwhite(5.0, 9.0, inf),
+					time: Pexprand(1.2, 2.7, inf),
+					delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
+					freq1: Pexprand(45, 70, inf),
+					freq2: Pexprand(45, 70, inf),
+					pwidth: Pwhite(0.1, 0.4, inf),
+					fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+					fHoldPct: Pif(Pkey(\freq1) > Pkey(\freq2), Pwhite(0.1, 0.4, inf),
+						Pwhite(0.6, 0.8, inf)),
+					ffreqMul: Pwhite(12.0, 36.0, inf),
+					amp: 0.8,
+					pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+					pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+					sbufbase: ~sbufs.first.bufnum,
+					sbufi1: Pwhite(0, ~sbufs.size - 1.01, inf),
+					sbufi2: Pwhite(0, ~sbufs.size - 1.01, inf),
+					sbufi1: Prand(#[0, 4.99], inf),
+					sbufi2: Pif(Pwhite(0.0, 1.0, inf) < 0.6, 4.99 - Pkey(\sbufi1), Pkey(\sbufi1)),
+					useLine: Pwhite(-0.5, 1.5, inf),  // 1/4 chance of wobbly
+					env: Pfunc { ~buzzEnv.choose }
 				]
 			)
 		) }
@@ -2203,7 +2262,7 @@ PR(\abstractProcess).clone {
 		squeaks: { |ev|
 			var	n = rrand(1, 2) * 2, parms;
 			// n-1: revert to regular delta in last event
-			~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false, { "revert".debug });
+			~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false);
 			parms = ~parmsPatStream.next(ev);
 			parms.put(\num, n)
 				.put(\rate, rrand(0.2, 0.5))
@@ -2297,14 +2356,8 @@ make: { |name|
 	BP(name).free;
 	PR(\creaks) => BP(name);
 	0 => BP(name);
+	BP(name).printStopMsg = false;
 }, type: \bp) => Fact(\creaks);
-
-// buzzes
-// (keys: #[master, glrvbmc, lcrvbmc],
-// make: { |name|
-// 	BP(name).free;
-
-// }, type: \bp) => Fact(\buzzes);
 
 
 // slurps
@@ -2365,7 +2418,14 @@ make: { |name|
 		},
 		objects: (
 			bgpan: (
-				def: \bufGrainPanFiltDist,
+				def: \addRvbOut.eval(\bufGrainPanFiltDist, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
+						attack = 0.001, decay = 0.02, outbus, ffreq = 2000|
+					var sig;
+					sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+						* EnvGen.kr(Env.linen(attack, time, decay), doneAction:2);
+					sig = LPF.ar(sig, ffreq);
+					Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+				}),
 				args: [
 					#[pan, distance], Plazy { Pn(~xymaps, inf) },
 					\bufnum, Plazy { Pn(~buf, inf) },
