@@ -15,6 +15,8 @@ ChuckableBrowser.newWindow;
 (Document.current.path.dirname.dirname +/+ "common/common-defs.scd").loadPath;
 
 (Document.current.path.dirname +/+ "head-defs.scd").loadPath;
+~master.doWhenReady { PeakMonitor(~master) };
+
 topEnvironment[\dir] = Document.current.path.dirname.dirname +/+ "samples/feet";
 
 m = MixerChannel(\test1, s, 1, 2/*, level: 0.1*/);
@@ -1422,3 +1424,13 @@ Proto {
 	];
 } => BP(\faceDisp);
 )
+
+BP(\bl).noisedata.abs.maxItem;  // OK
+BP(\bl).oscbenv = Pfunc { Env.linen(0.01, 0.98, 0.01) };
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendBundle(0.5, [\n_trace, m[1]]) }).add;
+
+BP(\bl).noisebuf  // oops - bufnum fail
+
+BP(\cr).amp = 1;

@@ -2065,7 +2065,8 @@ make: { |name|
 		glrvbmc: ~glrvbmc,
 		lcrvbmc: ~lcrvbmc,
 		userprep: {
-			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+			~noisedata = Signal.fill(1024, { 1.0.rand2 });
+			~noisebuf = Buffer.sendCollection(s, ~noisedata.asWavetable, 1, 0.05);
 			~sbufs = Buffer.allocConsecutive(6, s, 1024, 1, { |buf, i|
 				buf.chebyMsg((0 ! (i*2+1)).put(i*2, 1).put(0, -1))
 			});
@@ -2137,6 +2138,7 @@ make: { |name|
 					Pan2.ar(sig.distort, Line.kr(pan, pan2, time), postAmp * eg)
 				}),
 				args: [
+					bufnum: ~noisebuf,
 					distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
 					time: Pexprand(0.15, 0.75, inf) * 3,
 					delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
@@ -2260,14 +2262,22 @@ PR(\abstractProcess).clone {
 			)
 		},
 		squeaks: { |ev|
-			var	n = rrand(1, 2) * 2, parms;
+			var	n = rrand(1, 2) * 2, parms,
+			saveDelta = ~delta, updater;
 			// n-1: revert to regular delta in last event
-			~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false);
+			// ~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false);
+			~delta = Pkey(\time) + Pn(rrand(0.25, 0.55), n);
 			parms = ~parmsPatStream.next(ev);
 			parms.put(\num, n)
 				.put(\rate, rrand(0.2, 0.5))
 				.put(\pct, rrand(0.4, 0.9) * parms[\rate])
 				.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
+			updater = Updater(BP(~collIndex), e { |obj, what, more|
+				if(more == \stopped) {
+					updater.remove;
+					~delta = saveDelta;
+				}
+			});
 			~makeOne.(parms);
 		},
 		smoothsqueaks: { |ev|
