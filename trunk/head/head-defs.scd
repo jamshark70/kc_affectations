@@ -2051,3 +2051,527 @@ make: { |name|
 	// will play on same clock as drums, and needs to stay in sync
 	1 => BP(name);
 }, type: \bp) => Fact(\int);
+
+
+
+// face dance
+
+// bloops
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\glrvbmc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		userprep: {
+			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~event.proto = topEnvironment[\rvbEvent];
+		},
+		userfree: {
+			~noisebuf.free;
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			};
+		},
+		// synth: ,
+		delta: Pwhite(1.2, 2.3, inf),
+	//	sustain: ,
+		objects: { (
+			sinb: (
+				def: \addRvbOut.eval(\dsinbloop, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+					amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+					normAmp = 0.5, pan = 0, pan2 = 0|
+					var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+							timeScale: time),
+						preAmp = Line.kr(amp1, amp2, time),
+						sig = XFade2.ar(SinOsc.ar(freq), BPF.ar(PinkNoise.ar, freq * noiseFmul, rq, noisePreamp),
+							noiseBlend.madd(2, -1), preAmp),
+						postAmp = normAmp / preAmp * (preAmp+1),
+						env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+						eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+					Pan2.ar(sig.distort, Line.kr(pan, pan2, time), postAmp * eg)
+				}),
+				args: [
+					distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
+					time: Pexprand(0.15, 0.75, inf),
+					freq1: Pexprand(150, 400, inf),
+					freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+					fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+					fHoldPct: Pwhite(0.2, 0.8, inf),
+					amp1: Pwhite(4.0, 8.0, inf),
+					amp2: Pkey(\amp1) * Pwhite(8.0, 20.0, inf),
+					noiseBlend: Pexprand(0.1, 0.4, inf),
+					noiseFmul: Pwhite(2.0, 5.0, inf),
+					noisePreamp: Pwhite(3.0, 9.0, inf),
+					rq: 1 - Pexprand(0.05, 0.95, inf),
+					normAmp: 0.8,
+					pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+					pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+					// env: 
+				]
+			),
+			oscb: (
+				def: \addRvbOut.eval(\doscbloop, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
+					amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
+					normAmp = 0.5, pan = 0, pan2 = 0|
+					var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+							timeScale: time),
+						preAmp = Line.kr(amp1, amp2, time),
+						sig = BPF.ar(COsc.ar(bufnum, freq, ExpRand(0.5, 9.0)), freq, rq, preAmp),
+						postAmp = normAmp / preAmp * (preAmp+1),
+						env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
+						eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+					Pan2.ar(sig.distort, Line.kr(pan, pan2, time), postAmp * eg)
+				}),
+				args: [
+					distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
+					time: Pexprand(0.15, 0.75, inf) * 3,
+					delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
+					freq1: Pexprand(90, 200, inf),
+					freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+					fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+					fHoldPct: Pwhite(0.2, 0.8, inf),
+					amp1: Pwhite(4.0, 8.0, inf),
+					amp2: Pkey(\amp1) * Pwhite(8.0, 20.0, inf),
+					noiseBlend: Pexprand(0.1, 0.4, inf),
+					noiseFmul: Pwhite(2.0, 5.0, inf),
+					noisePreamp: Pwhite(3.0, 9.0, inf),
+					rq: 1 - Pexprand(0.05, 0.95, inf),
+					normAmp: 0.8,
+					pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+					pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\bloops);
+
+// creaks
+PR(\abstractProcess).clone {
+	~event = (eventKey: \singleSynthPlayer);
+	~def = \bufGrain2Dist;
+	~dir = topEnvironment[\sampleDir];
+	~path = "head/norm-29690_HerbertBoland_Creak_3.wav";
+
+	~coords = Plazy { Pn(~pt[2][..1], inf) };
+	~rate = Pwhite(0.4, 0.75, inf);
+	~pct = Pwhite(0.1, 0.17, inf);
+	~start = Pfunc { |ev| (ev[\coords] + (ev[\pct] * #[1, -1])).reduce(\rrand) };
+	~end = Pkey(\start) + Pkey(\pct);
+	~trail = false;
+	~num = 2;
+	~gest = \squeaks;
+	~rest = Pwhite(1.5, 3.0, inf);
+	~dist = Pwhite(5.0, 20.0, inf);
+	~amp = 10.dbamp;
+	~delta = Pkey(\time);
+	~continuous = false;
+
+	#[master, glrvbmc, lcrvbmc].do { |key|
+		key.envirPut(topEnvironment[key]);
+	};
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~event.put(\chan, ~chan).proto_(topEnvironment[\rvbEvent].proto);
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~buf = Buffer.readAndQuery(s, ~dir +/+ ~path);
+		~readLabels.();
+		\addRvbOut.eval(\bufGrain2Dist, SynthDescLib.at(\bufGrain2).def.func).add;
+	};
+	~freeCleanup = {
+		#[glrvbmc, lcrvbmc].do { |key|
+			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		};
+		[~buf, ~chan].free;
+	};
+	~gestures = (
+		squeak: { |ev| ~makeOne.(~parmsPatStream.next(ev).put(\num, #[2, 4].choose)) },
+		squeakfall: { |ev|
+			~makeOne.(~parmsPatStream.next(ev)
+				.put(\num, rrand(12, 24))
+				.put(\trail, true)
+			)
+		},
+		squeaks: { |ev|
+			var	n = rrand(1, 2) * 2, parms;
+			// n-1: revert to regular delta in last event
+			~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false, { "revert".debug });
+			parms = ~parmsPatStream.next(ev);
+			parms.put(\num, n)
+				.put(\rate, rrand(0.2, 0.5))
+				.put(\pct, rrand(0.4, 0.9) * parms[\rate])
+				.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
+			~makeOne.(parms);
+		},
+		smoothsqueaks: { |ev|
+			var	n = rrand(2, 6) * 2, parms;
+			parms = ~parmsPatStream.next(ev);
+			parms.put(\num, n)
+				.put(\rate, rrand(0.4, 0.75))
+				.put(\pct, rrand(0.15, 0.35) * parms[\rate])
+				.put(\coords, ~pt[#[2, 3].choose][..1]);
+			~makeOne.(parms)
+		}
+	);
+	~asPattern = {
+		~gestStream ?? { ~makeStreamForKey.(\gest) };
+		~parmsPatStream ?? { ~makeStreamForKey.(\parmsPat) };
+		Pseq([
+			Plazy({ |ev|
+				var	g = ~gestStream.next(ev);
+				g !? { ~gestures[g].value(ev) }
+			}),
+			Pif(Pfuncn { ~continuous }, BPStream(\rest), 0)
+		], if(~continuous) { inf } { 1 })
+	};
+	~parmsPat = Plazy {
+		Pbind(
+			\coords, BPStream(\coords),
+			\rate, BPStream(\rate),
+			\pct, BPStream(\pct) * Pkey(\rate),
+			\start, BPStream(\start),
+			\end, BPStream(\end),
+			\trail, BPStream(\trail),
+			\num, BPStream(\num).roundUp(2),
+			\dist, BPStream(\dist)
+		)
+	};
+	~makeOne = { |parms|
+		var	coords, pct, start, end, rate, num, dist, forwback;
+		parms.use {
+			coords = ~coords;
+			rate = ~rate;
+			pct = ~pct;
+			start = ~start;
+			end = ~end;
+			num = ~num;
+			dist = ~dist;
+			forwback = ~forwback;
+		};
+		Pseq([
+			Pbind(
+				\instrument, Pn(~def, num),
+				\bufnum, ~buf.bufnum,
+				\distance, ~dist, // Pseries.fromEndpoints(startd, 25-startd, num),
+				\pan, 0, //rrand(-0.5, 0.5),
+				\amp, BPStream(\amp),
+				\rate, rate * Pseq(#[1, -1], inf, forwback ? 0),
+				\start, ~buf.sampleRate * Pif(Pkey(\rate) > 0, start, end),
+				\time, pct / Pkey(\rate).abs,
+				\delta, BPStream(\delta),
+				#[attack, decay], Pkey(\time) * #[0.12, 0.12]
+			),
+			(
+				type: if(parms[\trail] ? false) { \note } { \rest },
+				instrument: ~def,
+				bufnum: ~buf.bufnum,
+				distance: dist, // 25-startd,
+				pan: 0, //rrand(-0.5, 0.5),
+				amp: ~ampStream.next,
+				// amp: 6.dbamp,
+				rate: rate,
+				start: ~buf.sampleRate * start,
+				time: (1.5 - start) / rate,
+				delta: if(parms[\trail] ? false) { (1.5 - start) / rate } { 0 },
+				attack: 0.05,
+				decay: 0.05
+			)
+		], 1)
+	};
+	~readLabels = {
+		~pt = TabFileReader.read(~dir +/+ ~path.splitext[0] ++ "-labels.txt");
+		~pt.do { |row| 2.do { |i| row[i] = row[i].asFloat } };
+	};
+} => PR(\creaks);
+
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\creaks) => BP(name);
+	0 => BP(name);
+}, type: \bp) => Fact(\creaks);
+
+// buzzes
+// (keys: #[master, glrvbmc, lcrvbmc],
+// make: { |name|
+// 	BP(name).free;
+
+// }, type: \bp) => Fact(\buzzes);
+
+
+// slurps
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		alwaysReset: true,
+		event: (eventKey: \singleSynthPlayNotify).proto_(topEnvironment[\rvbEvent].proto),
+		inChannels: 2,
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\glrvbmc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		bufdir: topEnvironment[\sampleDir],
+		bufpath: "head/slurpy.aiff",
+		userprep: {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~buf = Buffer.readAndQuery(s, ~bufdir +/+ ~bufpath);
+			~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+			~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
+			~xymaps = [~panCtl, ~distCtl].collect(_.asMap);
+			~fastProbCtl = GenericGlobalControl(\fastProb, nil, 0);
+		},
+		useGui: { |vpi|
+			[~panCtl, ~distCtl, ~fastProbCtl].do { |gc| gc => VP(vpi) };
+		},
+		userfree: {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			};
+			[~buf, ~panCtl, ~distCtl, ~fastProbCtl].free;
+		},
+		preparePlay: {
+			~stage = 0;
+			~autoSynth ?? {
+				~autoSynth = {
+					var	angle = Phasor.kr(0, -2pi / 8 * ControlDur.ir, 0, 2pi),
+						radius = SinOsc.kr(0.329843287).range(0.3, 1.0);
+					Out.kr(~panCtl.bus, angle.cos * radius);
+					Out.kr(~distCtl.bus, (angle.sin * radius).linlin(-1, 1, 20, 5));
+					Silent.ar(1)
+				}.play(~chan.fadergroup, addAction: \addToHead);
+			};
+		},
+		stopCleanup: {
+			~autoSynth !? {
+				~autoSynth.free;
+				~autoSynth = nil;
+			}
+		},
+		lastTrig: {
+			~stage = ~stage + 1;
+		},
+		recvEventNotify: {
+			if(~stage > 0) { ~stage = ~stage + 1 };
+		},
+		objects: (
+			bgpan: (
+				def: \bufGrainPanFiltDist,
+				args: [
+					#[pan, distance], Plazy { Pn(~xymaps, inf) },
+					\bufnum, Plazy { Pn(~buf, inf) },
+					\time, Pwhite(0.8, 1.8, inf),
+					\overlap, Pwhite(2.0, 5.0, inf),
+					\delta, Pkey(\time) / Pkey(\overlap),
+					\start, Plazy { Pif(
+						Pwhite(0.0, 1.0, inf) < ~fastProbCtl,
+						Pwhite(3276, (3276 + 488489) - (Pkey(\time) * ~buf.sampleRate), inf),
+						Pwhite(516826, (516826 + 97978) - (Pkey(\time) * ~buf.sampleRate), inf)
+					) },
+					\rate, Prand(#[-1, 1], inf),
+					\attack, 0.1, \decay, 0.15,
+					\ffreq, 15000,
+					\datafixes, Pfunc { |ev|
+						switch(~stage)
+						{ 0 } {
+							if(ev[\rate] < 0) { ev[\start] = ev[\start] + (ev[\time] * ~buf.sampleRate) };
+							ev[\time] = ev[\time] - ev[\attack] - ev[\decay];
+							0
+						}
+						{ 1 } {
+							ev.putAll((
+								start: 516826, time: 165436 / ~buf.sampleRate - 0.25,
+								rate: 1
+							));
+							0
+						}
+						{ nil };	// all other stages: stop now
+					}
+				]
+			)
+		),
+		reset: Func(\resetBPStreams).v
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\slurps);
+
+
+// words
+(keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthBusLock).proto_(topEnvironment[\rvbEvent].proto),
+		dir: topEnvironment[\sampleDir],
+		path: "head/questions1.aiff",
+		labelPath: { ~dir +/+ "head/questions1-labels.txt" },
+		lpcPath: "head/questions1.lpc.aif",
+	
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\glrvbmc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+	
+		userprep: {
+			var	sf;
+			~lpcbuf = Buffer.readAndQuery(s, ~dir +/+ ~lpcPath);
+			~readLabels.();
+			sf = SoundFile.openRead(~dir +/+ ~path);
+			if(sf.notNil) {
+				~voxdur = sf.duration;
+				sf.close;
+			} {
+				"Could not read duration from %.".format(~dir +/+ ~path).warn;
+			};
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+			~pitchbufs = \makeWavetables.eval(8, s, 2048, 48, { |numh| 1 ! numh });
+			~pitchProb = GenericGlobalControl(\pitchProb, nil, 0);
+			~preAmp = GenericGlobalControl(\preAmp, nil, 1, #[0.05, 20, exp]);
+			~postAmp = GenericGlobalControl(\postAmp, nil, 2.1, #[0.05, 20, exp]);
+			~distBuses = Bus.control(s, 12);
+			~distBusPool = Pseq((0 .. 11) + ~distBuses.index, inf).asStream;
+			~xfscale = GenericGlobalControl(\xfscale, nil, 0.1, #[0.001, 0.4, exp]);
+		},
+		useGui: { |vpi| [~pitchProb, ~preAmp, ~postAmp, ~xfscale].do { |gc| gc => VP(vpi) } },
+		userfree: {
+			[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses, ~xfscale].free;
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			};
+		},
+	
+		delta: 1,
+		sustain: 1,
+		synth: Plazy { Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb, \pitched, \noisy) },
+	
+		freq1: Pexprand(80.0, 250.0, inf),
+	// 	freq2: Pkey(\freq1) * Prand(#[0.5, 2.0], inf),
+		noiseSlideProb: 0.35,
+		freq2: Pkey(\freq1) * Pif(Pfunc { ~noiseSlideProb.coin },
+			Pexprand(0.75, 1.33, inf), 1),
+		fHoldPct: Pwhite(0.15, 0.35, inf),
+		fHoldPct: Pwhite(0.35, 0.7, inf),
+		fcurve: Pwhite(2.7, 4.5, inf) * (Pkey(\freq2) - Pkey(\freq1)).sign,
+	// 	fcurve: 0,
+		preamp: 9,
+		amp: 10.dbamp,
+		noiseenv: Env.linen(0.2, sustainTime: 0.45, releaseTime: 0.35),
+		pfreq: (Paccumbounce(25, 39, Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+				+.x Pseries(0, Pwhite(1, 4, 3)))
+			.clump(3)
+			.collect { |deg| Mode(\ab).cps(deg) },
+		pitchedSlideProb: 0.1,
+	
+		questionKeys: #["what", "where", "why", "who"],
+		coords: Plazy {
+			var	items = ~pts.select { |pt|
+					~questionKeys.includesEqual(pt[\id])
+				};
+			Prand(items, inf).collect { |item| [item[\start], item[\end]] }
+		},
+		lpchpf: 20,
+		lpclpf: 15000,
+	// 	dist: Pwhite(5.0, 20.0, inf),
+		dist: Pfunc { |ev|
+			var	bus = ~distBusPool.next; //, start = rrand(10.0, 20.0);
+			// use event for server latency
+			(instrument: \ctlEnv, outbus: bus, group: ~chan.synthgroup, addAction: \addBefore,
+				env: Env(({ rrand(5.0, 20.0) } ! 2), #[1]), connect: 0, time: ev[\time]
+			).play;
+			("c" ++ bus).asSymbol  // return map indicator
+		},
+		pan1: Pwhite(-1.0, 1.0, inf),
+		pan2: Pwhite(0.0, 1.0, inf) * Pkey(\pan1).sign.neg,
+		lpcEv: Pbind(
+			\instrument, \simpleLPCfxPan2Dist,
+			\lpcbuf, Plazy { Pn(~lpcbuf, inf) },
+			\voxdur, Plazy { Pn(~voxdur, inf) },
+			#[start, end], BPStream(\coords),
+			\hpf, BPStream(\lpchpf),
+			\lpf, BPStream(\lpclpf),
+			\distance, BPStream(\dist),
+			\pan1, BPStream(\pan1),
+			\pan2, BPStream(\pan2),
+			\amp, Plazy { Pn(~preAmp.asMap, inf) },
+			\xfscale, Plazy { Pn(~xfscale.asMap, inf) },
+			\postAmp, Plazy { Pn(~postAmp.asMap, inf) },
+			// filter is sometimes still ringing when 'time' cuts it off
+			\time, Pkey(\time) + 0.1
+		),
+	
+		objects: (
+			noisy: (
+				def: \oscbloop1,
+				args: [
+					bufnum: Plazy { Pn(~noisebuf, inf) },
+					freq1: BPStream(\freq1),
+					freq2: BPStream(\freq2),
+					fcurve: BPStream(\fcurve),
+					fHoldPct: BPStream(\fHoldPct),
+					delta: Pwhite(3.0, 6.0, inf),
+					time: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
+					amp1: BPStream(\preamp),
+					amp2: Pkey(\amp1),
+					normAmp: BPStream(\amp),
+					env: Pfunc { ~noiseenv },
+					lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
+				]
+			),
+			pitched: (
+				def: \oscbloop1,
+				args: [
+					freq1: BPStream(\pfreq),
+					freq2: Pif(Pfunc { ~pitchedSlideProb.coin },
+						BPStream(\pfreq), Pkey(\freq1)),
+					bufnum: Plazy { Pkey(\freq1).cpsmidi.linlin(48, 48+(12*7),
+						~pitchbufs.first.bufnum, ~pitchbufs.first.bufnum + ~pitchbufs.size - 1
+					) },
+					fcurve: Pfunc { |ev|
+						rrand(2.7, 4.5) * (ev[\freq1] - ev[\freq2]).sign
+					},
+					fHoldPct: BPStream(\fHoldPct),
+					delta: Pwhite(1.5, 4.0, inf),
+					time: Pkey(\delta) * Pwhite(1.4, 2.1, inf),
+					amp1: BPStream(\preamp),
+					amp2: Pkey(\amp1),
+					normAmp: BPStream(\amp),
+					beats: Pkey(\freq1).explin(50, 1200, 1.8, 3.6),
+					env: Pfunc { ~noiseenv },
+					lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
+				]
+			)
+		),
+		sanitizeKeys: (time: \time),
+		sanitizeEvent: { |ev, keys(~sanitizeKeys)|
+			var	newEv = ().proto_(~event.proto);
+			keys.keysValuesDo { |k, v|
+				newEv[k] = ev[v];
+			};
+			newEv
+		},
+	
+		readLabels: {
+			~pt = TabFileReader.read(~labelPath.());
+			~processLabels.();
+		},
+		processLabels: {
+			var temp;
+			~pts = ~pt.collect { |row|
+				temp = (id: row[2], start: row[0].asFloat, end: row[1].asFloat);
+				temp.put(\dur, temp[\end] - temp[\start])
+			}
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\words);
