@@ -156,13 +156,16 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 	lcrvbmc: topEnvironment[\lcrvbmc],
 	userprep: {
 		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, 1, 0.05);
+		~sbufs = Buffer.allocConsecutive(6, s, 1024, 1, { |buf, i|
+			buf.chebyMsg((0 ! (i*2+1)).put(i*2, 1).put(0, -1).postln)
+		});
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 		};
 		~event.proto = topEnvironment[\rvbEvent];
 	},
 	userfree: {
-		~noisebuf.free;
+		[~noisebuf, ~sbufs].free;
 		#[glrvbmc, lcrvbmc].do { |key|
 			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 		};
@@ -235,6 +238,43 @@ PR(\basicSynthChooser).chuck(BP(\bl), nil, (
 				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
 				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
 			]
+		),
+		buzz: (
+			def: \addRvbOut.eval(\lowbuzz, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1,
+					fHoldPct = 0, pwidth = 0.1, ffreqMul = 9,
+					chspeed = 0.448, chwidth = 0.005275, chdelay = 0.0681, chdecay = 0.75,
+					sbufbase, sbufi1, sbufi2, pan = 0, pan2 = 0, amp = 0.75|
+				var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+						timeScale: time),
+					sig = Pulse.ar(freq, pwidth),
+					sbufi = Line.kr(sbufi1, sbufi2, time),
+					sb1 = sbufi.round(2),
+					sbFrac2 = sbufi - sb1,
+					sb2 = sb1 + sbFrac2.sign,
+					env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.02, 0.96, 0.02).asArray));
+				sig = LPF.ar(sig, (freq * ffreqMul).clip(20, 18000));
+				sig = Shaper.ar(sbufbase + [sb1, sb2], sig.clip(-1.0, 1.0));
+				sig = XFade2.ar(*(sig ++ [sbFrac2.abs.madd(2, -1)]));
+				sig = sig + CombL.ar(sig, 0.2, SinOsc.kr(chspeed, 0, chwidth, chdelay).min(0.1), chdecay);
+				pan = Line.kr(pan, pan2, time);
+				Pan2.ar(sig, pan, amp * EnvGen.kr(env, timeScale: time, doneAction: 2))
+			}),
+			args: [
+				distance: Pexprand(0.01, 1.0, inf).linlin(0.01, 1.0, 20, 5),
+				time: Pexprand(0.15, 0.75, inf) * 3,
+				delta: Pkey(\time) + Pwhite(0.8, 1.8, inf),
+				freq1: Pexprand(50, 110, inf),
+				freq2: Pkey(\freq1) * (Pwhite(1.8, 3.0, inf) pow: Prand(#[-1, 1], inf)),
+				pwidth: Pwhite(0.1, 0.4, inf),
+				fcurve: 2.1 * sign(Pkey(\freq2) - Pkey(\freq1)),
+				fHoldPct: Pwhite(0.2, 0.8, inf),
+				amp: 0.8,
+				pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+				pan2: Pwhite(0.6, 1.0, inf) * Pkey(\pan).sign.neg,
+				sbufbase: ~sbufs.first.bufnum,
+				sbufi1: Pwhite(0, ~sbufs.size - 1.01, inf),
+				sbufi2: Pwhite(0, ~sbufs.size - 1.01, inf)
+			]
 		)
 	) }
 ));
@@ -247,6 +287,14 @@ p = BP(\bl);
 p.synth = \oscb;
 p.synth = Pwrand(#[sinb, oscb], #[0.8, 0.2], inf);
 
+p.prepareForPlay.reset;
+p.triggerOneEvent(0);
+
+p.override(\synth, Pn(\oscb, 1));
+p.listVars
+p.unOverride(\synth);
+
+p.synthStream.next
 
 // Creaking (eye rolls)
 // no time to synthesize! using samples (thank you freesound.org)
@@ -598,15 +646,22 @@ m.scope
 
 g = GenericGlobalControl(\pwidth, nil, 0.5, #[0.05, 0.5]);
 
-p = m.play(Instr("ptest", { |freq, pwidth = 0.5, ffreqMul = 5, sbufbase, sbufi|
+p = m.play(Instr("ptest", { |freq, pwidth = 0.5, ffreqMul = 5, chspeed = 0.05, chwidth = 0.02, chdelay = 0.04, chdecay = 0.01, sbufbase, sbufi|
 	var	sig = Pulse.ar(freq, pwidth),
 	sb1 = sbufi.round(2),
 	sbFrac2 = sbufi - sb1,
 	sb2 = sb1 + sbFrac2.sign;
 	sig = LPF.ar(sig, (freq * ffreqMul).clip(20, 18000));
 	sig = Shaper.ar(sbufbase + [sb1, sb2], sig.clip(-1.0, 1.0));
-	XFade2.ar(*(sig ++ [sbFrac2.abs.madd(2, -1)]))
-}, [\freq, #[0.05, 0.5], #[2, 20, \exp], \mybuf, nil]), [nil, g, nil, b.first.bufnum, KrNumberEditor(0, [0, b.size - 1.01])]);
+	sig = XFade2.ar(*(sig ++ [sbFrac2.abs.madd(2, -1)]));
+	sig + CombL.ar(sig, 0.2, SinOsc.kr(chspeed, 0, chwidth, chdelay).min(0.1), chdecay)
+}, [\freq, #[0.05, 0.5], #[2, 20, \exp], #[0.01, 3, exp], #[0.001, 0.1, exp], #[0.001, 0.1, exp], #[0.001, 0.75, exp], \mybuf, nil]), [KrNumberEditor(56, \freq), g, 
+	KrNumberEditor(8.4339300685716, ControlSpec(2, 20, 'exp', 0.0, 2, "")),
+	KrNumberEditor(0.66594208691452, ControlSpec(0.01, 3, 'exp', 0.0, 0.01, "")),
+	KrNumberEditor(0.0052749969028213, ControlSpec(0.001, 0.1, 'exp', 0.0, 0.001, "")),
+	KrNumberEditor(0.068129207003196, ControlSpec(0.001, 0.1, 'exp', 0.0, 0.001, "")),
+	KrNumberEditor(0.75, ControlSpec(0.001, 0.75, 'exp', 0.0, 0.001, "")),
+	b.first.bufnum, KrNumberEditor(0, [0, b.size - 1.01])]);
 p.gui;
 
 p.synth.trace
@@ -616,6 +671,27 @@ KrBusWatcher.newFrom(s).updateFreq = 6;
 g.stopWatching.stopAuto;
 
 g.dump;
+g.free;
+
+\addRvbOut.eval(\lowbuzz, { |freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0, pwidth = 0.1, ffreqMul = 9, chspeed = 0.448, chwidth = 0.005275, chdelay = 0.0681, chdecay = 0.75, sbufbase, sbufi1, sbufi2, pan = 0, pan2 = 0, amp = 0.75|
+	var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
+			timeScale: time),
+		sig = Pulse.ar(freq, pwidth),
+		sbufi = Line.kr(sbufi1, sbufi2, time),
+		sb1 = sbufi.round(2),
+		sbFrac2 = sbufi - sb1,
+		sb2 = sb1 + sbFrac2.sign,
+		env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.02, 0.96, 0.02).asArray));
+	sig = LPF.ar(sig, (freq * ffreqMul).clip(20, 18000));
+	sig = Shaper.ar(sbufbase + [sb1, sb2], sig.clip(-1.0, 1.0));
+	sig = XFade2.ar(*(sig ++ [sbFrac2.abs.madd(2, -1)]));
+	sig = sig + CombL.ar(sig, 0.2, SinOsc.kr(chspeed, 0, chwidth, chdelay).min(0.1), chdecay);
+	pan = Line.kr(pan, pan2, time);
+	Pan2.ar(sig, pan, amp * EnvGen.kr(env, timeScale: time, doneAction: 2))
+}).add;
+
+
+
 
 // Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
 
