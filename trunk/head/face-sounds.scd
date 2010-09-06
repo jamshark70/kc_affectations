@@ -1353,10 +1353,21 @@ IdentityDictionary.findRespondingMethodFor('==')
 
 // deploying
 (
-BP(#[faceDisp, bl, cr, wet, sw]).free;
+BP(#[faceDisp, bl, cr, cr1, cr2, cr3, wet, sw]).free;
 
 Fact(\bloops) => BP(\bl);
 Fact(\creaks) => BP(\cr);
+
+(1..3).do { |i|
+	var	bp;
+	PR(\creaks).chuck(bp = BP(("cr" ++ i).asSymbol), nil, (
+		chan: BP(\cr).chan,
+		buf: BP(\cr).buf
+	));
+	0 => bp;
+	bp.printStopMsg = false;
+};
+
 Fact(\slurps) => BP(\wet);
 Fact(\words) => BP(\sw);
 
@@ -1365,18 +1376,28 @@ BP(\bl).prepareForPlay;
 
 (
 Proto {
+	~crKeyStream = Pseq(#[cr, cr1, cr2, cr3], inf).asStream;
 	// override with non-gui
 	~prep = {
+		var self = currentEnvironment;
 		~w = ResizeFlowWindow(~collIndex, Rect(100, 100, 500, 500));
 		~gestures.pairsDo { |name, func, i|
 			Button(~w, 98@20)
-				.states_([[name]])
-				.action_(func.e);
+				.states_(
+					if(~playStopKeys.includes(name)) {
+						[[name ++ " GO"], [name ++ " stop"]]
+					} {
+						[[name]]
+					}
+				)
+				.action_({ |view| self.use { func.value(view) } });
 		};
 		~w.recursiveResize.front;
 		~w.onClose = e { BP(~collIndex).free };
 	};
 	~freeCleanup = { if(~w.isClosed.not) { ~w.onClose_(nil).close } };
+
+	~playStopKeys = #[words];
 
 	~gestures = [
 		bloop: {
@@ -1398,28 +1419,45 @@ Proto {
 			BP(\bl).triggerOneEvent(0)
 		},
 		squeak: {
-			BP(\cr).gest = \squeak;
-			BP(\cr).play;
+			var	key = ~crKeyStream.next;
+			BP(key).gest = \squeak;
+			BP(key).play;
 		},
 		squeaks: {
-			BP(\cr).gest = \squeaks;
-			BP(\cr).play;
+			var	key = ~crKeyStream.next;
+			BP(key).gest = \squeaks;
+			BP(key).play;
 		},
 		smoothsqueaks: {
-			BP(\cr).gest = \smoothsqueaks;
-			BP(\cr).play;
+			var	key = ~crKeyStream.next;
+			BP(key).gest = \smoothsqueaks;
+			BP(key).play;
 		},
 		squeakfall: {
-			BP(\cr).gest = \squeakfall;
-			BP(\cr).play;
+			var	key = ~crKeyStream.next;
+			BP(key).gest = \squeakfall;
+			BP(key).play;
 		},
-		wet: {
+		wet: { |view|
+			view.enabled = false;
 			BP(\wet).fastProbCtl.value = 0.6;
 			BP(\wet).play(0);
-			BP(\wet).clock.sched(rrand(2.0, 5.0), { BP(\wet).stop(0); nil });
+			BP(\wet).clock.sched(rrand(2.0, 5.0), {
+				defer { view.enabled = true };
+				BP(\wet).stop(0); nil
+			});
 		},
 		slowword: {
 			BP(\sw).triggerOneEvent(0);
+		},
+		words: { |view|
+			if(view.value == 1) { BP(\sw).play } { BP(\sw).stop };
+		},
+		'-> rand words': {
+			BP(\sw).word = Plazy { Prand(~pts, inf) }
+		},
+		'-> phrases': {
+			BP(\sw).word = Plazy { Pn(Pser(~pts, { rrand(3, 7) }, { ~pts.size.rand }), inf) }
 		}
 	];
 } => BP(\faceDisp);
@@ -1434,3 +1472,71 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendBundle(0.5, [\
 BP(\bl).noisebuf  // oops - bufnum fail
 
 BP(\cr).amp = 1;
+
+p = BP(#[cr, cr1, cr2, cr3]);
+
+();
+p.do { |bp|
+	bp.gestures.squeaks = { |ev|
+		var	n = rrand(2, 5), parms,
+		saveDelta = ~delta, updater;
+		// n-1: revert to regular delta in last event
+		// ~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false);
+		~delta = Pkey(\time) + Pn(rrand(0.05, 0.12), n);
+		parms = ~parmsPatStream.next(ev);
+		parms.put(\num, n)
+			.put(\rate, rrand(0.35, 0.65))
+			.put(\pct, rrand(0.06, 0.09) * parms[\rate])
+			.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
+		updater = Updater(BP(~collIndex), e { |obj, what, more|
+			if(more == \stopped) {
+				updater.remove;
+				~delta = saveDelta;
+			}
+		});
+		~makeOne.(parms);
+	};
+	bp.gestures.smoothsqueaks = { |ev|
+		var	n = rrand(2, 6) * 2, parms;
+		parms = ~parmsPatStream.next(ev);
+		parms.put(\num, n)
+			.put(\rate, rrand(0.4, 0.75))
+			.put(\pct, rrand(0.07, 0.175) * parms[\rate])
+			.put(\coords, ~pt[#[2, 3].choose][..1]);
+		~makeOne.(parms)
+	};
+	bp.amp = 1;
+};
+
+p.free;
+
+
+p = BP(\sw);
+
+p.objects.keys.do { |key|
+	p[(key ++ "delta").asSymbol] = Pwhite(0.3, 0.8, inf);
+	p[(key ++ "sustain").asSymbol] = Pkey(\delta).linlin(0.3, 0.8, 0.9, 2.4);
+};
+
+p.sustain = Pkey(\delta) * 1.2;
+
+p.pitcheddelta = Pwhite(0.1, 0.4, inf);
+p.pitchedtime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+
+p.amp
+p.pitchedAmp = 17.dbamp;
+p.pitchednormAmp = 17.dbamp;
+p.noisynormAmp = 7.dbamp;
+
+p.noisysustain.postcs
+p.noisydelta.postcs
+
+p.pitchedmode = Pseq([
+	Pn(\ab0, { rrand(12, 24) }),
+	Pstutter(Pwhite(2, 6, inf), Prand(Mode.keys.asArray.select { |key|
+		key != \ab0 and: { key.asString.last == $0 }
+	}, { rrand(1, 4) }))
+], inf);
+
+p.noisydelta = Pwhite(0.1, 0.4, inf);
+p.noisytime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
