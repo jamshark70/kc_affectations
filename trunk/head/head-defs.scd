@@ -2229,7 +2229,7 @@ PR(\abstractProcess).clone {
 	~gest = \squeaks;
 	~rest = Pwhite(1.5, 3.0, inf);
 	~dist = Pwhite(5.0, 20.0, inf);
-	~amp = 10.dbamp;
+	~amp = 1; // 10.dbamp;
 	~delta = Pkey(\time);
 	~continuous = false;
 
@@ -2238,20 +2238,27 @@ PR(\abstractProcess).clone {
 	};
 
 	~prep = {
-		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
-		~event.put(\chan, ~chan).proto_(topEnvironment[\rvbEvent].proto);
-		#[glrvbmc, lcrvbmc].do { |key|
-			key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+		if(~chan.isNil) {
+			~iMadeStuff = true;
+			~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~buf = Buffer.readAndQuery(s, ~dir +/+ ~path);
+			\addRvbOut.eval(\bufGrain2Dist, SynthDescLib.at(\bufGrain2).def.func).add;
+		} {
+			~iMadeStuff = false;
 		};
-		~buf = Buffer.readAndQuery(s, ~dir +/+ ~path);
+		~event.put(\chan, ~chan).proto_(topEnvironment[\rvbEvent].proto);
 		~readLabels.();
-		\addRvbOut.eval(\bufGrain2Dist, SynthDescLib.at(\bufGrain2).def.func).add;
 	};
 	~freeCleanup = {
-		#[glrvbmc, lcrvbmc].do { |key|
-			key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+		if(~iMadeStuff) {
+			#[glrvbmc, lcrvbmc].do { |key|
+				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			};
+			[~buf, ~chan].free;
 		};
-		[~buf, ~chan].free;
 	};
 	~gestures = (
 		squeak: { |ev| ~makeOne.(~parmsPatStream.next(ev).put(\num, #[2, 4].choose)) },
@@ -2309,7 +2316,7 @@ PR(\abstractProcess).clone {
 			\start, BPStream(\start),
 			\end, BPStream(\end),
 			\trail, BPStream(\trail),
-			\num, BPStream(\num).roundUp(2),
+			\num, BPStream(\num), //.roundUp(2),
 			\dist, BPStream(\dist)
 		)
 	};
@@ -2540,16 +2547,18 @@ make: { |name|
 		pfreq: (Paccumbounce(25, 39, Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
 				+.x Pseries(0, Pwhite(1, 4, 3)))
 			.clump(3)
-			.collect { |deg| Mode(\ab).cps(deg) },
+			.collect { |deg, ev| Mode(ev[\mode]).cps(deg) },
 		pitchedSlideProb: 0.1,
 	
 		questionKeys: #["what", "where", "why", "who"],
-		coords: Plazy {
+		word: Plazy {
 			var	items = ~pts.select { |pt|
 					~questionKeys.includesEqual(pt[\id])
 				};
-			Prand(items, inf).collect { |item| [item[\start], item[\end]] }
+			Prand(items, inf)
 		},
+		// don't change this one
+		coords: Plazy { BPStream(\word).collect { |item| [item[\start], item[\end]] } },
 		lpchpf: 20,
 		lpclpf: 15000,
 	// 	dist: Pwhite(5.0, 20.0, inf),
@@ -2601,6 +2610,12 @@ make: { |name|
 			pitched: (
 				def: \oscbloop1,
 				args: [
+					mode: Pseq([
+						Pn(\ab0, { rrand(12, 24) }),
+						Pxrand(Mode.keys.asArray.select { |key|
+							key != \ab0 and: { key.asString.last == $0 }
+						}, { rrand(1, 5) })
+					], inf),
 					freq1: BPStream(\pfreq),
 					freq2: Pif(Pfunc { ~pitchedSlideProb.coin },
 						BPStream(\pfreq), Pkey(\freq1)),
