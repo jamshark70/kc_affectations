@@ -2269,15 +2269,15 @@ PR(\abstractProcess).clone {
 			)
 		},
 		squeaks: { |ev|
-			var	n = rrand(1, 2) * 2, parms,
+			var	n = rrand(2, 5), parms,
 			saveDelta = ~delta, updater;
 			// n-1: revert to regular delta in last event
 			// ~override.(\delta, Pkey(\time) + Pn(rrand(0.25, 0.55), n-1), false);
-			~delta = Pkey(\time) + Pn(rrand(0.25, 0.55), n);
+			~delta = Pkey(\time) + Pn(rrand(0.05, 0.12), n);
 			parms = ~parmsPatStream.next(ev);
 			parms.put(\num, n)
-				.put(\rate, rrand(0.2, 0.5))
-				.put(\pct, rrand(0.4, 0.9) * parms[\rate])
+				.put(\rate, rrand(0.35, 0.65))
+				.put(\pct, rrand(0.06, 0.09) * parms[\rate])
 				.put(\coords, ~pt[#[0, 1, 3, 4].choose][..1]);
 			updater = Updater(BP(~collIndex), e { |obj, what, more|
 				if(more == \stopped) {
@@ -2292,7 +2292,7 @@ PR(\abstractProcess).clone {
 			parms = ~parmsPatStream.next(ev);
 			parms.put(\num, n)
 				.put(\rate, rrand(0.4, 0.75))
-				.put(\pct, rrand(0.15, 0.35) * parms[\rate])
+				.put(\pct, rrand(0.07, 0.175) * parms[\rate])
 				.put(\coords, ~pt[#[2, 3].choose][..1]);
 			~makeOne.(parms)
 		}
@@ -2602,7 +2602,7 @@ make: { |name|
 					time: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
 					amp1: BPStream(\preamp),
 					amp2: Pkey(\amp1),
-					normAmp: BPStream(\amp),
+					normAmp: 7.dbamp, // BPStream(\amp),
 					env: Pfunc { ~noiseenv },
 					lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }
 				]
@@ -2612,9 +2612,9 @@ make: { |name|
 				args: [
 					mode: Pseq([
 						Pn(\ab0, { rrand(12, 24) }),
-						Pxrand(Mode.keys.asArray.select { |key|
+						Pstutter(Pwhite(2, 6, inf), Prand(Mode.keys.asArray.select { |key|
 							key != \ab0 and: { key.asString.last == $0 }
-						}, { rrand(1, 5) })
+						}, { rrand(1, 4) }))
 					], inf),
 					freq1: BPStream(\pfreq),
 					freq2: Pif(Pfunc { ~pitchedSlideProb.coin },
@@ -2630,7 +2630,7 @@ make: { |name|
 					time: Pkey(\delta) * Pwhite(1.4, 2.1, inf),
 					amp1: BPStream(\preamp),
 					amp2: Pkey(\amp1),
-					normAmp: BPStream(\amp),
+					normAmp: 17.dbamp, // BPStream(\amp),
 					beats: Pkey(\freq1).explin(50, 1200, 1.8, 3.6),
 					env: Pfunc { ~noiseenv },
 					lpcEv: BPStream(\lpcEv) <> Pfunc { |ev| ~sanitizeEvent.(ev) }

@@ -1515,7 +1515,7 @@ p = BP(\sw);
 
 p.objects.keys.do { |key|
 	p[(key ++ "delta").asSymbol] = Pwhite(0.3, 0.8, inf);
-	p[(key ++ "sustain").asSymbol] = Pkey(\delta).linlin(0.3, 0.8, 0.9, 2.4);
+	p[(key ++ "time").asSymbol] = Pkey(\delta).linlin(0.3, 0.8, 0.9, 2.4);
 };
 
 p.sustain = Pkey(\delta) * 1.2;
