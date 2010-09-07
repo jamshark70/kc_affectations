@@ -81,25 +81,30 @@
 
 ** Head
 *** Face dance
-**** Sounds [3/7]
-***** TODO Volume tuning
+**** Sounds [7/7]
+***** DONE Volume tuning
 ***** DONE Bloops
-***** TODO Creaking (eye rolls) [0/1]
-****** TODO Creaks are too slow
+***** DONE Creaking (eye rolls) [1/1]
+****** DONE Creaks are too slow
 ***** DONE Low buzzes, analog-y (tongue rolls in mouth)
 ***** DONE Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
-***** TODO Tongue comes out, open mouth: start vocalization
+***** DONE Tongue comes out, open mouth: start vocalization
       What should I do?
       Where should I go?
       Why is it this way, and not that?
       Who is listening?
       Who is watching?
-****** TODO Fatten pitched synth
-***** TODO Smile and other emotions: vocal chatter
+****** DONE Fatten pitched synth
+***** DONE Smile and other emotions: vocal chatter
 
 
 ** Torso
-
+*** TODO Watch video!
+*** Sounds [0/3]
+**** Silences!
+**** TODO Bells
+**** TODO Washes
+**** TODO Tinkly things
 
 ** Body
 
