@@ -706,17 +706,26 @@ PR(\abstractProcess).clone {
 Proto {
 	~event = (eventKey: \singleSynthPlayNotify);
 	~numCh = 1;
-	~iMadeBus = false;
+//	~iMadeBus = false;
 	~prep = {
 		~outCh ?? { ~outCh = ~numCh };
-		~bus ?? {
+		if(~bus.notNil) {
+			~bus = SharedBus.newFrom(~bus, \notMe);
+		} {
 			~bus = Bus.control(s, max(~numCh, ~outCh));
-			~iMadeBus = true;
+			// ~iMadeBus = true;
+		};
+		if(~recvBus.notNil) {
+			~recvBus = SharedBus.newFrom(~recvBus, \notMe);
+		} {
+			~recvBus = Bus.control(s, max(~numCh, ~outCh));
+			// ~iMadeBus = true;
 		};
 		~userprep.();
 	};
 	~freeCleanup = {
-		if(~iMadeBus) { ~bus.free };
+		// if(~iMadeBus) { ~bus.free };
+		[~bus, ~recvBus].free;
 		~userfree.();
 	};
 	
@@ -738,6 +747,7 @@ make: { |name|
 		numCh: 5,
 		outCh: 8,
 		bus: ~bus,
+		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
 		playTestFile: false,
 		userprep: {
@@ -757,8 +767,8 @@ make: { |name|
 				Out.kr(outbus, data);
 			}).add;
 	
-			SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
-				var	data = In.kr(bus, ~numCh),
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, writeBus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
+				var	data = In.kr(recvBus, ~numCh),
 					avgSize = (avgTime * ControlRate.ir).trunc,
 					peak;
 			
@@ -773,7 +783,7 @@ make: { |name|
 				// peak = Peak.kr(data.last);
 				// peak.poll(stop, "peak was");
 				
-				ReplaceOut.kr(bus, data);
+				ReplaceOut.kr(writeBus, data);
 			}).add;
 	
 			~visualizer.();
@@ -803,6 +813,7 @@ make: { |name|
 		},
 		preparePlay: {
 			~bus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~outCh);
 			KrBusWatcher.register(~bus)
 		},
 		stopCleanup: {
@@ -817,6 +828,7 @@ make: { |name|
 			~fixer = nil;
 			~player = nil;
 			~bus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~outCh);
 		},
 		recvEventNotify: { |node, ev|
 			if(ev[\instrument].asString.contains("fixer")) {
@@ -829,14 +841,14 @@ make: { |name|
 			Pseq([
 				(
 					instrument: ("datafixer" ++ ~numCh).asSymbol,
-					bus: ~bus, avgTime: ~avgTime ? 0.2,
+					recvBus: ~recvBus, writeBus: ~bus, avgTime: ~avgTime ? 0.2,
 					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
 				Pfuncn({
 					(
 						instrument: if(~playTestFile) { ("data" ++ ~numCh).asSymbol } { \rest },
-						buf: ~buf, bus: ~bus, loop: 0,
+						buf: ~buf, loop: 0, bus: ~recvBus,
 						delta: ~buf.numFrames / 30,
 						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)

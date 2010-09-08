@@ -19,7 +19,7 @@ s.waitForBoot {
 	VC(\ac).env.target => MCG(0);
 
 	if(BP.exists(\di).not) {
-		Fact(\dataIn).chuck(BP(\di), nil, (bus: Bus.new(\control, 3996, 8, s)));
+		Fact(\dataIn).chuck(BP(\di), nil, (recvBus: Bus.new(\control, 3996, 8, s)));
 		
 		BP(\acDisp).free;
 		PR(\armsChord) => BP(\acDisp);
