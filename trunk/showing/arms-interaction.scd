@@ -19,10 +19,16 @@ s.waitForBoot {
 	VC(\ac).env.target => MCG(0);
 
 	if(BP.exists(\di).not) {
-		Fact(\dataIn).chuck(BP(\di), nil, (recvBus: Bus.new(\control, 3996, 8, s)));
+		Fact(\dataIn).chuck(BP(\di), nil, (
+			recvBus: Bus.new(\control, 3996, 8, s),
+			filename: "arms/locomotor_arms_solo_Laura_9-8-10.wav"
+		));
 		
 		BP(\acDisp).free;
-		PR(\armsChord) => BP(\acDisp);
+		PR(\armsChord).chuck(BP(\acDisp), nil, (
+			angleBus: BP(\di).bus.index + 1, // ??
+			rotSpeedBus: BP(\di).bus.index + 4
+		));
 		BP(\acDisp) => VC(\ac);
 		0 => BP(\acDisp);
 

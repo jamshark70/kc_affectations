@@ -3,8 +3,11 @@ ChuckableBrowser.newWindow;
 Dialog.getPaths { |paths| p = paths[0].postcs };
 "/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/arms/hands-1_data.txt"
 
+"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/locomotor_arms_solo_Laura_9-8-10.txt"
+
 d = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples/arms";
 p = d +/+ "hands-1_data2.txt";
+p = d +/+ "locomotor_arms_solo_Laura_9-8-10.txt";
 
 File.exists(p);
 

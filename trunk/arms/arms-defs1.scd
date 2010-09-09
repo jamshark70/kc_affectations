@@ -461,9 +461,9 @@ SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5|
 	);
 }).add;
 
-SynthDef(\angleAuto, { |speedMul = 1, outbus|
+SynthDef(\angleAuto, { |speedMul = 1, speedBus, outbus|
 	// leaky integrator is not leaky if coef == 1
-	ReplaceOut.kr(outbus, Integrator.kr(In.kr(outbus, 1) * speedMul * ControlDur.ir, 1).wrap(0, 2pi));
+	ReplaceOut.kr(outbus, Integrator.kr(In.kr(speedBus, 1) * speedMul * ControlDur.ir, 1).wrap(0, 2pi));
 }).add;
 
 SynthDef(\yxRatioAuto, { |inbus, outbus|
@@ -635,7 +635,7 @@ PR(\abstractProcess).clone {
 				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
 				\addToHead);
 			~angle.automate(\angleAuto,
-				[speedMul: ~speedMul.asMap],
+				[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			~yxRatio.automate(\yxRatioAuto, 
 				[inbus: BP(\di).bus.index + 7],
@@ -740,6 +740,7 @@ Proto {
 
 
 (keys: #[],
+filename: "arms/hands-1_data2.wav",
 make: { |name|
 	BP(name).free;
 	PR(\dataIn).chuck(BP(name), nil, (
@@ -748,7 +749,7 @@ make: { |name|
 		outCh: 8,
 		bus: ~bus,
 		recvBus: ~recvBus,
-		path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
+		path: topEnvironment[\sampleDir] +/+ ~filename,
 		playTestFile: false,
 		userprep: {
 			~buf = Buffer.readAndQuery(s, ~path);
