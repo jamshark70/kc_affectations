@@ -100,13 +100,16 @@
 
 ** Torso
 *** TODO Watch video!
-*** Sounds [1/3]
+*** Sounds [1/4]
 **** Silences!
 **** DONE Bells
 **** TODO Washes
-     Reuse waterpad
+     Reuse waterpad - move feet process to here!
      Keep/throw out tinkly combs?
      --- would really like to have wash fade in/out, then tinkles follow -- separate from VC
+**** TODO Melody
+     Reuse melody PR from arms, new notes, slower rhythms, shorter phrases
+     Sound? Maybe inharmonic at first, becoming clearly pitched
 **** TODO Tinkly things
 
 

@@ -393,7 +393,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 	} => PR(\trajectories);
 
 	topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
-
+	if(MBM.exists(0).not) { MIDIBufManager(nil, nil) => MBM.prNew(0) };
 };
 
 true   // avoid stupid "found nil" warning

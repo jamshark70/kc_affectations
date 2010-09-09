@@ -14,8 +14,8 @@ ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
 
 (Document.current.path.dirname.dirname +/+ "common/common-defs.scd").loadPath;
+(Document.current.path.dirname +/+ "torso-defs.scd").loadPath;
 
-//(Document.current.path.dirname +/+ "head-defs.scd").loadPath;
 ~master.doWhenReady { PeakMonitor(~master) };
 
 
@@ -232,13 +232,70 @@ p.delta = Pseq([
 // washes - feet pad didn't make the cut there, try to reuse here
 // pad is reusable, maybe change wavetables and rethink fx
 
+(
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	var out;
 
-Fact(\waterpad) => VC(\wp);
+	WrapInstr([\osc2, \vosc3map2], { |freq, bufbase, numbufs, basefreq, topfreq, gate, freqmul = 1|
+		var	baselog = log2(basefreq),
+			newfreq = freq * freqmul,
+			freqmap = ((log2(newfreq) - baselog) / (log2(topfreq) - baselog)
+				* (numbufs - 1)).clip(0, numbufs - 1.001);
+		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap]);
+	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1]]);
+	
+	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
+		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate]),
+			glatch = Latch.kr(gate, gate),
+			feg = EnvGen.kr(fenv, gate, timeScale: fenv_tscale);
+		feg = (feg - 1) * Sensitivity.kr(1, glatch, fenv_vsens) * fenv_sens + 1;
+		sig = RLPF.ar(sig, (ffreq * feg).clip(20, 18000), rq);
+		Pan2.ar(sig, pan)
+	}, [#[0, 1], \freq, \myrq, EnvSpec(Env.one), #[0, 1], #[0, 1], #[0.1, 10, \exp]]);
+
+	~target = MixerChannel(name, s, 2, 2, level: -27.dbamp, outbus: ~master, completionFunc: { |chan|
+//		~mono2Stereo = chan.playfx('1to2');
+		StaticEQ(1, \eq, 589.41, -6.457.dbamp, 1, \hishelf, 6947.785, 2.047.dbamp, 1).play(chan);
+		~ch = chan.playfx(Instr("busfx.chorus2"), #[0, 2, 2, 3, 0.0040240867741694, 0.11364637357074, 0.0036090192987437, 1.1344639929904, 0.72629173909809]);
+		~ch.doWhenPlaying { ~ch.synth.moveToTail(chan.effectgroup) };
+		// spatialization strategy isn't compatible with channel fx
+		chan.newPostSend(~glrvbmc, 0.21);
+		chan.newPostSend(~lcrvbmc, 0.98);  // rather soupy but sounds ok
+	});
+
+	~wt = #[squareAmps, sawtoothAmps].collect { |selector|
+		\makeWavetables.eval(8, s, 2048, nil, { |nh|
+			var	a = Array.perform(selector, nh), i = (0, 2 .. a.size-1).scramble;
+			i.keep((i.size * rrand(0.1, 0.2)).asInteger).do { |ind| a[ind] = 0 };
+			a
+		});
+	};
+	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: ~wt.first.first.bufnum, numbufs: `(~wt.first.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin), fenv_tscale: (3.5+4.0), detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
+// 	out.mapGlobal(\ffreq, nil, 400, \freq);
+// 	out.mapGlobal(\rq, nil, 1, \myrq);
+	out.mapGlobal(\clevel, nil, 1, \amp);
+	out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
+	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
+	out
+},
+free: {
+	[~target, ~wt].free
+},
+type: \vc) => Fact(\wtpadnofx);
+)
+
+
+Fact(\wtpadnofx) => VC(\wp);
 VC(\wp) => VP(0);
 
 SynthDescLib.at(VC(\wp).v.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 SynthDescLib.at(VC(\wp).v.nodes[0].defname.asSymbol).msgFunc.postcs
 
+VC(\wp).env.wt
+
+();
 p = Pbind(
 	\type, \voicerNote,
 	\voicer, VC(\wp).v,
@@ -246,11 +303,23 @@ p = Pbind(
 	\octave, 5 + Pwrand(#[-1, 0, 1, 2], #[1, 3, 3, 2].normalizeSum, inf),
 	\delta, Pexprand(0.5, 1.2, inf),
 	\legato, Pwhite(3.0, 6.0, inf),
-	\gate, Pwhite(0.2, 0.5, inf)
+	\fenv_tscale, Pkey(\delta) * Pkey(\legato),
+	// \gate, Pwhite(0.1, 0.8, inf),
+	\bufbase, Pstutter(Pwhite(5, 12, inf), Pseq(VC(\wp).env.wt.flop[0], inf)),
+	\angle, Ptime().neg * 2pi / 15 - 0.5pi,  // 15sec cycle
+	\pan, cos(Pkey(\angle)),
+	\gate, sin(Pkey(\angle)).linlin(-1, 1, 0.9, 0.1),
+	\vsens, 0.5
 ).play;
 
 p.stop;
 VC(\wp).env.stopfx;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
 
 
 VC(\wp).env.playfx;
@@ -258,3 +327,13 @@ VC(\wp).env.fx.trace
 
 u = VC(\wp).env.levelSync;
 u.remove;
+
+
+Fact(\waterch) => BP(\wc);
+BP(\wc) => VC(\wp);
+0 => BP(\wc);
+
+p = BP(\wc);
+p.child.argPairs = [fenv_tscale: Pkey(\length)];
+
+VC(\wp).v.trace
