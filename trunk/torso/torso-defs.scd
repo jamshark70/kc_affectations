@@ -122,9 +122,10 @@ make: { |name|
 	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: ~wt.first.first.bufnum, numbufs: `(~wt.first.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin), fenv_tscale: (3.5+4.0), detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
 // 	out.mapGlobal(\ffreq, nil, 400, \freq);
 // 	out.mapGlobal(\rq, nil, 1, \myrq);
-	out.mapGlobal(\clevel, nil, 1, \amp);
-	out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
+	// out.mapGlobal(\clevel, nil, 1, \amp);
+	// out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
 	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
+	// SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 	out
 },
 free: {
@@ -205,3 +206,45 @@ PR(\arpeg1).clone {
 	BP(name).value.reset;
 	BP(name)
 }, type: \bp) => Fact(\waterch);
+
+
+(//keys: #[master, glrvbmc, lcrvbmc],
+vcKey: \wp,
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		chan: VC(~vcKey).env.target,
+		isFx: true,
+		userprep: {
+			~overlap = GenericGlobalControl(\overlap, nil, 0.7, #[0.7, 6.0, \exp]);
+			~event = ~event.copy.put(\addAction, \addToHead);
+		},
+		useGui: { |vp| ~overlap => VP(vp) },
+		userfree: { ~overlap.free },
+		delta: Pwhite(3.0, 8.0, inf),
+		sustain: Plazy { Pkey(\delta) * ~overlap },
+		objects: { (
+			shift: (
+				def: (
+					Instr("busfx.fshift", { |bus, numCh, freq1, freq2, wet1, wet2, wetProp = 0.5, time = 1|
+						var	sig = In.ar(bus, numCh),
+							freq = XLine.kr(freq1, freq2, time),
+							fx = FreqShift.ar(sig, freq),
+							weteg = EnvGen.kr(Env([wet1, wet2, wet1], [wetProp, 1-wetProp], \sin),
+								timeScale: time, doneAction: 2);
+						XFade2.ar(sig, fx, weteg.madd(2, -1))
+					}, [\audioBus, \numChannels, #[0, 900], #[0, 900], nil, nil, nil, #[0.1, 50]]);
+					Patch("busfx.fshift", [nil, 1], ReplaceOut)
+				),
+				args: [
+					time: Pkey(\sustain),
+					freq1: Pwhite(0.0, 900.0, inf),
+					freq2: Pwhite(0.0, 900.0, inf),
+					wet1: 0, wet2: 1,
+					wetProp: Pwhite(0.2, 0.8, inf)
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\watershift);

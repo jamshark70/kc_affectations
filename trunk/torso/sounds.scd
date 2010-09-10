@@ -19,12 +19,12 @@ ChuckableBrowser.newWindow;
 ~master.doWhenReady { PeakMonitor(~master) };
 
 
-m = MixerChannel(\test1, s, 1, 2/*, level: 0.1*/);
-n = MixerChannel(\test2, s, 2, 2/*, level: 0.1*/);
+m = MixerChannel(\test1, s, 1, 2/*, level: 0.1*/, outbus: ~master);
+n = MixerChannel(\test2, s, 2, 2/*, level: 0.1*/, outbus: ~master);
 m => MCG(0); n => MCG(1);
 
 [m, n].do { |mx|
-	mx.outbus = ~master;
+	// mx.outbus = ~master;
 	mx.sendsSignalTo(~glrvbmc);
 	mx.sendsSignalTo(~lcrvbmc);
 };
@@ -39,8 +39,8 @@ PeakMonitor(~master);
 PeakMonitor(~glrvbmc);
 
 
-[~glrvb, ~lcrvb].do(_.run(false));
-[~glrvb, ~lcrvb].do(_.run(true));
+[~glrvb, ~lcrvb].do(_.run(false)); [~glrvbmc, ~lcrvbmc].do(_.mute(true));
+[~glrvb, ~lcrvb].do(_.run(true)); [~glrvbmc, ~lcrvbmc].do(_.mute(false));
 
 
 VoicerProxy.new => VP.prNew(0);
@@ -337,3 +337,99 @@ p = BP(\wc);
 p.child.argPairs = [fenv_tscale: Pkey(\length)];
 
 VC(\wp).v.trace
+
+Proto {
+	~asWarp = { currentEnvironment };
+	~array = [0.0, 1.0];  // linear
+	~map = { |value| ~array.blendAt(value * (~array.size-1)) };
+	~unmap = { |value| ~array.indexInBetween(value) / (~array.size-1) };
+	~asSpecifier = 'Custom';
+} => PR(\arrayWarp);
+
+w = PR(\arrayWarp).copy;
+w.map(0.75)
+w.array = #[0, 10];
+
+w.array = #[-400, 0, -4].asSpec.map((0, 0.02 .. 1.0))
+++ #[0, 400, 4].asSpec.map((0, 0.02 .. 1.0));
+
+w.array.plot
+
+g = GenericGlobalControl(\shift, nil, 0, [-400, 400, PR(\arrayWarp).copy.array = #[-400, 0, -4].asSpec.map((0, 0.02 .. 1.0)) ++ #[0, 400, 4].asSpec.map((0, 0.02 .. 1.0))]);
+
+g.gui;
+
+q = VC(\wp).env.target.playfx { |outbus|
+	var	sig = In.ar(outbus, 1);
+	sig + FreqShift.ar(sig, g.kr, 0, 0.5.sqrt);
+};
+
+q.moveToHead(VC(\wp).env.target.effectgroup);
+
+q.trace;
+
+q.free;
+
+g.spec = #[0, 800];
+g.free;
+
+q = VC(\wp).env.target.playfx(Instr("busfx.fshift", { |bus, numCh, freq, wet|
+	var	sig = In.ar(bus, numCh),
+	fx = FreqShift.ar(sig, freq);
+	XFade2.ar(sig, fx, wet.madd(2, -1))
+}, [\audioBus, \numChannels, #[0, 900], nil]), [0, 1]);
+q.doWhenPlaying { q.synth.moveToHead(VC(\wp).env.target.effectgroup) };
+q.gui;
+
+q.synth.trace
+s.sendMsg(\n_free, 1007)
+
+// overlapping pitch shifters!
+(
+BP(\shfx).free;
+PR(\basicSynthChooser).chuck(BP(\shfx), nil, (
+	chan: VC(\wp).env.target,
+	isFx: true,
+	userprep: {
+		~overlap = GenericGlobalControl(\overlap, nil, 0.7, #[0.7, 6.0, \exp]);
+		~event = ~event.copy.put(\addAction, \addToHead);
+	},
+	useGui: { |vp| ~overlap => VP(vp) },
+	userfree: { ~overlap.free },
+	delta: Pwhite(3.0, 8.0, inf),
+	sustain: Plazy { Pkey(\delta) * ~overlap },
+	objects: { (
+		shift: (
+			def: (
+				Instr("busfx.fshift", { |bus, numCh, freq1, freq2, wet1, wet2, wetProp = 0.5, time = 1|
+					var	sig = In.ar(bus, numCh),
+						freq = XLine.kr(freq1, freq2, time),
+						fx = FreqShift.ar(sig, freq),
+						weteg = EnvGen.kr(Env([wet1, wet2, wet1], [wetProp, 1-wetProp], \sin),
+							timeScale: time, doneAction: 2);
+					XFade2.ar(sig, fx, weteg.madd(2, -1))
+				}, [\audioBus, \numChannels, #[0, 900], #[0, 900], nil, nil, nil, #[0.1, 50]]);
+				Patch("busfx.fshift", [nil, 1], ReplaceOut)
+			),
+			args: [
+				time: Pkey(\sustain),
+				freq1: Pwhite(0.0, 900.0, inf),
+				freq2: Pwhite(0.0, 900.0, inf),
+				wet1: 0, wet2: 1,
+				wetProp: Pwhite(0.2, 0.8, inf)
+			]
+		)
+	) }
+));
+0 => BP(\shfx);
+)
+
+Spec.specs[\audiobus].postcs
+
+q = BP(\shfx);
+q.shiftfreq1 = Pwhite(0.0, 900.0, inf);
+q.shiftfreq2 = Pwhite(0.0, 900.0, inf);
+
+
+WrapInstr("test.piano", {
+	MdaPiano
