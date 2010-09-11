@@ -431,5 +431,122 @@ q.shiftfreq1 = Pwhite(0.0, 900.0, inf);
 q.shiftfreq2 = Pwhite(0.0, 900.0, inf);
 
 
-WrapInstr("test.piano", {
-	MdaPiano
+// nice that it works but maybe not this piece
+
+WrapInstr("test.piano", { |freq, gate|
+	var vel = Latch.kr(gate, gate) * 127,
+		sig = MdaPiano.ar(freq, gate, vel /*, decay: 0.8, release: 0.8, hard: 0.8, velhard: 0.8, muffle: 0.8, velmuff: 0.8, velcurve: 0.8, stereo: 0.2, tune: 0.5, random: 0.1, stretch: 0.1, sustain: 0, mul: 1, add: 0*/ );
+	DetectSilence.ar(sig, 0.001, doneAction: 2);
+	sig
+}, [\freq, NoLagControlSpec(0, 1)]);
+
+v.free;
+v = Voicer(20, WrapInstr("test.piano"), target: n);
+
+z = v.gate(440, 2, 1.0);
+z.trace;
+
+p = Pbind(
+	\type, \voicerNote,
+	\voicer, v,
+	// ok
+	\degree, 22 - Pexprand(1, 36, inf).trunc,
+	// crash
+	// \degree, 7 - Pexprand(-14, 21, inf).trunc,
+	\delta, Pwrand([Pn(0.125, 2), 0.25, 0.5, 0.75], #[1, 3, 2, 1].normalizeSum, inf),
+	\legato, Prand(#[0.5, 0.9, 1.8], inf),
+	\gate, Pexprand(0.4, 1.0, inf)
+).play;
+
+p.stop;
+
+e = p.asStream.next(());
+
+
+// fm for inharmonic -> harmonic spectra
+~cb = Buffer.alloc(s, 2048, 1);
+~mb = Buffer.alloc(s, 2048, 1);
+
+~cb.sine1(#[1]);
+~mb.sine1(#[1]);
+
+Library.at(WrapInstr, \osc2).keys.asArray.sort;
+WrapInstr("osc2.fm1porta").openFile;
+WrapInstr("osc2.fm1porta").listArgs;
+
+//v = MonoPortaVoicer(1, WrapInstr("osc2.fm1porta"), [car_buf: ~cb, mod_buf: ~mb, ], target: m);
+v = WrapInstr("osc2.fm1porta").miditestMono(0, [car_buf: ~cb, mod_buf: ~mb, ], target: m);
+
+v.trigger(440, 0.8);
+v.globalControls[\mod_ratio].watch.automate(\ctlEnv, [connect: 0, env: Env(#[2.7, 2.0], #[8])]);
+v.globalControls[\mod_ratio].autoSynth.trace;
+
+v.releaseAll;
+v.globalControls[\mod_ratio].stopWatching;
+
+(
+p = (Pfunc { |ev|
+	if(ev[\autoEv][\shouldPlay]) {
+		ev[\autoEv].put(\delta, 0).debug("\n\nauto").yield;
+	};
+	ev.put(\autoEv, nil).debug("\nnote")
+}
+<>
+Pbind(
+	\type, \voicerNote,
+	\voicer, v,
+	// \reartic, 0.3.asPattern.coin,  // OMG this really works!
+	\n, Pwhite(2, 5, inf),
+	\rearticNext, Pseq([Pn(false, { |ev| ev[\n] }), true], inf),
+	\legato, Pif(Pkey(\rearticNext), 0.9, 1.1),
+	\delta, Pwhite(1.5, 2.5, inf),
+	\freqlag, Pkey(\delta) * Pkey(\legato) * 0.8, // Pwhite(0.4, 0.7, inf),
+	\degree, Paccumbounce(0, 14, Pwrand(#[-2, -1, 1, 2], #[1, 2, 3, 2].normalizeSum, inf), inf),
+	\autoEv, Pbind(
+		\type, \note,
+		\instrument, \ctlEnv,
+		\outbus, v.globalControls[\mod_ratio].bus,
+		\connect, 0,
+		\env, Pfunc { Env([rrand(1.4, 2.7), 2], #[1]) },
+		// HACK, not right
+		\time, Pkey(\delta) * Pkey(\legato) * Pkey(\n),
+		\shouldPlay, Pseq([true, Pdelay(Pkey(\rearticNext), 1)], 1)
+	)
+)).play;
+)
+
+p.stop;
+v.panic;
+
+
+WrapInstr("osc2.fm2carporta", { arg freq, freqlag, gate, car_env, mod_env, mod_lev, mod_ratio,
+		detune, car_detune, car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, pan;
+	var sig, mod, car_amp, mod_amp;
+	freq = Lag.kr(freq, freqlag);
+	car_amp = Latch.kr(Sensitivity.kr(1, gate, car_vs), gate);
+	mod_amp = Latch.kr(Sensitivity.kr(1, gate, mod_vs), gate)
+		* EnvGen.kr(mod_env, gate);
+	mod_lev = mod_lev * basefreq / ((keyscale * freq) + (basefreq * (1 - keyscale)));
+	mod = Osc.ar(mod_buf, freq.madd(mod_ratio * [1, car_detune],
+		detune * [1, -1]), 0, mod_amp * mod_lev);
+	freq = freq * [1, car_detune];
+	sig = Mix(Osc.ar(car_buf, freq + (mod * freq), 0, car_amp))
+		* EnvGen.kr(car_env, gate, doneAction:2);
+	Pan2.ar(sig, pan)
+}, [\freq, \unipolar, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), [0.01, 300, \exponential], [1, 12, \linear, 0, 1], [-5, 5, \linear, 0, 0], \mydetune, \mybuf, \mybuf, nil, nil, \freq, [0.001, 1.0, \exp], nil]);
+
+WrapInstr("osc2.fm2carporta").listArgs
+
+v = WrapInstr("osc2.fm2carporta").miditestMono(0, [car_buf: ~cb, mod_buf: ~mb, car_vs: `0.8, mod_vs: `0, basefreq: `440, pan: `0, freqlag: KrNumberEditor(0.88709676265717).lag_(nil), mod_lev: 1.4667257941895, mod_ratio: 2, detune: 2.234, car_detune: 1.003, keyscale: 0.001], target: n);
+
+v.unmapGlobal(\freqlag);
+
+~cb.sine1(Array.squareAmps(3));
+~cb.sine1(Array.sawtoothAmps(3));
+~cb.sine1(#[1]);
+
+~mb.sine1(Array.sawtoothAmps(5));
+
+~mb.plotWavetable;
+
+v.trace;
