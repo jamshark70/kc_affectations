@@ -749,7 +749,6 @@ PR(\abstractProcess).clone {
 	~modREnv = Pfunc { Env([rrand(2.0, 4.0), 3], #[1], \sin) };
 	~envPat = Plazy({ Pbind(
 		\instrument, BPStream(\envDef),
-		// CHANGE ME!
 		\time, Pkey(\totalDur) * BPStream(\xyProportion),
 		\connect, 0,
 		\env, BPStream(\modREnv)
