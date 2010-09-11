@@ -577,8 +577,8 @@ Fact(\armsChordVC).chuck(VC(\tmel), nil, (
 	customize: { |v|
 		v.mapGlobal(\mod_ratio, nil, 3, #[1, 10, \exp]);
 		v.mapGlobal(\mod_lev, nil, 3.3, #[0.01, 15, \exp]);
-		v.mapGlobal(\distance, nil, 10, #[5, 20]);
-		v.mapGlobal(\pan, nil, 0, \bipolar);
+		// v.mapGlobal(\distance, nil, 10, #[5, 20]);
+		// v.mapGlobal(\pan, nil, 0, \bipolar);
 	}
 ));
 
@@ -645,29 +645,117 @@ PR(\abstractProcess).clone {
 		~event.proto_(topEnvironment[\rvbEvent].proto);
 		~reset.();
 	};
-	
+
 	~rewriteProb = 0.3;
 	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
 	~phraseIndex = Pfunc { ~phrases.size.rand };
 	~phrases = [
-		#[]
+		#[7, 8],
+		#[7, 5, 7, 6] 
 	];
+	~octOffset = 35;
+	~mode = \d;
+	~dur = Pexprand(1.2, 3.0, inf);
+	~amp = 0.3;
+	~frlagProp = Pwhite(0.5, 0.8, inf);
+	~freqlag = Plazy({ Pfunc({ |ev| ev[\note].length }) * BPStream(\frlagProp) });
 
 	~asPattern = {
+		var	phr;
 		// ~makeStreams.();
 		Pseq([
-			Plazy({ ~makePhrase.() }),
-			if(~continuous) {
-				Plazy({ |ev| Event.silent(~restStream.next(ev)) })
-			}
+			Plazy({ |ev|
+				if((phr = ~makePhrase.(ev)).notNil) { phr }
+					{ BP(~collIndex).stop(0); nil }  // force stop
+			}),
+			Plazy({ |ev|
+				if(~continuous) {
+					Event.silent(~restStream.next(ev))
+				} {
+					BP(~collIndex).stop(0); nil
+				}
+			})
 		], inf)
 	};
 
-	~makePhrase = {
+	~makePhrase = { |ev|
 		// one buslock per phrase; need to know total dur in advance
+		var	phrI = ~phraseIndexStream.next,
+			notes, durs, lock,
+			once = true;
+		if(phrI.notNil) {
+			lock = PR(\busLock).copy.prep((numCh: 2, rate: \control));
+			notes = \patRejectLastN.eval(~rewriters[phrI].asStream, 1).all;
+			durs = ~durStream.nextN(notes.size, ev);
+			notes = [notes, durs, durs + 0.01, 0.5].asNotes;
+			Pfunc({ |ev|
+				var xyEv;
+				if(once) {
+					xyEv = ~xyPatStream.next(ev);
+					xyEv !? {  // DON'T YIELD NIL!!!
+						xyEv.put(\delta, 0)
+						.put(\chan, nil)
+						.put(\bus, lock/*.listVars*/.bus)
+						.put(\parent, ProtoEvent(\singleSynthPlayer).v.parent)
+						.yield
+					};
+					xyEv = ~envPatStream.next(ev);
+					xyEv !? {  // DON'T YIELD NIL!!!
+						xyEv.put(\delta, 0)
+						.put(\chan, nil)
+						.put(\bus, ev[\voicer].globalControls[\mod_ratio].bus)
+						.put(\parent, ProtoEvent(\singleSynthPlayer).v.parent)
+						.yield
+					};
+					// why? event must .play before ev[\id] is available
+					thisThread.clock.sched(0.01, {
+						lock.addNode(ev[\voicer].latest.synth);
+						nil
+					});
+					once = false;
+				};
+				ev
+			})
+			<>
+			Pbind(
+				\note, Pseq(notes, 1) + BPStream(\octOffset),
+				\mode, BPStream(\mode),
+				\totalDur, durs.sum,
+				\freqlag, BPStream(\freqlag),
+				#[pan, distance], (lock.bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol },
+				\finalAmp, BPStream(\amp)
+			)
+		};  // else returns nil, stopping the process
 	};
 
-	~streamKeys = #[xyPat, rewriteLevel, rest];
+	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
+	~pan2 = Pkey(\x1).neg;
+	~yNear = 5;
+	~yFar = 20;
+	~xyProportion = Pwhite(0.6, 0.9, inf);
+	~xyDef = \xylin;
+
+	~xyPat = Plazy({ Pbind(
+		\instrument, BPStream(\xyDef),
+		// CHANGE ME!
+		\sustain, Pkey(\totalDur) * BPStream(\xyProportion),
+		\x1, BPStream(\pan1),
+		\x2, BPStream(\pan2),
+		\y1, BPStream(\yNear),
+		\y2, BPStream(\yFar)
+	) });
+
+	~envDef = \ctlEnv;
+	~modREnv = Pfunc { Env([rrand(2.0, 4.0), 3], #[1], \sin) };
+	~envPat = Plazy({ Pbind(
+		\instrument, BPStream(\envDef),
+		// CHANGE ME!
+		\time, Pkey(\totalDur) * BPStream(\xyProportion),
+		\connect, 0,
+		\env, BPStream(\modREnv)
+	) });
+
+	~streamKeys = #[xyPat, envPat, rewriteLevel, rest, phraseIndex, dur];
 	~makeStreams = {
 		~streamKeys.do { |key|
 			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
@@ -675,19 +763,18 @@ PR(\abstractProcess).clone {
 	};
 
 	~makeRewriters = {
-		var	self = currentEnvironment;
+		var	self = currentEnvironment, rew;
 		~rewriters = ~phrases.collect { |row|
-			PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
+			rew = PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
 				(_.notNil) -> { |item, level, inval|
 					// self: this runs inside the rewriter Proto object
 					if(self[\rewriteProb].coin) {
 						item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
 					} { [item] }
 				}
-			]).keepLowerLevels_(true)
+			]).keepLowerLevels_(true);
 		};
 	};
-};
 
 	~reset = {
 		~makeStreams.();
@@ -696,3 +783,17 @@ PR(\abstractProcess).clone {
 		
 } => PR(\torsoMel);
 )
+
+BP(\tm).free;
+PR(\torsoMel) => BP(\tm);
+BP(\tm) => VC(\tmel);
+0 => BP(\tm);
+
+BP(\tm).event.put(\glrvbamt, 0.2).put(\lcrvbamt, 0.1);
+
+VC(\tmel).v.latest.synth.dependants
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;

@@ -413,7 +413,7 @@ make: { |name|
 	~def = \addRvbOut.eval((name ++ "def").asSymbol, { |pan, freq = 440, freqlag = 0, gate = 1,
 			mod_lev = 0.01, mod_ratio = 1, detune = 0, car_detune = 0.99798261661993,
 			car_vs = 0, mod_vs = 0,
-			attackTimeScale = 1, decayTimeScale = 1|
+			attackTimeScale = 1, decayTimeScale = 1, finalAmp = 1|
 		WrapInstr("osc2.fm2car_stereo").valueArray([
 			pan, freq, freqlag, gate,
 			~car_env,
@@ -422,7 +422,7 @@ make: { |name|
 			detune, car_detune,
 			~cb.bufnum, ~mb.bufnum, car_vs, mod_vs, // 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
 			440, ~keyScale, /* basefreq, keyScale */
-			attackTimeScale, decayTimeScale
+			attackTimeScale, decayTimeScale, finalAmp
 		])
 	}).add;
 	SynthDescLib.at(~def.name.asSymbol).msgFuncKeepGate = true;
