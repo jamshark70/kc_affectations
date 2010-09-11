@@ -365,11 +365,12 @@ PR(\abstractProcess).clone {
 // chords (locomotive theme)
 // reuse spatialization from feet
 
-WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_env,
+WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, freqlag = 0, gate, car_env, mod_env,
 		mod_lev, mod_ratio, detune, car_detune,
-		car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, attackTimeScale = 1, decayTimeScale = 1;
+		car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, attackTimeScale = 1, decayTimeScale = 1, finalAmp = 1;
 	var sig, mod, car_amp, mod_amp, timeScale, car_eg, hit1;
 
+	freq = Lag.kr(freq, freqlag);
 	car_eg = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]);
 		// once envelope starts going down, attack phase is over
 	hit1 = PulseCount.kr(HPZ1.kr(car_eg) < 0) > 0;
@@ -383,35 +384,44 @@ WrapInstr("osc2.fm2car_stereo", { arg physicalPan = 0, freq, gate, car_env, mod_
 	car_eg = EnvGen.kr(car_env, gate, timeScale: timeScale, doneAction:2);
 	LocalOut.kr(car_eg);
 	sig = Mix(Osc.ar(car_buf, freq + (mod * freq), 0, car_amp))
-		* car_eg;
+		* car_eg * finalAmp;
 	Pan2.ar(sig, physicalPan);
-}, [\freq, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), [0.01, 300, \exponential], [1, 12, \linear, 0, 1], [-5, 5, \linear, 0, 0], \mydetune, \mybuf, \mybuf, nil, nil, \freq, [0.001, 1.0, \exp], #[0.1, 10, \exp, 0, 1]]);
+}, [\bipolar, \freq, nil, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), [0.01, 300, \exponential], [1, 12, \linear, 0, 1], [-5, 5, \linear, 0, 0], \mydetune, \mybuf, \mybuf, nil, nil, \freq, [0.001, 1.0, \exp], #[0.1, 10, \exp, 0, 1], \amp]);
 
 
 (keys: #[master, glrvbmc, lcrvbmc],
 defaultCarDetune: 1.005716,
 defaultDetune: 1.25,
+car_amps: #[1, 2, 3].reciprocal,
+mod_amps: #[1],
+car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),
+mod_env: Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),
+keyScale: 0.28621534453893,
+defaultCarVs: 0.833,
+defaultModVs: 0.819,
+isMono: false,
+customize: nil,
 make: { |name|
 	var	args, out;
 	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master);
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
 	};
-	~cb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1, 2, 3].reciprocal) });
-	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(#[1]) });
+	~cb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(~car_amps) });
+	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(~mod_amps) });
 
-	~def = \addRvbOut.eval(\armsSpinChord, { |pan, freq = 440, gate = 1,
+	~def = \addRvbOut.eval((name ++ "def").asSymbol, { |pan, freq = 440, freqlag = 0, gate = 1,
 			mod_lev = 0.01, mod_ratio = 1, detune = 0, car_detune = 0.99798261661993,
 			car_vs = 0, mod_vs = 0,
 			attackTimeScale = 1, decayTimeScale = 1|
 		WrapInstr("osc2.fm2car_stereo").valueArray([
-			pan, freq, gate,
-			Env.adsr(0.5, 0.8, 0.75, 1.0),	// car_env
-			Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),	// mod_env
+			pan, freq, freqlag, gate,
+			~car_env,
+			~mod_env,
 			mod_lev, mod_ratio,
 			detune, car_detune,
 			~cb.bufnum, ~mb.bufnum, car_vs, mod_vs, // 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
-			440, 0.28621534453893, /* basefreq, keyScale */
+			440, ~keyScale, /* basefreq, keyScale */
 			attackTimeScale, decayTimeScale
 		])
 	}).add;
@@ -423,11 +433,16 @@ make: { |name|
 	} {
 		"VC(%): Spatialization reverbs not found.".format(name.asCompileString).warn;
 	};
-	out = Voicer(45, ~def.name, args, target: ~target);
+	if(~isMono ? false) {
+		out = MonoPortaVoicer(1, ~def.name, args, target: ~target);
+	} {
+		out = Voicer(45, ~def.name, args, target: ~target);
+	};
 	out.mapGlobal(\detune, nil, ~defaultDetune, #[-5, 5]);
 	out.mapGlobal(\car_detune, nil, ~defaultCarDetune, \mydetune);
-	out.mapGlobal(\car_vs, nil, 0.833);
-	out.mapGlobal(\mod_vs, nil, 0.819);
+	out.mapGlobal(\car_vs, nil, ~defaultCarVs);
+	out.mapGlobal(\mod_vs, nil, ~defaultModVs);
+	~customize.(out);
 	out
 },
 free: {

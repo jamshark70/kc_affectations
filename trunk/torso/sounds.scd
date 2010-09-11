@@ -487,9 +487,9 @@ v.globalControls[\mod_ratio].stopWatching;
 (
 p = (Pfunc { |ev|
 	if(ev[\autoEv][\shouldPlay]) {
-		ev[\autoEv].put(\delta, 0).debug("\n\nauto").yield;
+		ev[\autoEv].put(\delta, 0) /*.debug("\n\nauto")*/ .yield;
 	};
-	ev.put(\autoEv, nil).debug("\nnote")
+	ev.put(\autoEv, nil) //.debug("\nnote")
 }
 <>
 Pbind(
@@ -507,7 +507,7 @@ Pbind(
 		\instrument, \ctlEnv,
 		\outbus, v.globalControls[\mod_ratio].bus,
 		\connect, 0,
-		\env, Pfunc { Env([rrand(1.4, 2.7), 2], #[1]) },
+		\env, Pfunc { Env([rrand(0.7, 1.35), 1] * v.globalControls[\mod_ratio].value, #[1]) },
 		// HACK, not right
 		\time, Pkey(\delta) * Pkey(\legato) * Pkey(\n),
 		\shouldPlay, Pseq([true, Pdelay(Pkey(\rearticNext), 1)], 1)
@@ -523,6 +523,13 @@ WrapInstr("osc2.fm2carporta", { arg freq, freqlag, gate, car_env, mod_env, mod_l
 		detune, car_detune, car_buf, mod_buf, car_vs, mod_vs, basefreq, keyscale, pan;
 	var sig, mod, car_amp, mod_amp;
 	freq = Lag.kr(freq, freqlag);
+
+	// stolen from arms: 
+	car_eg = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]);
+		// once envelope starts going down, attack phase is over
+	hit1 = PulseCount.kr(HPZ1.kr(car_eg) < 0) > 0;
+	timeScale = Select.kr(hit1, [attackTimeScale, decayTimeScale]);
+
 	car_amp = Latch.kr(Sensitivity.kr(1, gate, car_vs), gate);
 	mod_amp = Latch.kr(Sensitivity.kr(1, gate, mod_vs), gate)
 		* EnvGen.kr(mod_env, gate);
@@ -541,12 +548,151 @@ v = WrapInstr("osc2.fm2carporta").miditestMono(0, [car_buf: ~cb, mod_buf: ~mb, c
 
 v.unmapGlobal(\freqlag);
 
-~cb.sine1(Array.squareAmps(3));
-~cb.sine1(Array.sawtoothAmps(3));
+~cb.sine1(Array.squareAmps(5));
+~cb.sine1(Array.sawtoothAmps(5));
 ~cb.sine1(#[1]);
 
 ~mb.sine1(Array.sawtoothAmps(5));
+~mb.sine1(#[1]);
 
-~mb.plotWavetable;
+~cb.plotWavetable;
+
+Signal.square(512, 5).plot
 
 v.trace;
+
+
+VC(\tmel).free;
+Fact(\armsChordVC).chuck(VC(\tmel), nil, (
+	defaultCarDetune: 1.005716,
+	defaultDetune: 2.234,
+	car_amps: Array.squareAmps(5),
+	mod_amps: Array.sawtoothAmps(5), //#[1],
+	car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),            
+	mod_env: Env.adsr(0.01, 2.5, 0.75, 1, curve: -2.5),
+	keyScale: 0.3669,
+	defaultCarVs: 0.145,
+	defaultModVs: 0.21,
+	isMono: true,
+	customize: { |v|
+		v.mapGlobal(\mod_ratio, nil, 3, #[1, 10, \exp]);
+		v.mapGlobal(\mod_lev, nil, 3.3, #[0.01, 15, \exp]);
+		v.mapGlobal(\distance, nil, 10, #[5, 20]);
+		v.mapGlobal(\pan, nil, 0, \bipolar);
+	}
+));
+
+VC(\tmel).env.cb.plotWavetable
+
+v = VC(\tmel).v;
+v.globalControls[\mod_ratio].watch;
+v.globalControls[\mod_ratio].value = 3
+
+
+// improved: attack speed follows gate
+(
+p = (Pfunc { |ev|
+	var aev = ev[\autoEv];
+	if(ev[\autoEv][\shouldPlay]) {
+		ev[\autoEv].put(\delta, 0)/*.debug("\n\nauto")*/.yield;
+	};
+	ev.put(\autoEv, nil) //.debug("\nnote")
+}
+<>
+Pbind(
+	\type, \voicerNote,
+	\voicer, v,
+	// \reartic, 0.3.asPattern.coin,  // OMG this really works!
+	\n, Pwhite(2, 5, inf),
+	\rearticNext, Pseq([Pn(false, { |ev| ev[\n] }), true], inf),
+	\legato, Pif(Pkey(\rearticNext), 0.9, 1.1),
+	\delta, Pwhite(1.5, 2.5, inf),
+	\freqlag, Pkey(\delta) * Pkey(\legato) * 0.8, // Pwhite(0.4, 0.7, inf),
+	\degree, Paccumbounce(0, 14, Pwrand(#[-2, -1, 1, 2], #[1, 2, 3, 2].normalizeSum, inf), inf),
+	\gate, Pclutch(Pwhite(0.2, 0.9, inf), Pdelay(Pkey(\rearticNext))),
+	\attackTimeScale, Pkey(\gate).linlin(0, 1, 4, 0.4),
+	\autoEv, Pbind(
+		\type, \note,
+		\instrument, \ctlEnv,
+		\outbus, v.globalControls[\mod_ratio].bus,
+		\connect, 0,
+		\env, Pfunc { Env([rrand(0.7, 1.35), 1] * v.globalControls[\mod_ratio].value, #[1]) },
+		// HACK, not right
+		\time, Pkey(\delta) * Pkey(\legato) * Pkey(\n),
+		\shouldPlay, Pseq([true, Pdelay(Pkey(\rearticNext), 1)], 1),
+		\group, VC(\tmel).env.target.synthgroup,
+		\addAction, \addBefore
+	)
+)).play(protoEvent: ().proto_(~rvbEvent.proto));
+)
+
+p.stop;
+BusDict
+
+v.trace
+
+
+VC(\tmel).env.mb.sine1(Array.sawtoothAmps(5));
+VC(\tmel).env.mb.sine1(#[1]);
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~continuous = false;
+
+	~prep = {
+		~event.proto_(topEnvironment[\rvbEvent].proto);
+		~reset.();
+	};
+	
+	~rewriteProb = 0.3;
+	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	~phraseIndex = Pfunc { ~phrases.size.rand };
+	~phrases = [
+		#[]
+	];
+
+	~asPattern = {
+		// ~makeStreams.();
+		Pseq([
+			Plazy({ ~makePhrase.() }),
+			if(~continuous) {
+				Plazy({ |ev| Event.silent(~restStream.next(ev)) })
+			}
+		], inf)
+	};
+
+	~makePhrase = {
+		// one buslock per phrase; need to know total dur in advance
+	};
+
+	~streamKeys = #[xyPat, rewriteLevel, rest];
+	~makeStreams = {
+		~streamKeys.do { |key|
+			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
+		}
+	};
+
+	~makeRewriters = {
+		var	self = currentEnvironment;
+		~rewriters = ~phrases.collect { |row|
+			PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
+				(_.notNil) -> { |item, level, inval|
+					// self: this runs inside the rewriter Proto object
+					if(self[\rewriteProb].coin) {
+						item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+					} { [item] }
+				}
+			]).keepLowerLevels_(true)
+		};
+	};
+};
+
+	~reset = {
+		~makeStreams.();
+		~makeRewriters.();
+	};
+		
+} => PR(\torsoMel);
+)
