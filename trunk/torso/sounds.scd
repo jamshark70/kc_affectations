@@ -32,6 +32,7 @@ m => MCG(0); n => MCG(1);
 ~master => MCG(7);
 ~glrvbmc => MCG(5);
 ~lcrvbmc => MCG(6);
+~cRvbMc => MCG(4);
 
 PeakMonitor(m);
 PeakMonitor(n);
@@ -564,7 +565,7 @@ v.trace;
 
 VC(\tmel).free;
 Fact(\armsChordVC).chuck(VC(\tmel), nil, (
-	defaultCarDetune: 1.005716,
+	defaultCarDetune: 1.0066,
 	defaultDetune: 2.234,
 	car_amps: Array.squareAmps(5),
 	mod_amps: Array.sawtoothAmps(5), //#[1],
@@ -572,11 +573,13 @@ Fact(\armsChordVC).chuck(VC(\tmel), nil, (
 	mod_env: Env.adsr(0.01, 2.5, 0.75, 1, curve: -2.5),
 	keyScale: 0.3669,
 	defaultCarVs: 0.145,
-	defaultModVs: 0.21,
+	defaultModVs: 0.145,
 	isMono: true,
+	cRvbMc: topEnvironment[\cRvbMc],
 	customize: { |v|
+		~target.newPostSend(~cRvbMc, 1.2);
 		v.mapGlobal(\mod_ratio, nil, 3, #[1, 10, \exp]);
-		v.mapGlobal(\mod_lev, nil, 3.3, #[0.01, 15, \exp]);
+		v.mapGlobal(\mod_lev, nil, 1.6, #[0.01, 15, \exp]);
 		// v.mapGlobal(\distance, nil, 10, #[5, 20]);
 		// v.mapGlobal(\pan, nil, 0, \bipolar);
 	}
@@ -640,18 +643,25 @@ VC(\tmel).env.mb.sine1(#[1]);
 PR(\abstractProcess).clone {
 	~event = (eventKey: \voicerNote);
 	~continuous = false;
+	~alwaysReset = false;
+	~continuous_ = { |bool = false|
+		~continuous = ~alwaysReset = bool;
+		currentEnvironment
+	};		
 
 	~prep = {
-		~event.proto_(topEnvironment[\rvbEvent].proto);
+		~event.proto_(topEnvironment[\rvbEvent].proto.copy.putAll((distNear: 5, distFar: 50)));
 		~reset.();
 	};
 
 	~rewriteProb = 0.3;
-	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	~rewriteLevel = Pwhite(1, 3, inf); // Pseq([1, 2, Pwhite(1, 3, inf)], 1);
 	~phraseIndex = Pfunc { ~phrases.size.rand };
 	~phrases = [
 		#[7, 8],
-		#[7, 5, 7, 6] 
+		#[7, 4, 5, 7, 8],
+		#[7, 5, 7, 6],
+		#[7, 4, 2, 5, 6]
 	];
 	~octOffset = 35;
 	~mode = \d;
@@ -659,10 +669,12 @@ PR(\abstractProcess).clone {
 	~amp = 0.3;
 	~frlagProp = Pwhite(0.5, 0.8, inf);
 	~freqlag = Plazy({ Pfunc({ |ev| ev[\note].length }) * BPStream(\frlagProp) });
+	~gate = 0.2;
+	~rest = 3;
 
 	~asPattern = {
 		var	phr;
-		// ~makeStreams.();
+		~makeStreams.();
 		Pseq([
 			Plazy({ |ev|
 				if((phr = ~makePhrase.(ev)).notNil) { phr }
@@ -670,12 +682,18 @@ PR(\abstractProcess).clone {
 			}),
 			Plazy({ |ev|
 				if(~continuous) {
-					Event.silent(~restStream.next(ev))
+					// currentEnvironment.listVars;
+					Pn((note: SequenceNote(#[], ~restStream.next(ev), 1, 1)), 1)
+					// (freq: #[], delta: ~restStream.next(ev))
+					// Event.silent(~restStream.next(ev))
 				} {
 					BP(~collIndex).stop(0); nil
 				}
 			})
-		], inf)
+		], inf)/*.collect { |ev|
+			ev.tryPerform(\at, \note).postcs;
+			ev
+		}*/
 	};
 
 	~makePhrase = { |ev|
@@ -687,7 +705,7 @@ PR(\abstractProcess).clone {
 			lock = PR(\busLock).copy.prep((numCh: 2, rate: \control));
 			notes = \patRejectLastN.eval(~rewriters[phrI].asStream, 1).all;
 			durs = ~durStream.nextN(notes.size, ev);
-			notes = [notes, durs, durs + 0.01, 0.5].asNotes;
+			notes = [notes, durs, durs + 0.01, ~gateStream.next(ev)].asNotes;
 			Pfunc({ |ev|
 				var xyEv;
 				if(once) {
@@ -730,8 +748,8 @@ PR(\abstractProcess).clone {
 
 	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
 	~pan2 = Pkey(\x1).neg;
-	~yNear = 5;
-	~yFar = 20;
+	~yNear = 22;
+	~yFar = 50;
 	~xyProportion = Pwhite(0.6, 0.9, inf);
 	~xyDef = \xylin;
 
@@ -746,18 +764,22 @@ PR(\abstractProcess).clone {
 	) });
 
 	~envDef = \ctlEnv;
-	~modREnv = Pfunc { Env([rrand(2.0, 4.0), 3], #[1], \sin) };
+	~randModStart = Pwhite(2.0, 4.0, inf);
+	~modREnv = Pfunc { |ev| Env([~randModStartStream.next(ev), 3], #[1], \sin) };
+	~envProportion = Pwhite(0.4, 0.7, inf);
 	~envPat = Plazy({ Pbind(
 		\instrument, BPStream(\envDef),
-		\time, Pkey(\totalDur) * BPStream(\xyProportion),
+		\time, Pkey(\totalDur) * BPStream(\envProportion),
 		\connect, 0,
 		\env, BPStream(\modREnv)
 	) });
 
-	~streamKeys = #[xyPat, envPat, rewriteLevel, rest, phraseIndex, dur];
-	~makeStreams = {
+	~streamKeys = #[xyPat, envPat, rewriteLevel, rest, phraseIndex, dur, randModStart, gate];
+	~makeStreams = { |forceReset = false|
 		~streamKeys.do { |key|
-			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
+			if(forceReset or: { (key ++ "Stream").asSymbol.envirGet.isNil }) {
+				~makeStreamForKey.(key)
+			};
 		}
 	};
 
@@ -776,7 +798,7 @@ PR(\abstractProcess).clone {
 	};
 
 	~reset = {
-		~makeStreams.();
+		~makeStreams.(true);
 		~makeRewriters.();
 	};
 		
@@ -788,11 +810,86 @@ PR(\torsoMel) => BP(\tm);
 BP(\tm) => VC(\tmel);
 0 => BP(\tm);
 
+BP(\tm).randModStart = 3.0;
+// BP(\tm).rest = 3.0;
+BP(\tm).continuous = true;
+
+BP(\tm).randModStart = Pwhite(2.0, 4.0, inf);
+
 BP(\tm).event.put(\glrvbamt, 0.2).put(\lcrvbamt, 0.1);
 
+p = BP(\tm);
+p.gate.postcs
+
+p.yNear = Pwhite(8.0, 14.0, inf);
+
+p.yNear = 22;
+p.yFar = 50;
+p.amp = 0.3;
+p.event.proto = ~rvbEvent.proto.copy.putAll((
+	distNear: 5, distFar: 50//, glrvbout: 8, lcrvbout: 8
+));
+
+p.event.put(\glrvbamt, nil).put(\lcrvbamt, nil);
+
+PeakMonitor(~cRvbMc)
+PeakMonitor(VC(\tmel).env.target);
+VC(\tmel).env.target.postSends[0].level = 1.2;
+
+~cavernousRvb.synth.trace;
+
+Instr("busfx.freeverb2").listArgs
+r = VC(\tmel).env.target.playfx(Instr("busfx.freeverb2"), [0]);
+r.gui;
+
+r.free;
+
+~lcrvb.synth.trace
+
+p.event.distNear
+
+Instr("busfx.chorus2").listArgs
+q = VC(\tmel).env.target.playfx(Instr("busfx.chorus"), [0, 2]); q.gui;
+
+q.run(false);
+q.run(true);
+
+FxPatch(
+	[ 'busfx', 'chorus' ], [ 22, 2, 0.031797551618235, 0.1, 0.005, 1.0134169548268, 0.0 ]
+)
+
+FxPatch(
+	[ 'busfx', 'chorus2' ], [ 22, 2, 2, 3, 0.035944798179937, 0.32819277562721, 0.012095071265366, 2.0268339681703, 0.41011271794916 ]
+)
+
 VC(\tmel).v.latest.synth.dependants
+VC(\tmel).v.latest.synth.trace
 
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
 
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+
+// tinkles - reuse bells?
+// this is quite nice, connection to low bells
+Fact(\bells) => BP(\b);
+p = BP(\b);
+
+p.lowbellfLow = Pexprand(1600, 2400, inf);
+p.lowbellfHigh = Pkey(\fLow) * Pwhite(5.0, 8.0);
+p.delta = Pexprand(0.12, 0.6, inf);
+p.sustain = Pwhite(3.0, 7.0, inf);
+
+p.override(\lowbellfLow, Pgeom.fromEndpoints(90, 900, 18));
+
+20000/8
+
+p.lowbellfHigh.postcs
+
+// rather quiet; even 0.1 is OK
+p.lowbellatten = 0.05
+
+PeakMonitor(BP(\b).chan)
+
+// rework Klank as effect for chord process

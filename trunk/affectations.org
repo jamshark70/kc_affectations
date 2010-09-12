@@ -73,6 +73,7 @@
 
 
 * For premiere
+  DEADLINE: <2010-10-21 Thu>
 ** Feet
 
 
@@ -100,17 +101,23 @@
 
 ** Torso
 *** TODO Watch video!
-*** Sounds [1/4]
+**** TODO What to do with the hopping theme?
+**** Pauses on the box
+*** Sounds [2/4]
 **** Silences!
 **** DONE Bells
 **** TODO Washes
      Reuse waterpad - move feet process to here!
      Keep/throw out tinkly combs?
      --- would really like to have wash fade in/out, then tinkles follow -- separate from VC
-**** TODO Melody
+**** DONE Melody
      Reuse melody PR from arms, new notes, slower rhythms, shorter phrases
      Sound? Maybe inharmonic at first, becoming clearly pitched
 **** TODO Tinkly things
+     Raise pitch and speed up rhythm of low bells - nice
+     Nice for Stephen's solo, with melodic fragments
+     Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
+     Later, integrate tinkles with chords(?) -- rework Klank as effect
 
 
 ** Body

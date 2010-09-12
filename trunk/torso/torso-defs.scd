@@ -1,7 +1,21 @@
 
 // just in case... (won't load twice if already loaded)
-(thisProcess.nowExecutingPath.dirname.dirname +/+ "common/common-defs.scd").loadPath;
+// (thisProcess.nowExecutingPath.dirname.dirname +/+ "common/common-defs.scd").loadPath;
 
+// using armsChordVC for a different sound
+// this loads common-defs, so above is deprecated
+(thisProcess.nowExecutingPath.dirname.dirname +/+ "arms/arms-defs1.scd").loadPath;
+
+s.doWhenBooted {
+	if(~cRvbMc.tryPerform(\fadergroup).isNil) {
+		~cRvbMc = MixerChannel(\rvbC, s, 2, 2, level: 1, outbus: ~master);
+	};
+	if(~cavernousRvb.isPlaying.not) {
+		~cRvbMc.doWhenReady {
+			~cavernousRvb = ~cRvbMc.playfx(Instr("busfx.freeverb2"), [0, 1/*0.69354838132858*/, 0.90322577953339, 0.5, 1.0])
+		}
+	};
+};
 
 (
 keys: #[master, glrvbmc, lcrvbmc],
