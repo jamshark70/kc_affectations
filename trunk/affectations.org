@@ -100,7 +100,7 @@
 
 
 ** Torso
-*** TODO Watch video!
+*** TODO [0/1] Watch video!
 **** TODO What to do with the hopping theme?
 **** Pauses on the box
 *** Sounds [2/4]

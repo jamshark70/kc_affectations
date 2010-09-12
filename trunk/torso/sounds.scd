@@ -43,6 +43,8 @@ PeakMonitor(~glrvbmc);
 [~glrvb, ~lcrvb].do(_.run(false)); [~glrvbmc, ~lcrvbmc].do(_.mute(true));
 [~glrvb, ~lcrvb].do(_.run(true)); [~glrvbmc, ~lcrvbmc].do(_.mute(false));
 
+~cavernousRvb.run(false); ~cRvbMc.mute(true);
+~cavernousRvb.run(true); ~cRvbMc.mute(false);
 
 VoicerProxy.new => VP.prNew(0);
 4.do { VP(0).v.addControlProxy(VoicerGCProxy(nil, VP(0).v), addAlways: true) };
@@ -893,3 +895,150 @@ p.lowbellatten = 0.05
 PeakMonitor(BP(\b).chan)
 
 // rework Klank as effect for chord process
+(
+(
+//keys: #[master, glrvbmc, lcrvbmc],
+parentChan: nil,
+longDelayMax: 8,
+longDelayTime: 8,
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayer),
+		alwaysReset: true,
+		chan: ~parentChan,
+		longDelayMax: ~longDelayMax,
+		longDelayTime: ~longDelayTime,
+		isFx: true,
+		// master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
+		userprep: {
+			if(~chan.isNil) {
+				Error("Could not instantiate Fact(\\bellfx) -- parent mixerchannel not supplied")
+				.throw;
+			};
+			~longDelayBuf = Buffer.allocConsecutive(~chan.outChannels, s, (~longDelayMax * s.sampleRate).nextPowerOfTwo, 1);
+			~delayBus = Bus.audio(s, ~chan.outChannels);
+			~event.put(\chan, nil);
+			// #[glrvbmc, lcrvbmc].do { |key|
+			// 	key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			// };
+			// ~event.proto = topEnvironment[\rvbEvent].proto;
+			// ~event.put(\glrvbamt, 0.395).put(\lcrvbamt, 0.232);
+		},
+		userfree: {
+			~longDelayBuf.free;
+			// 	#[glrvbmc, lcrvbmc].do { |key|
+			// 		key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			// 	};
+		},
+		sustain: Pwhite(9.0, 18.0, inf),
+		delta: Pif(Pwhite(0.0, 1.0, inf) < 0.2, Pwhite(1.5, 4.0, inf), Pwhite(10.0, 16.0, inf)),
+		delta: Pseq([
+			Plazy({
+				var	last = rrand(0.9, 1.2);
+				Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
+			}),
+			Pwhite(10.0, 16.0, 1)
+		], inf),
+		preparePlay: {
+			~dlySynth ?? {
+				~dlySynth = SynthDef(\bufdelay2, { |inbus, outbus, buf, delaytime|
+					Out.ar(outbus,
+						BufDelayL.ar(buf + #[0, 1], In.ar(inbus, 2), delaytime: delaytime)
+					)
+				}).play(~chan.effectgroup, [
+					inbus: ~chan.inbus, outbus: ~delayBus,
+					buf: ~longDelayBuf, delaytime: ~longDelayTime
+				], \addToHead);
+			}
+		},
+		stopCleanup: {
+			~dlySynth !? { ~dlySynth.free; ~dlySynth = nil; }
+		},
+		objects: { (
+			lowbell: (
+				def: SynthDef(\bellfx10, { |inbus, outbus, atten = 0.02, time = 9, //pan = 0,
+					fLow = 80, fHigh = 240, dLow = 0.45, dHigh = 1.0,
+					beaterFilt = 18000, beaterDec = 0.1,
+					// chfreq = 0.6, chamt = 0.002, chdly = 0.008,
+					pan = 0, panWidth = 1, panFreq = 1,
+					wet = 0.8|
+					var	n = 10,
+						in = In.ar(inbus, 2),
+						initTrig = Impulse.kr(0),
+						exc = LPF.ar(in, beaterFilt)
+							* Decay2.kr(initTrig, 0.01, beaterDec),
+						fpoints = (0..n).linlin(0, n, fLow, fHigh),
+						freqs = ({ |i| ExpRand(*fpoints[[i, i+1]]) } ! n).clump(2).flop,
+						sig = freqs.collect { |farray, i|
+							Klank.ar(`[
+								farray,
+								atten ! n,
+								farray.linlin(fLow, fHigh, dLow, dHigh, \none)
+							], exc[i], decayscale: time)
+						}; //,
+						// panFreq = Rand(0.4, 1.2);
+					sig = sig.collect { |chan, i|
+						Pan2.ar(chan, SinOsc.kr(panFreq, pi * i, panWidth, pan).clip(-1, 1))
+					}.sum;
+					// sig = 0.5 * (sig
+					// 	+ DelayL.ar(sig, chamt + chdly + 0.05, SinOsc.kr(chfreq, 0, chamt, chdly)));
+					// DetectSilence.ar(sig, amp: 0.001, doneAction: 2);
+					sig = Limiter.ar(sig);
+					Line.kr(0, 1, time, doneAction: 2);
+					Out.ar(outbus, sig);  // use atten to control level
+					// wet = EnvGen.kr(Env([0.001, wet, 0.001], [0.01, time], \exp),
+					// 	doneAction: 2).madd(2, -1);
+					// ReplaceOut.ar(outbus, XFade2.ar(in, sig, wet));
+				}),
+				args: [
+					inbus: Pn(~delayBus, inf),
+					target: Pfunc { ~dlySynth },
+					bus: ~chan.inbus,
+					addAction: \addAfter,
+					time: BPStream(\sustain),
+					// delta: Pkey(\time) * Pexprand(0.8, 1.1, inf), // + Pwhite(0.2, 1.0, inf),
+					fLow: Pif(Pkey(\delta) < 5, Pexprand(120, 300, inf), Pexprand(40, 70, inf)),
+					fHigh: Pkey(\fLow) * Pwhite(4.0, 11.0, inf),
+					beaterFilt: Pexprand(1500, 5000, inf),
+					atten: 0.025,
+					pan: 0,
+					panWidth: 1
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\bellfx);
+)
+
+BP(\bfx).free;
+Fact(\bellfx).chuck(BP(\bfx), nil, (parentChan: VC(\wp).env.target));
+
+p = BP(\bfx);
+
+p.lowbellfLow = Pexprand(1600, 2400, inf);
+p.lowbellfHigh = Pkey(\fLow) * Pwhite(5.0, 8.0);
+p.delta = Pexprand(0.12, 0.6, inf);
+p.sustain = Pwhite(3.0, 7.0, inf);
+
+p.lowbellatten = 0.1;
+
+p.debug = true;
+p.debug = false;
+
+p.event.addAction = \addToHead;
+
+p.dlySynth.trace
+
+~master.startRecord;
+
+BP(#[wc, bfx]).play(0);
+p.lowbellfLow = Pexprand(1600, 2400, inf);
+p.lowbellfHigh = Pkey(\fLow) * Pwhite(5.0, 8.0);
+p.delta = Pexprand(0.12, 0.6, inf);
+p.sustain = Pwhite(3.0, 7.0, inf);
+
+BP(#[wc, bfx]).stop;
+
+~master.stopRecord;
