@@ -8,13 +8,13 @@
 * Schedules
 
 
-* For showing
+* DONE For showing
   DEADLINE: <2010-08-31 Tue>
-** Misc [2/3]
+** Misc [3/3]
 *** DONE Email Lorne re: Linux setup, video times
 *** DONE Email ateam re: my schedule
 
-*** TODO drum8 stopped in a test? why?
+*** DONE drum8 stopped in a test? why?
 ** Feet [1/1]
 *** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
 *** Optional [0/3]
@@ -72,7 +72,24 @@
 *** TODO [#C] LPC for face/section start
 
 
-* For premiere
+* Residency <2010-09-27 Mon>--<2010-10-02 Sat>
+** TODO Place to put in IP address/port
+** Data for Lorne:
+*** Position data
+*** Other CC data
+*** Note data per instrument
+** TODO [0/5] Data extraction notes
+*** TODO Feet
+*** TODO Arms
+*** TODO Head
+*** TODO Torso
+*** TODO Body
+
+** Debugging
+*** TODO drum8 stopped in a test? why?
+
+
+* TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
 
