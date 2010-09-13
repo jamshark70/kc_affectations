@@ -78,8 +78,32 @@
 *** Position data
 *** Other CC data
 *** Note data per instrument
-** TODO [0/5] Data extraction notes
-*** TODO Feet
+** TODO [1/5] Data extraction notes
+*** DONE Feet
+    How many feet are moving?
+    Together or separate?
+    Pauses (and triggers for the three poses in Laura's theme).
+    Hop.
+    Direction? Their 90 degree turns will be awfully hard to read, but very useful.
+    We talked about animated circles or ovals appearing on screen in sync with the footsteps. I could use triggers for those.
+    1:51 -- slinky -- maybe measure their distribution by averaging the X positions? (mean - xmin) / (xmax - xmin) will be lower when Stephen is further to the left
+    I'm having trouble imagining distinguishing characteristics for the walking. I know there are three locomotive themes that the dancers do sometimes together and sometimes in counterpoint. Distinguishing them musically is a "nice to have" for me but only if I have time left over after working on the sections where I don't have any material. We might have to navigate through the different walking constructions based on the segment-to-segment cues that Lorne will do by hand.
+    Pause at 2:00 -- and hop to start moving again
+    2:30 -- a musically useful pause, but how to read their movement toward backstage?
+    2:35 -- movement in canon, going into Laura's three poses
+    2:50 -- multiple speeds -- speed shouldn't be too hard to read
+    3:36 -- slower movements, adding arms -- for the music, here I have a sketch of building harmony by overlapping two-note chords, would be nice to trigger these based on their movements, or if not trigger directly, then control pacing by their level of activity
+    4:02 -- I don't know how much you can get when they are lying on their backs -- some parameters for their degree of leaning? If technically feasible
+    4:34 -- walking again -- can we get any of the arm swinging?
+    4:49 -- I really love that gesture -- I know it's hard to read. All three parts -- Laura's slide, the inversion, and the other inversion -- have some higher-speed movement followed by a pause. Maybe some continuous data going higher when they are in transition between poses? (I'm writing more about this because it's such great movement, and I want to do something special musically for it.)
+    5:19 -- stop walking, and lean -- another musically suggestive gesture! They're moving horizontally before the lean -- I'd watch for the feet to separate and the neck marker to move to the right of the feet.
+    5:35 -- "conflict" -- important musically but not sure how to read in video.
+    5:46 -- from camera distance, I can't make out what's happening here.
+    6:10 -- "falling" section -- also important to represent musically -- one figure's markers will have a very low y spread during the fall
+    6:28 -- height variation
+    6:52 -- multiple speeds (something comic here?)
+    7:20 -- partnering work -- new to me. Unclear what's readable here.
+    7:35 -- lifts and twirls. Would like to have some musical activity when they spin, maybe a variation of the measurement in the arms interaction demo.
 *** TODO Arms
 *** TODO Head
 *** TODO Torso
@@ -92,12 +116,28 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
+*** Sounds/processes [0/7]
+**** TODO Harmony w/ arms - refine
+**** TODO Slide/inversion gesture
+**** TODO Leaning
+**** TODO Falling
+**** TODO Conflict
+**** TODO Multiple speeds
+**** TODO [#C] Distinguish locomotive themes
+*** Data needed from Lorne
+*** Data to send to Lorne
 
 
 ** Arms
+*** Sounds/processes [0/0]
+*** Data needed from Lorne
+*** Data to send to Lorne
 
 
 ** Head
+*** Sounds/processes [0/0]
+*** Data needed from Lorne
+*** Data to send to Lorne
 *** Face dance
 **** Sounds [7/7]
 ***** DONE Volume tuning
@@ -120,24 +160,29 @@
 *** TODO [0/1] Watch video!
 **** TODO What to do with the hopping theme?
 **** Pauses on the box
-*** Sounds [2/4]
+*** Sounds [4/4]
 **** Silences!
 **** DONE Bells
-**** TODO Washes
+**** DONE Washes
      Reuse waterpad - move feet process to here!
      Keep/throw out tinkly combs?
      --- would really like to have wash fade in/out, then tinkles follow -- separate from VC
 **** DONE Melody
      Reuse melody PR from arms, new notes, slower rhythms, shorter phrases
      Sound? Maybe inharmonic at first, becoming clearly pitched
-**** TODO Tinkly things
+**** DONE Tinkly things
      Raise pitch and speed up rhythm of low bells - nice
      Nice for Stephen's solo, with melodic fragments
      Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
      Later, integrate tinkles with chords(?) -- rework Klank as effect
+*** Data needed from Lorne
+*** Data to send to Lorne
 
 
 ** Body
+*** Sounds/processes [0/0]
+*** Data needed from Lorne
+*** Data to send to Lorne
 
 
 * Sample attributions
