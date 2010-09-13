@@ -95,7 +95,7 @@ make: { |name|
 
 // washes (moved over from feet)
 
-(keys: #[master, glrvbmc, lcrvbmc],
+(keys: #[master, glrvbmc, lcrvbmc, cRvbMc],
 make: { |name|
 	var out;
 
@@ -122,7 +122,7 @@ make: { |name|
 		~ch = chan.playfx(Instr("busfx.chorus2"), #[0, 2, 2, 3, 0.0040240867741694, 0.11364637357074, 0.0036090192987437, 1.1344639929904, 0.72629173909809]);
 		~ch.doWhenPlaying { ~ch.synth.moveToTail(chan.effectgroup) };
 		// spatialization strategy isn't compatible with channel fx
-		chan.newPostSend(~glrvbmc, 0.21);
+		chan.newPostSend(~cRvbMc, 0.405);
 		chan.newPostSend(~lcrvbmc, 0.98);  // rather soupy but sounds ok
 	});
 
@@ -262,3 +262,332 @@ make: { |name|
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\watershift);
+
+
+// melody synth
+// Func, not Fact, b/c Fact-calling-a-Fact will mess up the environments
+{ |name|
+	VC(name).free;
+	topEnvironment.use {
+		Fact(\armsChordVC).chuck(VC(name), nil, (
+			defaultCarDetune: 1.0066,
+			defaultDetune: 2.234,
+			car_amps: Array.squareAmps(5),
+			mod_amps: Array.sawtoothAmps(5), //#[1],
+			car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),            
+			mod_env: Env.adsr(0.01, 2.5, 0.75, 1, curve: -2.5),
+			keyScale: 0.3669,
+			defaultCarVs: 0.145,
+			defaultModVs: 0.145,
+			isMono: true,
+			cRvbMc: topEnvironment[\cRvbMc],
+			// called within the VC's new environment
+			customize: { |v|
+				~target.newPostSend(~cRvbMc, 1.2);
+				v.mapGlobal(\mod_ratio, nil, 3, #[1, 10, \exp]);
+				v.mapGlobal(\mod_lev, nil, 1.6, #[0.01, 15, \exp]);
+				// v.mapGlobal(\distance, nil, 10, #[5, 20]);
+				// v.mapGlobal(\pan, nil, 0, \bipolar);
+			}
+		));
+	};
+} => Func(\makeTmelVC);
+
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~continuous = false;
+	~alwaysReset = false;
+	~continuous_ = { |bool = false|
+		~continuous = ~alwaysReset = bool;
+		currentEnvironment
+	};		
+
+	~prep = {
+		~event.proto_(topEnvironment[\rvbEvent].proto.copy.putAll((distNear: 5, distFar: 50)));
+		~reset.();
+	};
+
+	~rewriteProb = 0.3;
+	~rewriteLevel = Pwhite(1, 3, inf); // Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	~phraseIndex = Pfunc { ~phrases.size.rand };
+	~phrases = [
+		#[7, 8],
+		#[7, 4, 5, 7, 8],
+		#[7, 5, 7, 6],
+		#[7, 4, 2, 5, 6]
+	];
+	~octOffset = 35;
+	~mode = \d;
+	~dur = Pseq([
+		Pwhite(1.9, 3.2, 1),
+		Pswitch1([
+			Pwhite(1.9, 2.6, inf),
+			Pexprand(0.4, 0.7, inf),
+			Pexprand(0.9, 1.4, inf)
+		], Pwrand(#[0, 1, 2], #[1, 3, 5].normalizeSum, { |ev| ev[\noteCount] - 2 })),
+		Pwhite(1.9, 3.2, 1)
+	], inf); //Pexprand(1.2, 3.0, inf);
+	~amp = 0.15;
+	~frlagProp = Pwhite(0.5, 0.8, inf);
+	~freqlag = Plazy({ Pfunc({ |ev| ev[\note].length }) * BPStream(\frlagProp) });
+	~gate = 0.2;
+	~rest = 3;
+
+	~asPattern = {
+		var	phr;
+		~makeStreams.();
+		Pseq([
+			Plazy({ |ev|
+				if((phr = ~makePhrase.(ev)).notNil) { phr }
+					{ BP(~collIndex).stop(0); nil }  // force stop
+			}),
+			Plazy({ |ev|
+				if(~continuous) {
+					// currentEnvironment.listVars;
+					Pn((note: SequenceNote(#[], ~restStream.next(ev), 1, 1)), 1)
+					// (freq: #[], delta: ~restStream.next(ev))
+					// Event.silent(~restStream.next(ev))
+				} {
+					BP(~collIndex).stop(0); nil
+				}
+			})
+		], inf)/*.collect { |ev|
+			ev.tryPerform(\at, \note).postcs;
+			ev
+		}*/
+	};
+
+	~makePhrase = { |ev|
+		// one buslock per phrase; need to know total dur in advance
+		var	phrI = ~phraseIndexStream.next,
+			notes, durs, lock,
+			once = true;
+		if(phrI.notNil) {
+			lock = PR(\busLock).copy.prep((numCh: 2, rate: \control));
+			notes = \patRejectLastN.eval(~rewriters[phrI].asStream, 1).all;
+			ev[\noteCount] = notes.size;
+			durs = ~durStream.nextN(ev[\noteCount], ev);
+			notes = [notes, durs, durs + 0.01, ~gateStream.next(ev)].asNotes;
+			Pfunc({ |ev|
+				var xyEv;
+				if(once) {
+					xyEv = ~xyPatStream.next(ev);
+					xyEv !? {  // DON'T YIELD NIL!!!
+						xyEv.put(\delta, 0)
+						.put(\chan, nil)
+						.put(\bus, lock/*.listVars*/.bus)
+						.put(\parent, ProtoEvent(\singleSynthPlayer).v.parent)
+						.yield
+					};
+					xyEv = ~envPatStream.next(ev);
+					xyEv !? {  // DON'T YIELD NIL!!!
+						xyEv.put(\delta, 0)
+						.put(\chan, nil)
+						.put(\bus, ev[\voicer].globalControls[\mod_ratio].bus)
+						.put(\parent, ProtoEvent(\singleSynthPlayer).v.parent)
+						.yield
+					};
+					// why? event must .play before ev[\id] is available
+					thisThread.clock.sched(0.01, {
+						lock.addNode(ev[\voicer].latest.synth);
+						nil
+					});
+					once = false;
+				};
+				ev
+			})
+			<>
+			Pbind(
+				\note, Pseq(notes, 1) + BPStream(\octOffset),
+				\mode, BPStream(\mode),
+				\totalDur, durs.sum,
+				\freqlag, BPStream(\freqlag),
+				#[pan, distance], (lock.bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol },
+				\finalAmp, BPStream(\amp)
+			)
+		};  // else returns nil, stopping the process
+	};
+
+	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
+	~pan2 = Pkey(\x1).neg;
+	~yNear = 22;
+	~yFar = 50;
+	~xyProportion = Pwhite(0.6, 0.9, inf);
+	~xyDef = \xylin;
+
+	~xyPat = Plazy({ Pbind(
+		\instrument, BPStream(\xyDef),
+		// CHANGE ME!
+		\sustain, Pkey(\totalDur) * BPStream(\xyProportion),
+		\x1, BPStream(\pan1),
+		\x2, BPStream(\pan2),
+		\y1, BPStream(\yNear),
+		\y2, BPStream(\yFar)
+	) });
+
+	~envDef = \ctlEnv;
+	~randModStart = Pwhite(2.0, 4.0, inf);
+	~modREnv = Pfunc { |ev| Env([~randModStartStream.next(ev), 3], #[1], \sin) };
+	~envProportion = Pwhite(0.4, 0.7, inf);
+	~envPat = Plazy({ Pbind(
+		\instrument, BPStream(\envDef),
+		\time, Pkey(\totalDur) * BPStream(\envProportion),
+		\connect, 0,
+		\env, BPStream(\modREnv)
+	) });
+
+	~streamKeys = #[xyPat, envPat, rewriteLevel, rest, phraseIndex, dur, randModStart, gate];
+	~makeStreams = { |forceReset = false|
+		~streamKeys.do { |key|
+			if(forceReset or: { (key ++ "Stream").asSymbol.envirGet.isNil }) {
+				~makeStreamForKey.(key)
+			};
+		}
+	};
+
+	~makeRewriters = {
+		var	self = currentEnvironment, rew;
+		~rewriters = ~phrases.collect { |row|
+			rew = PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
+				(_.notNil) -> { |item, level, inval|
+					// self: this runs inside the rewriter Proto object
+					if(self[\rewriteProb].coin) {
+						item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+					} { [item] }
+				}
+			]).keepLowerLevels_(true);
+		};
+	};
+
+	~reset = {
+		~makeStreams.(true);
+		~makeRewriters.();
+	};
+		
+} => PR(\torsoMel);
+
+
+(
+vcKey: \tmel,
+make: { |name|
+	BP(name).free;
+	PR(\torsoMel) => BP(name);
+	if(VC.exists(~vcKey)) {
+		BP(name) => VC(~vcKey);
+	} {
+		"VC(%) not found; set voicer manually".format(~vcKey.asCompileString).warn;
+	};
+	0 => BP(name);
+}, type: \bp) => Fact(\tmelBP);
+
+
+(
+//keys: #[master, glrvbmc, lcrvbmc],
+parentChan: nil,
+longDelayMax: 8,
+longDelayTime: 8,
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayer),
+		alwaysReset: true,
+		chan: ~parentChan,
+		longDelayMax: ~longDelayMax,
+		longDelayTime: ~longDelayTime,
+		isFx: true,
+		// master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
+		userprep: {
+			if(~chan.isNil) {
+				Error("Could not instantiate Fact(\\bellfx) -- parent mixerchannel not supplied")
+				.throw;
+			};
+			~longDelayBuf = Buffer.allocConsecutive(~chan.outChannels, s, (~longDelayMax * s.sampleRate).nextPowerOfTwo, 1);
+			~delayBus = Bus.audio(s, ~chan.outChannels);
+			~attenCtl = GenericGlobalControl(\atten, nil, 0.15, #[0.01, 0.35, \exp]);
+			~event.put(\chan, nil).put(\atten, ~attenCtl.asMap);
+			// #[glrvbmc, lcrvbmc].do { |key|
+			// 	key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
+			// };
+			// ~event.proto = topEnvironment[\rvbEvent].proto;
+			// ~event.put(\glrvbamt, 0.395).put(\lcrvbamt, 0.232);
+		},
+		userfree: {
+			[~longDelayBuf, ~delayBus, ~attenCtl].free;
+			// 	#[glrvbmc, lcrvbmc].do { |key|
+			// 		key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
+			// 	};
+		},
+		delta: Pexprand(0.12, 0.6, inf),
+		sustain: Pwhite(3.0, 7.0, inf),
+		preparePlay: {
+			~dlySynth ?? {
+				~dlySynth = SynthDef(\bufdelay2, { |inbus, outbus, buf, delaytime|
+					Out.ar(outbus,
+						BufDelayL.ar(buf + #[0, 1], In.ar(inbus, 2), delaytime: delaytime)
+					)
+				}).play(~chan.effectgroup, [
+					inbus: ~chan.inbus, outbus: ~delayBus,
+					buf: ~longDelayBuf, delaytime: ~longDelayTime
+				], \addToHead);
+			}
+		},
+		stopCleanup: {
+			~dlySynth !? { ~dlySynth.free; ~dlySynth = nil; }
+		},
+		objects: { (
+			lowbell: (
+				def: SynthDef(\bellfx10, { |inbus, outbus, atten = 0.02, time = 9, //pan = 0,
+					fLow = 80, fHigh = 240, dLow = 0.45, dHigh = 1.0,
+					beaterFilt = 18000, beaterDec = 0.1,
+					// chfreq = 0.6, chamt = 0.002, chdly = 0.008,
+					pan = 0, panWidth = 1, panFreq = 1,
+					wet = 0.8|
+					var	n = 10,
+						in = In.ar(inbus, 2),
+						initTrig = Impulse.kr(0),
+						exc = LPF.ar(in, beaterFilt)
+							* Decay2.kr(initTrig, 0.01, beaterDec),
+						fpoints = (0..n).linlin(0, n, fLow, fHigh),
+						freqs = ({ |i| ExpRand(*fpoints[[i, i+1]]) } ! n).clump(2).flop,
+						sig = freqs.collect { |farray, i|
+							Klank.ar(`[
+								farray,
+								atten ! n,
+								farray.linlin(fLow, fHigh, dLow, dHigh, \none)
+							], exc[i], decayscale: time)
+						}; //,
+						// panFreq = Rand(0.4, 1.2);
+					sig = sig.collect { |chan, i|
+						Pan2.ar(chan, SinOsc.kr(panFreq, pi * i, panWidth, pan).clip(-1, 1))
+					}.sum;
+					// sig = 0.5 * (sig
+					// 	+ DelayL.ar(sig, chamt + chdly + 0.05, SinOsc.kr(chfreq, 0, chamt, chdly)));
+					// DetectSilence.ar(sig, amp: 0.001, doneAction: 2);
+					sig = Limiter.ar(sig);
+					Line.kr(0, 1, time, doneAction: 2);
+					Out.ar(outbus, sig);  // use atten to control level
+					// wet = EnvGen.kr(Env([0.001, wet, 0.001], [0.01, time], \exp),
+					// 	doneAction: 2).madd(2, -1);
+					// ReplaceOut.ar(outbus, XFade2.ar(in, sig, wet));
+				}),
+				args: [
+					inbus: Pn(~delayBus, inf),
+					target: Pfunc { ~dlySynth },
+					bus: ~chan.inbus,
+					addAction: \addAfter,
+					time: BPStream(\sustain),
+					// delta: Pkey(\time) * Pexprand(0.8, 1.1, inf), // + Pwhite(0.2, 1.0, inf),
+					fLow: Pexprand(1600, 2400, inf),
+					fHigh: Pkey(\fLow) * Pwhite(5.0, 8.0),
+// 					atten: 0.1,
+					beaterFilt: Pexprand(1500, 5000, inf),
+					pan: 0,
+					panWidth: 1
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\bellfx);

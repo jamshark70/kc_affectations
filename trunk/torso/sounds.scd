@@ -706,7 +706,8 @@ PR(\abstractProcess).clone {
 		if(phrI.notNil) {
 			lock = PR(\busLock).copy.prep((numCh: 2, rate: \control));
 			notes = \patRejectLastN.eval(~rewriters[phrI].asStream, 1).all;
-			durs = ~durStream.nextN(notes.size, ev);
+			ev[\noteCount] = notes.size;
+			durs = ~durStream.nextN(ev[\noteCount], ev);
 			notes = [notes, durs, durs + 0.01, ~gateStream.next(ev)].asNotes;
 			Pfunc({ |ev|
 				var xyEv;
@@ -827,10 +828,27 @@ p.yNear = Pwhite(8.0, 14.0, inf);
 
 p.yNear = 22;
 p.yFar = 50;
-p.amp = 0.3;
+p.amp = 0.15;
 p.event.proto = ~rvbEvent.proto.copy.putAll((
 	distNear: 5, distFar: 50//, glrvbout: 8, lcrvbout: 8
 ));
+
+p.dur = Pif(0.2.asPattern.coin, Pwhite(1.5, 2.7, inf), Pexprand(0.8, 1.8, inf));
+
+BP(\tm).dur = Pseq([
+	Pwhite(1.9, 3.2, 1),
+	Pswitch1([
+		Pwhite(1.9, 2.6, inf),
+		Pexprand(0.4, 0.7, inf),
+		Pexprand(0.9, 1.4, inf)
+	], Pwrand(#[0, 1, 2], #[1, 3, 5].normalizeSum, { |ev| ev[\noteCount] - 2 })),
+// 	Pfin({ |ev| ev[\noteCount] - 2 },
+// 		Pif(0.08.asPattern.coin, Pwhite(1.9, 3.2, inf), Pexprand(0.7, 1.5, inf))
+// 	),
+	Pwhite(1.9, 3.2, 1)
+], inf);
+
+p.rewriteProb = 0.7;
 
 p.event.put(\glrvbamt, nil).put(\lcrvbamt, nil);
 
@@ -918,7 +936,8 @@ make: { |name|
 			};
 			~longDelayBuf = Buffer.allocConsecutive(~chan.outChannels, s, (~longDelayMax * s.sampleRate).nextPowerOfTwo, 1);
 			~delayBus = Bus.audio(s, ~chan.outChannels);
-			~event.put(\chan, nil);
+			~attenCtl = GenericGlobalControl(\atten, nil, 0.15, #[0.01, 0.35, \exp]);
+			~event.put(\chan, nil).put(\atten, ~attenCtl.asMap);
 			// #[glrvbmc, lcrvbmc].do { |key|
 			// 	key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			// };
@@ -926,20 +945,13 @@ make: { |name|
 			// ~event.put(\glrvbamt, 0.395).put(\lcrvbamt, 0.232);
 		},
 		userfree: {
-			~longDelayBuf.free;
+			[~longDelayBuf, ~delayBus, ~attenCtl].free;
 			// 	#[glrvbmc, lcrvbmc].do { |key|
 			// 		key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 			// 	};
 		},
-		sustain: Pwhite(9.0, 18.0, inf),
-		delta: Pif(Pwhite(0.0, 1.0, inf) < 0.2, Pwhite(1.5, 4.0, inf), Pwhite(10.0, 16.0, inf)),
-		delta: Pseq([
-			Plazy({
-				var	last = rrand(0.9, 1.2);
-				Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
-			}),
-			Pwhite(10.0, 16.0, 1)
-		], inf),
+		delta: Pexprand(0.12, 0.6, inf),
+		sustain: Pwhite(3.0, 7.0, inf),
 		preparePlay: {
 			~dlySynth ?? {
 				~dlySynth = SynthDef(\bufdelay2, { |inbus, outbus, buf, delaytime|
@@ -998,10 +1010,10 @@ make: { |name|
 					addAction: \addAfter,
 					time: BPStream(\sustain),
 					// delta: Pkey(\time) * Pexprand(0.8, 1.1, inf), // + Pwhite(0.2, 1.0, inf),
-					fLow: Pif(Pkey(\delta) < 5, Pexprand(120, 300, inf), Pexprand(40, 70, inf)),
-					fHigh: Pkey(\fLow) * Pwhite(4.0, 11.0, inf),
+					fLow: Pexprand(1600, 2400, inf),
+					fHigh: Pkey(\fLow) * Pwhite(5.0, 8.0),
+// 					atten: 0.1,
 					beaterFilt: Pexprand(1500, 5000, inf),
-					atten: 0.025,
 					pan: 0,
 					panWidth: 1
 				]
@@ -1022,7 +1034,9 @@ p.lowbellfHigh = Pkey(\fLow) * Pwhite(5.0, 8.0);
 p.delta = Pexprand(0.12, 0.6, inf);
 p.sustain = Pwhite(3.0, 7.0, inf);
 
-p.lowbellatten = 0.1;
+p.sustain = Pkey(\delta) * Pwhite(3.0, 7.0, inf);
+
+p.lowbellatten = 0.25;
 
 p.debug = true;
 p.debug = false;
@@ -1042,3 +1056,18 @@ p.sustain = Pwhite(3.0, 7.0, inf);
 BP(#[wc, bfx]).stop;
 
 ~master.stopRecord;
+
+BP.all.stop;
+
+BP(\shfx).event.chan = nil;
+BP(\shfx).event.putAll((target: VC(\wp).env.ch.synth, bus: VC(\wp).env.target.inbus, addAction: \addBefore));
+
+BP(\shfx).event.chan = VC(\wp).env.target;
+BP(\shfx).event.addAction = \addToHead;
+
+VC(\wp).env.target.postSettings
+
+
+
+// test defs
+
