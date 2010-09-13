@@ -121,12 +121,14 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 	Pan2.ar(sig, pan);
 }).add;
 
-SynthDef(\xylin, { |x1, x2, y1, y2, sustain = 1, out|
-	Out.kr(out, [
-		Line.kr(x1, x2, sustain, doneAction: 2),
-		Line.kr(y1, y2, sustain)
-	]);
-}).add;
+s.doWhenBooted {
+	SynthDef(\xylin, { |x1, x2, y1, y2, sustain = 1, out|
+		Out.kr(out, [
+			Line.kr(x1, x2, sustain, doneAction: 2),
+			Line.kr(y1, y2, sustain)
+		]);
+	}).add;
+};
 
 
 // airy melody
