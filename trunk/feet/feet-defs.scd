@@ -1441,22 +1441,22 @@ cLevelRatio: 1.5.dbamp,
 make: { |name|
 	var out;
 
-	WrapInstr([\osc2, \vosc3map2], { |freq, bufbase, numbufs, basefreq, topfreq, gate, freqmul = 1|
+	WrapInstr([\osc2, \vosc3map2], { |freq, bufbase, numbufs, basefreq, topfreq, gate, freqmul = 1, env|
 		var	baselog = log2(basefreq),
 			newfreq = freq * freqmul,
 			freqmap = ((log2(newfreq) - baselog) / (log2(topfreq) - baselog)
 				* (numbufs - 1)).clip(0, numbufs - 1.001);
-		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap]);
-	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1]]);
+		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap, env]);
+	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1], EnvSpec(Env.adsr)]);
 	
-	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
-		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate]),
+	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, env, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
+		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate, nil, env.dereference.value]),
 			glatch = Latch.kr(gate, gate),
-			feg = EnvGen.kr(fenv, gate, timeScale: fenv_tscale);
+			feg = EnvGen.kr(fenv.dereference.value, gate, timeScale: fenv_tscale);
 		feg = (feg - 1) * Sensitivity.kr(1, glatch, fenv_vsens) * fenv_sens + 1;
 		sig = RLPF.ar(sig, (ffreq * feg).clip(20, 18000), rq);
 		Pan2.ar(sig, pan)
-	}, [#[0, 1], \freq, \myrq, EnvSpec(Env.one), #[0, 1], #[0, 1], #[0.1, 10, \exp]]);
+	}, [#[0, 1], \freq, \myrq, EnvSpec(Env.adsr), EnvSpec(Env.one), #[0, 1], #[0, 1], #[0.1, 10, \exp]]);
 
 	// note, this is a mono -> stereo effect
 	~combsdef = SynthDef(("combsfx" ++ name).asSymbol, { |outbus, density = 2, clevel = 0.3,
@@ -1506,7 +1506,29 @@ make: { |name|
 	};
 	~bigdelay = Buffer.alloc(s, 44100, 1);
 	~littledelays = Buffer.allocConsecutive(~numCombs, s, (s.sampleRate / ~cFundamental).roundUp);
-	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: ~wt.first.first.bufnum, numbufs: `(~wt.first.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin), fenv_tscale: (3.5+4.0), detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
+	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [
+		bufbase: ~wt.first.first.bufnum,
+		numbufs: `(~wt.first.size),
+		basefreq: `(48.midicps),
+		topfreq: `(127.midicps),
+		// env: Env.adsr(1.6, 0.8, 0.6, 2.5),
+		env: `{
+			var	attack = NamedControl.kr(\envAtk, 1.6),
+			decay = NamedControl.kr(\envDcy, 0.8);
+			Env.adsr(attack, decay, 0.6, 2.5)
+		},
+		// fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin),
+		fenv: `{
+			var proportion = NamedControl.kr(\fenvProp, 3.5 / (3.5 + 4.0));
+			Env(#[1, 40, 1], [proportion, 1 - proportion], \sin)
+		},
+		fenv_tscale: (3.5+4.0),
+		detune: 1.003,
+		/* ffreq: 900,*/
+		fenv_sens: 0.8,
+		fenv_vsens: 1,
+		vsens: 0.2
+	], target: ~target);
 // 	out.mapGlobal(\ffreq, nil, 400, \freq);
 // 	out.mapGlobal(\rq, nil, 1, \myrq);
 	out.mapGlobal(\clevel, nil, 1, \amp);
@@ -1956,3 +1978,96 @@ make: { |name|
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\openingSteps);
+
+
+
+// chords (arm movements)
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~prep = {
+		// urgh, I need a different ~canStream method but chucking overwrites my choice!
+		~canStream = {
+			~event[\voicer].isKindOf(Voicer)  // don't try to play if VC doesn't exist
+		};
+		~atkProbCtl = GenericGlobalControl(\atkProb, nil, 0.25);
+	};
+	~freeCleanup = { ~atkProbCtl.free };
+	~useGui = { |vpi| ~atkProbCtl => VP(vpi) };
+
+	// ~top = Pwhite(36, 44, inf);
+	// can't replace by Pseq - Paccumbounce loses continuity
+	~top = Pswitch1([
+		Pwhite(36, 44, inf),
+		Paccumbounce(36, 44, Pwrand(#[-2, -1, 1, 2], #[1, 2, 3, 2].normalizeSum, inf), inf)
+	], Psmartstutter(Pfunc { |which| (which * 3 + 1) * rrand(2, 5) }, Pseq(#[1, 0], inf)));
+
+	~numNotes = Pwrand(#[2, 3], #[0.8, 0.2], inf);
+	// ~intervals = Pexprand(1, 6, inf).round;
+	~intervals = Pwrand((1..6), #[1, 3, 2, 2, 1, 1].normalizeSum, inf);
+	~degree = Pkey(\top) -.x Pseries(0, Plazy { |ev| Pfin(ev[\numNotes], ~intervals) }, inf)
+		.clump(Pkey(\numNotes));
+	~mode = \g;
+	~bufbase = Plazy { Prand(~bufBases, inf) };
+	~amp = Pexprand(0.5, 1, inf);
+	~delta = Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf)
+		* Pif(Pkey(\attackNote), 1, 4);
+	~sustain = Pexprand(2.2, 5.6, inf); //Pexprand(1.7, 4.2, inf);
+	~gate = 0.1;
+	~ffreq = Pexprand(90.0, 400.0, inf);
+	~rq = 0.4;
+	~fenv_vsens = 0;
+	~fenv_tscale = Pif(Pkey(\attackNote), Pwhite(0.25, 0.6, inf), Pwhite(0.75, 1.0, inf));
+	~fenv_sens = Pif(Pkey(\attackNote), Pexprand(0.1, 0.25, inf), Pexprand(0.15, 0.7, inf));
+	~pan = (
+		Pn(Pser(#[-1, 1, 0], Pkey(\numNotes).asStream), inf)  // orientation
+		*
+		Pstutter(Pkey(\numNotes), Pwhite(0.4, 0.8, inf))  // width
+	).clump(Pkey(\numNotes)).collect(_.scramble);
+
+	~attackNote = Plazy { ~atkProbCtl.asPattern.coin };  // 0.1.asPattern.coin;
+	~envAtk = Pif(Pkey(\attackNote), Pwhite(0.02, 0.05, inf), 1.6);
+	~envDcy = Pif(Pkey(\attackNote), Pwhite(0.15, 0.4, inf), 0.8);
+	~fenvProp = Pif(Pkey(\attackNote), Pwhite(0.07, 0.18, inf), 0.466667);
+
+	~asPattern = {
+		/*Debug*/Pbind(
+			\attackNote, BPStream(\attackNote),
+			\top, BPStream(\top),
+			\numNotes, BPStream(\numNotes),
+			\freq, BPStream(\degree),
+			\mode, BPStream(\mode),
+			\bufbase, BPStream(\bufbase),
+			\amp, BPStream(\amp),
+			\delta, BPStream(\delta),
+			\length, Pkey(\delta) * BPStream(\sustain),
+			\gate, BPStream(\gate),
+			\ffreq, BPStream(\ffreq),
+			\rq, BPStream(\rq),
+			\fenv_sens, BPStream(\fenv_sens),
+			\fenv_vsens, BPStream(\fenv_vsens),
+			\fenv_tscale, Pkey(\length) * BPStream(\fenv_tscale),
+			\envAtk, BPStream(\envAtk),
+			\envDcy, BPStream(\envDcy),
+			\fenvProp, BPStream(\fenvProp),
+			\pan, BPStream(\pan)
+		)
+	};
+
+	// process needs buffer info from VC chucked in
+	~bindVC = { |vc|
+		if(try({ vc.env.wt[0][0] }).notNil) {
+			~bufBases = vc.env.wt.collect { |w| w.first.bufnum }
+		} {
+			"VC(%) is not compatible with BP(%) - wt needs to be a 2-d array of buffers."
+			.format(vc.collIndex.asCompileString, ~collIndex.asCompileString).warn;
+		};
+		~makeSreamForKey.(\bufbase);  // force Plazy to rebuild stream with new bufnums
+	};
+} => PR(\feetChords);
+
+(
+make: { |name|
+	BP(name).free;
+	PR(\feetChords) => BP(name);
+	1 => BP(name);
+}, type: \bp) => Fact(\feetChordBP);

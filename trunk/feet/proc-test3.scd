@@ -580,35 +580,53 @@ BP(\slch).topNote.deg.postcs
 PR(\abstractProcess).clone {
 	~event = (eventKey: \voicerNote);
 	~prep = {
-
 		// urgh, I need a different ~canStream method but chucking overwrites my choice!
 		~canStream = {
 			~event[\voicer].isKindOf(Voicer)  // don't try to play if VC doesn't exist
 		};
+		~atkProbCtl = GenericGlobalControl(\atkProb, nil, 0.25);
 	};
-	~freeCleanup = {
-	};
+	~freeCleanup = { ~atkProbCtl.free };
+	~useGui = { |vpi| ~atkProbCtl => VP(vpi) };
 
-	~top = Pwhite(36, 44, inf);
+	// ~top = Pwhite(36, 44, inf);
+	// can't replace by Pseq - Paccumbounce loses continuity
+	~top = Pswitch1([
+		Pwhite(36, 44, inf),
+		Paccumbounce(36, 44, Pwrand(#[-2, -1, 1, 2], #[1, 2, 3, 2].normalizeSum, inf), inf)
+	], Psmartstutter(Pfunc { |which| (which * 3 + 1) * rrand(2, 5) }, Pseq(#[1, 0], inf)));
+
 	~numNotes = Pwrand(#[2, 3], #[0.8, 0.2], inf);
-	~intervals = Pexprand(1, 6, inf).round;
+	// ~intervals = Pexprand(1, 6, inf).round;
+	~intervals = Pwrand((1..6), #[1, 3, 2, 2, 1, 1].normalizeSum, inf);
 	~degree = Pkey(\top) -.x Pseries(0, Plazy { |ev| Pfin(ev[\numNotes], ~intervals) }, inf)
 		.clump(Pkey(\numNotes));
 	~mode = \g;
 	~bufbase = Plazy { Prand(~bufBases, inf) };
 	~amp = Pexprand(0.5, 1, inf);
-	~delta = 4 * Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf);
+	~delta = Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf)
+		* Pif(Pkey(\attackNote), 1, 4);
 	~sustain = Pexprand(2.2, 5.6, inf); //Pexprand(1.7, 4.2, inf);
 	~gate = 0.1;
 	~ffreq = Pexprand(90.0, 400.0, inf);
 	~rq = 0.4;
-	~fenv_sens = 1;
 	~fenv_vsens = 0;
-	~fenv_tscale = Pwrand(#[0.1, 1], #[0.1, 0.9], inf);
-	~pan = 0;
+	~fenv_tscale = Pif(Pkey(\attackNote), Pwhite(0.25, 0.6, inf), Pwhite(0.75, 1.0, inf));
+	~fenv_sens = Pif(Pkey(\attackNote), Pexprand(0.1, 0.25, inf), Pexprand(0.15, 0.7, inf));
+	~pan = (
+		Pn(Pser(#[-1, 1, 0], Pkey(\numNotes).asStream), inf)  // orientation
+		*
+		Pstutter(Pkey(\numNotes), Pwhite(0.4, 0.8, inf))  // width
+	).clump(Pkey(\numNotes)).collect(_.scramble);
+
+	~attackNote = Plazy { ~atkProbCtl.asPattern.coin };  // 0.1.asPattern.coin;
+	~envAtk = Pif(Pkey(\attackNote), Pwhite(0.02, 0.05, inf), 1.6);
+	~envDcy = Pif(Pkey(\attackNote), Pwhite(0.15, 0.4, inf), 0.8);
+	~fenvProp = Pif(Pkey(\attackNote), Pwhite(0.07, 0.18, inf), 0.466667);
 
 	~asPattern = {
 		/*Debug*/Pbind(
+			\attackNote, BPStream(\attackNote),
 			\top, BPStream(\top),
 			\numNotes, BPStream(\numNotes),
 			\freq, BPStream(\degree),
@@ -623,6 +641,9 @@ PR(\abstractProcess).clone {
 			\fenv_sens, BPStream(\fenv_sens),
 			\fenv_vsens, BPStream(\fenv_vsens),
 			\fenv_tscale, Pkey(\length) * BPStream(\fenv_tscale),
+			\envAtk, BPStream(\envAtk),
+			\envDcy, BPStream(\envDcy),
+			\fenvProp, BPStream(\fenvProp),
 			\pan, BPStream(\pan)
 		)
 	};
@@ -657,3 +678,57 @@ BP(\fc).numNotes = Pwrand(#[2, 3], #[0.8, 0.2], inf);
 BP(\fc).sustain = Pexprand(2.2, 5.6, inf);
 
 BP(\fc).pan = sin(Pseries(0, Pwhite(0.35, 0.8, inf), inf)).trace;
+
+BP(\fc).pan = (Pn(Pser(#[-1, 1, 0], Pkey(\numNotes).asStream), inf) * Pstutter(Pkey(\numNotes), Pwhite(0.4, 0.8, inf))).clump(Pkey(\numNotes)).collect { |pans| pans.scramble };
+
+p = BP(\fc);
+p.delta.postcs
+
+p.fenv_tscale = Pif(Pkey(\attackNote), Pwhite(0.1, 0.22, inf), Pwhite(0.75, 1.0, inf));
+
+
+p.attackNote = true;
+p.attackNote = 0.25.asPattern.coin;
+
+p.delta = Pif(Pkey(\attackNote),
+	Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf),
+	4 * Pwrand(#[0.25, 0.5, 0.75, 1], #[1, 4, 3, 1].normalizeSum, inf)
+);
+
+p.fenv_tscale = Pif(Pkey(\attackNote), Pwhite(0.25, 0.6, inf), Pwhite(0.75, 1.0, inf));
+p.fenv_sens = Pif(Pkey(\attackNote), Pexprand(0.1, 0.25, inf), Pexprand(0.15, 0.7, inf));
+
+p.envAtk = Pif(Pkey(\attackNote), Pwhite(0.02, 0.05, inf), 1.6);
+p.envDcy = Pif(Pkey(\attackNote), Pwhite(0.15, 0.4, inf), 0.8);
+p.fenvProp = Pif(Pkey(\attackNote), Pwhite(0.07, 0.18, inf), 0.466667);
+
+// this plus atkProbCtl > 0.8 has a bit creepy effect
+p.mode = Pseq([
+	Pn(\g0, { rrand(12, 24) }),
+	Pn(Prand(Mode.keys.asArray.select { |key| key != \g0 and: { key.asString.last == $0 } }, 1),
+		{ rrand(4, 7) })
+], inf);
+
+
+p.atkProbCtl = GenericGlobalControl(\atkProb, nil, 0.25);
+p.freeCleanup = { ~atkProbCtl.free };
+p.useGui = { |vpi| ~atkProbCtl => VP(vpi) };
+p.attackNote = p.atkProbCtl.asPattern.coin;
+
+p.intervals = Pwrand((1..6), #[1, 3, 2, 2, 1, 1].normalizeSum, inf);
+p.makeStreamForKey(\degree);
+
+// can't replace by Pseq - Paccumbounce loses continuity
+p.top = Pswitch1([
+	Pwhite(36, 44, inf),
+	Paccumbounce(36, 44, Pwrand(#[-2, -1, 1, 2], #[1, 2, 3, 2].normalizeSum, inf), inf)
+], Psmartstutter(Pfunc { |which| (which * 3 + 1) * rrand(2, 5) }, Pseq(#[1, 0], inf)));
+
+
+v = VC(\waterpad);
+v.nodes[0].defname
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
