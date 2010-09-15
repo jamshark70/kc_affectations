@@ -318,6 +318,20 @@ SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, 
 	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
+SynthDef(\pvplayPanEnvShift, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, ampMap = 1, pan,
+	attack = 0.01, decay = 0.05 /*, shiftS = 0, shiftE = 0, shiftFreq = 1 */|
+	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
+		sig,
+		env = NamedControl.kr(\env, (0 ! 40).overWrite(Env.zero.asArray));
+		// lowShift = min(shiftS, shiftE),
+		// hiShift = max(shiftS, shiftE);
+	fft = PV_BinShift(fft, 1, EnvGen.kr(env, timeScale: time));
+	sig = IFFT(fft, 1)
+		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+}).add;
+
+
 // amp is per-event control; ampMap should be mapped to kr bus for continuous volume control
 SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, pan,
 	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0, ampMap = 1|
@@ -375,7 +389,7 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 } => Func(\makeWateryFx);
 
 
-#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayStereo].do { |name|
+#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayPanEnvShift, pvplayStereo].do { |name|
 	\addRvbOut.eval((name ++ "Dist").asSymbol, SynthDescLib.at(name).def.func).add;
 };
 
