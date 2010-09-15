@@ -78,7 +78,7 @@
 *** Position data
 *** Other CC data
 *** Note data per instrument
-** TODO [1/5] Data extraction notes
+** TODO [2/5] Data extraction notes
 *** DONE Feet
     How many feet are moving?
     Together or separate?
@@ -104,7 +104,24 @@
     6:52 -- multiple speeds (something comic here?)
     7:20 -- partnering work -- new to me. Unclear what's readable here.
     7:35 -- lifts and twirls. Would like to have some musical activity when they spin, maybe a variation of the measurement in the arms interaction demo.
-*** TODO Arms
+*** DONE Arms
+    8:09 -- axial theme -- ideally I would get triggers for each gesture. Whether they come from video analysis or manual intervention doesn't matter to me.
+    8:35 -- locomotive theme -- we already have the arms-interaction demo. In a couple of places, the dancers stop and move hands up together. The demo doesn't currently respond to that, but I'd like to make it do so. In those places, is it possible to read most of the points being relatively still while some in the middle move upward, and track the upward motion?
+    9:09 -- "sunrise" -- would be very nice to have data about where they are in the arc
+    9:15 -- hand stacking -- I hear little arpeggios in the music, not sure if each arpeggio needs to be triggered individually from video. It's probably enough to get a signal saying "stacking now" and then another saying "they're going down now," then "that bit's over."
+    9:28 -- intricate sequence -- a pause with hands clasped behind backs, then the partnering bit flipping Ilana upside down, a repeat of Laura's slide from the feet section (I like recurring motives like this!), leading right into 9:40. I would love to know when the slide is happening, to echo the earlier musical gesture.
+    9:40 -- "Shiva" -- locomotive theme in canon.
+    10:10 -- swaying --> partnering. Still thinking what to do here. Probably some punctuation sound, instead of trying to compose to every movement. I'll need to decide where the triggers should be, or maybe the triggers don't have to be in the same place every time.
+    10:36 -- axial theme, three levels
+    11:10 -- duet partnering -- Before, I read this as Stephen teaching Ilana the axial sequence -- curiously, that relationship disappears with a smoother performance.
+    11:43 -- manipulating Laura -- triggers similar to the regular axial presentation would be useful. Music and visuals should give the audience permission to laugh here!
+    12:00 -- Laura becomes more active in the partnering, leading into the locomotive theme (short)
+    12:06 -- Stephen's solo, wild movements -- arm positions relative to the rest of the body might be the most useful thing
+    12:17 -- new material, interesting juxtaposition of cradling next to something that looks like drawing a bow. Fragments of the axial and locomotive themes -- for my stuff, it would be nice to know when which one or the other is happening.
+    12:47 -- all three to the ground, then up
+    13:01 -- Laura solo, mostly locomotive material, probably can reuse the arms-interaction code, but I think it should be more sparse there
+    14:14 -- hand play, should start with the bleeps and bloops for the face dance
+
 *** TODO Head
 *** TODO Torso
 *** TODO Body
