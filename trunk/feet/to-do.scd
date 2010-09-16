@@ -67,12 +67,26 @@ p.gestures.lauraslide = { |parms|
 // good enough:
 p.runningNotes = (
 	lauraslide: Pseries(
-		{ |ev| rrand(-7, 0) },
+		{ rrand(-7, 0) },
 		Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
 		Pkey(\numEv).asStream
-	) //,
-	// inversion1: ,
-	// inversion2: 
+	),
+	inversion1: Pseries(
+		{ rrand(-3, 4) },
+		Pstutter(
+			Pseq([Pfuncn({ |ev| (ev[\numEv] * 0.6).round }), 100], 1),
+			Pseq([1, -1], 1)
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	),
+	inversion2: Pseries(
+		{ rrand(0, 8) },
+		Pstutter(
+			Pseries(1, 1, inf),
+			Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	).trace
 );
 
 p.gestures.lauraslide = { |parms|
@@ -80,10 +94,11 @@ p.gestures.lauraslide = { |parms|
 		\numEv, parms[\numEv],
 		\instrument, Pn(\bufGrainPanKlankDist, parms[\numEv]),
 		\delta, 0.4 * Pexprand(0.8, 1.25, inf)
-			* Pgeom.fromEndpoints(rrand(0.35, 0.6), rrand(0.1, 0.2), parms[\numEv]),
+			* Pgeom.fromEndpoints(parms[\startDelta] ?? { rrand(0.35, 0.6) }, rrand(0.1, 0.2),
+				parms[\numEv]),
 		\amp, BPStream(\amp) * 0.04,  // filters are LOUD
-		\numNotes, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf),
-		\filtDegree, (~runningNotes[\lauraslide].value(parms)
+		\numNotes, parms[\numNotesPat] ?? { Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf) },
+		\filtDegree, (~runningNotes[parms[\notesKey] ? \lauraslide].value(parms)
 			+.x Pseries(0, Pwrand(#[-1, -2, -3], #[1, 2, 2].normalizeSum, Pkey(\numNotes).asStream), inf))
 			.clump(Pkey(\numNotes)),
 		\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
@@ -99,7 +114,7 @@ p.gestures.lauraslide = { |parms|
 		\decays, parms[\decays] ?? { [~defaultKlankDecays] },
 		\pan, sin(Pseries(0, Pseries.fromEndpoints(0.08, 0.33, parms[\numEv]), inf) * 2pi)
 			* #[-1, 1].choose,
-		\distance, Pseries.fromEndpoints(20, 5, parms[\numEv])
+		\distance, Pseries.fromEndpoints(parms[\startY] ? 20, 5, parms[\numEv])
 	)
 };
 
@@ -114,6 +129,13 @@ p.numEv = Pwhite(8, 15, inf);
 p.reset;
 p.play;
 p.runGesture((gest: \lauraslide, numEv: rrand(8, 14).postln));
+p.runGesture((gest: \lauraslide, numEv: rrand(8, 14).postln, notesKey: \inversion1));
+
+p.runGesture((gest: \lauraslide, numEv: 10));
+p.runGesture((gest: \lauraslide, numEv: 12, notesKey: \inversion1));
+p.runGesture((gest: \lauraslide, numEv: rrand(12, 19), notesKey: \inversion2, startDelta: rrand(0.65, 0.85), startY: 8));
+
+
 p.runGesture((gest: \slowStepStretch, numEv: 8));
 
 p.stop;

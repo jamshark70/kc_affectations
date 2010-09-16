@@ -133,9 +133,9 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
-*** Sounds/processes [1/7]
+*** Sounds/processes [2/7]
 **** DONE Harmony w/ arms - refine
-**** TODO Slide/inversion gesture
+**** DONE Slide/inversion gesture    
 **** TODO Leaning
 **** TODO Falling
 **** TODO Conflict
