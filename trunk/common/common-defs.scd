@@ -326,7 +326,8 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				// cuz parent: don't work in putAll #@$*$&*$&@#312
 				.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
 				.play;
-				~lpcEv[\node].do { |node| ~lock.addNode(node) };
+				// ~lpcEv[\node].do { |node| ~lock.addNode(node) };
+				~lock.killNodes = ~lpcEv[\node];
 			};
 		}
 	))) => ProtoEvent(\polySynthKrBusLock);
