@@ -240,14 +240,14 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		};
 	} => PR(\busFxPatLock);
 	
-	(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
+ 	(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
 		lockKey: \busLock,
 		superPlay: ProtoEvent(\polySynthPlayer).v[\play],
 		play: {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
 			~lock = PR(~lockKey).copy.prep((
-				numCh: ~numCh, server: ~chan.server
+				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \audio
 			));
 			~bus = ~lock.bus;
 			~target = ~chan.synthgroup;
@@ -291,6 +291,46 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 	// 	}
 	))) => ProtoEvent(\polySynthBusLock);
 	
+	(parent: ProtoEvent(\polySynthBusLock).v.parent.copy.putAll((
+		play: {
+			var	chan = ~chan;
+			~numCh ?? { ~numCh = ~chan.inChannels };
+			~lock = PR(~lockKey).copy.prep((
+				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \control
+			));
+			// ~bus = ~lock.bus;
+			// ~target = ~chan.synthgroup;
+			// ~chan = nil;
+			~superPlay.();
+	
+			if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
+				~playExtraProcess.(chan);
+				~node.do { |node| ~lock.addNode(node) };
+			} {
+				~lock.freeStuff;
+			};
+			if(~tempo.isNumber) { thisThread.clock.tempo = ~tempo }
+		},
+		playExtraProcess: { |chan|
+			if(~lpcEv.size > 0) {
+				~lpcEv.putAll((
+					bus: ~lock.bus,
+					target: chan.synthgroup,
+					chan: nil,
+					// inbus: ~lock.bus,
+					collIndex: ~collIndex,
+						// effectgroup might have post-lpc effect nodes (chorus etc.)
+						// so put lpc's up front
+					addAction: ~lpcEv[\addAction] ?? { \addToHead }
+				))
+				// cuz parent: don't work in putAll #@$*$&*$&@#312
+				.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
+				.play;
+				~lpcEv[\node].do { |node| ~lock.addNode(node) };
+			};
+		}
+	))) => ProtoEvent(\polySynthKrBusLock);
+
 	(parent: ProtoEvent(\polySynthBusLock).v.parent.copy.putAll((
 		lockKey: \busFxPatLock,
 		playExtraProcess: { |chan|
