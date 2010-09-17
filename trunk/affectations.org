@@ -136,10 +136,11 @@
 *** Sounds/processes [2/7]
 **** DONE Harmony w/ arms - refine
 **** DONE Slide/inversion gesture    
-**** TODO Leaning
+**** TODO [#A] Multiple speeds
+     Coming... want to modulate between no pitch, normal pitch and "crispy" pitch
+**** TODO Leaning - sketched, come back to this after doing multiple speeds
 **** TODO Falling
 **** TODO Conflict
-**** TODO Multiple speeds
 **** TODO [#C] Distinguish locomotive themes
 *** Data needed from Lorne
 *** Data to send to Lorne

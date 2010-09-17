@@ -86,7 +86,7 @@ p.runningNotes = (
 			Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
 		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
 		Pkey(\numEv).asStream
-	).trace
+	)
 );
 
 p.gestures.lauraslide = { |parms|
@@ -152,7 +152,150 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).a
 
 
 /**** TODO Leaning */
+
+// use waterpad, with randomized freqmul for wobbling
+
+Fact(\waterpad) => VC(\wp);
+// SynthDescLib.at(VC(\wp).nodes[0].defname.asSymbol).msgFunc.def.argNames;
+
+// mandatory!
+SynthDescLib.at(VC(\wp).nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+
+SynthDef(\krwobble, { |outbus, sustain = 1|
+	var	envOne = Env.one.asArray,
+		speedEnv = NamedControl.kr(\speedEnv, (0 ! 32).overWrite(envOne)),
+		speed = EnvGen.kr(speedEnv, timeScale: sustain),
+		widthEnv = NamedControl.kr(\widthEnv, (0 ! 32).overWrite(envOne)),
+		width = EnvGen.kr(widthEnv, timeScale: sustain),
+		fmul = LFDNoise1.kr(speed).exprange(width.reciprocal, width);
+	Out.kr(outbus, fmul);
+}).add;
+
+z = VC(\wp).nodes[0];
+
+e = ProtoEvent(\polySynthKrBusLock).copy.putAll((
+	instrument: z.defname.asSymbol,
+	chan: VC(\wp).env.target,
+	busRate: \control,
+	numCh: 1,
+	gate: 0.1,
+	freq: 60.midicps * [1, 5/4, 3/2],
+	sustain: 7,
+	bufbase: VC(\wp).env.wt[0][0].bufnum,
+	freqmul: { ~lock.bus.asMap },  // asControlInput .value's this
+	lpcEv: (
+		instrument: \krwobble,
+		sustain: 7,
+		speedEnv: Env(#[1.2, 5, 0.7], #[0.3, 0.7]),
+		// widthEnv: Env(#[1.25, 1.25], #[1])
+		widthEnv: Env(#[1, 1.8, 1], #[0.7, 0.3], \exp)
+	)
+));
+
+f = e.copy.play;
+s.controlBusAllocator.debug;
+
+f.node.choose.trace;
+
+f.lock.killNodes.trace;
+
+f.lock.listVars
+f.lpcEv
+
+
+p = Pbind(
+	\chan, VC(\wp).env.target,
+	\instrument, z.defname.asSymbol,
+	\busRate, \control,
+	\numCh, 1,
+	\gate, 0.1,
+	\deg, (Pwhite(35, 45, inf) +.x Pseries(0, Prand(#[-1, -2, -3], 2))).clump(2),
+	\freq, Pfunc { |ev| Mode(\g).cps(ev[\deg]) },
+	\delta, Pwhite(0.9, 1.4, inf),
+	\sustain, 7,
+	\bufbase, Prand(VC(\wp).env.wt.flop[0], inf),
+	\envAtk, 0.05,
+	\envDcy, 0.12,
+	\fenv_tscale, Pkey(\sustain),
+	\fenvProp, 0.07,
+	\freqmul, { ~lock.bus.asMap },  // asControlInput .value's this
+	\lpcEv, Pbind(
+		\instrument, \krwobble,
+		\speedEnv, Pfunc({ Env(#[1.2, 5, 0.7], #[0.3, 0.7]) }),
+		\widthEnv, Pfunc({ Env(#[1, 1.05, 1], #[0.7, 0.3], \exp) })
+	) <> Pfunc { |inev| inev.copy[\chan] = nil }
+).play(protoEvent: ProtoEvent(\polySynthKrBusLock).copy);
+
+p.stop;
+
+
 /**** TODO Falling */
 /**** TODO Conflict */
 /**** TODO Multiple speeds */
+
+Fact(\opening) => BP(\op);
+Fact(\openingSteps) => BP(\st);
+
+p = BP(\st);
+
+p.gestures.keys
+p.gestures[\klankHarmonize].postcs
+p.gestures[\clatter].postcs
+p[\xyPat].postcs
+
+SynthDescLib.at(\bufGrainPanKlankDist).controls.do(_.postln); ""
+
+
+// add to feet-defs later?
+// not quite right - want to make notes crispier
+p.kAmpCtl = GenericGlobalControl(\kAmp, nil, 1, \amp);
+p.kAmpCtl.gui;
+
+p.gestures.klankMachine = { |parms|
+	Pbind(
+		#[pan, distance], ~xyPat.(parms),
+		\instrument, \bufGrainPanKlankDist,
+		\delta, parms[\newDelta] ? 0.5,
+		\time, 0.15,  // exciter time only - note dur is from filtDecay
+		\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
+		\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
+		\filtAttack, Pkey(\filtDecay) * 0.05,
+		\filtAmp, ~kAmpCtl.asMap,
+		\amp, 0.5
+	)
+};
+
+p.autoRun = false;
+
+// p.autoRun = true;
+// p.gDelta = 2.5;
+// ~saveNumEv = p.numEv;
+// p.numEv = Pwhite(8, 15, inf);
+
+p.reset;
+p.play;
+
+p.runGesture((gest: \klankMachine, yEnds: #[5, 20], newDelta: 1.2, freq: 40.midicps, numEv: 10, timeMul: 0.5));
+p.runGesture((gest: \klankMachine, yEnds: #[5, 20], newDelta: 0.3, freq: 50.midicps, numEv: 20, timeMul: 0.6));
+
+q = Pbind(
+	\play, {
+		p.runGesture(currentEnvironment)
+	},
+	\gest, \klankMachine,
+	\yEnds, #[5, 20],
+	\midi, Pn(Pshuf(#[40, 50, 59, 66, 79], 1), inf),
+	\freq, Pkey(\midi).midicps,
+	\newDelta, 1.2 / (Pkey(\midi) - 20) * 20,
+	\numEv, (5 / Pkey(\newDelta)).round,
+	\timeMul, 0.5,
+	\delta, Pwhite(0.8, 2.2, inf)
+).play;
+
+q.stop;
+p.stop;
+
+
+
+
 /**** TODO [#C] Distinguish locomotive themes */
