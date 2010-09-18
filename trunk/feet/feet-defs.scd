@@ -1747,6 +1747,8 @@ make: { |name|
 			~chan.playfx(Instr("busfx.limiter"), [0, 2, 0.99, 0.05]);
 
 			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
+			~kAmpCtl = GenericGlobalControl(\kAmp, nil, 1, \amp);
+			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 18000, \freq);
 			~event.putAll((
 				// just in case reverb channels don't exist,
 				// push them to hw input buses (to suppress output)
@@ -1768,10 +1770,11 @@ make: { |name|
 		useGui: { |vpi| ~ampCtl => VP(vpi) },
 		free: {
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
-			~ampCtl.free;
+			[~ampCtl, ~kAmpCtl, ~ffreqCtl].free;
 		},
 		stopCleanup: {
-			~spawner = nil
+			~spawner = nil;
+			~ffreqCtl.stopAuto;
 		},
 	
 		// external hook to drop a gesture in!
@@ -1943,6 +1946,28 @@ make: { |name|
 			},
 			klankDecay: { |parms|
 				Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
+			},
+			klankMachine: { |parms|
+				Pbind(
+					#[pan, distance], ~xyPat.(parms),
+					\instrument, Pif((parms[\prob] ? 1).asPattern.coin, \bufGrainPanKlankDist, \rest),
+					\delta, parms[\newDelta] ? 0.5,
+					// exciter time only - note dur is from filtDecay
+					\time, min(0.15, Pkey(\delta) * 0.7),
+					\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
+					\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
+					\filtAttack, Pkey(\filtDecay) * 0.05,
+					\filtAmp, ~kAmpCtl.asMap,
+					\ffreq, ~ffreqCtl.asMap,
+					\lprq, 0.32, //~rqCtl.asMap,
+					\amp, 0.5,
+					\harm, Pstutter(Pwhite(3, 6, inf), Pwrand([
+						(1..5),
+						(1, 3 .. 9),
+						Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+					], #[0.4, 0.4, 0.2], inf).collect([_])),
+					\amps, Pkey(\harm).reciprocal
+				)
 			}
 		),
 	
@@ -1988,7 +2013,72 @@ make: { |name|
 	
 		// oh earth mother, this is a damnably wretched hack but I had to do SOMETHING!!
 		ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613],
-		listGest: { ~gestures.keys.asArray.sort.do(_.postln); "" }
+		listGest: { ~gestures.keys.asArray.sort.do(_.postln); "" },
+
+		mSpeedNotes: [
+			#[40, 50, 59, 66, 79, 85],
+			#[43, 52, 54, 59, 69, 78],
+			#[45, 55, 62, 73, 76, 83]
+		].mapMode(\d),
+		multiSpeedParms: Plazy({
+			Pbind(
+				\collIndex, ~collIndex,
+				\play, {
+					BP(~collIndex).runGesture(currentEnvironment)
+				},
+				\gest, \klankMachine,
+				\yEnds, #[5, 20],
+				\range, Pn(Pshuf((0..5), 1), inf),
+				\notes, Pstutter(
+					Pwhite(6, 14, inf),
+					Pxrand(~mSpeedNotes, inf).collect { |array|
+						~currentMSNotes = array;
+						BP(~collIndex).changed(\msNotes, array);
+						array
+					}
+				),
+				\newDelta, Pkey(\range).linexp(0, 5, 1.2, 0.09) * Pwhite(1.0, 1.2, inf),
+				\numEv, (8 / Pkey(\newDelta)).round,
+				\prob, Pkey(\range).linlin(0, 5, 1, 0.66),
+				\freq, Pfunc({ |ev|
+					var i = ev[\range],
+					n = ev[\numEv],
+					n1 = (n * rrand(0.4, 0.65)).roundUp,
+					n2 = ((n - n1) * 0.5).trunc,
+					adder = Pwrand(#[0, 1, 2, 3], #[1.5, 2, 2, 1].normalizeSum, n2);
+					if(i >= 4) {
+						adder = Pfin(n2, Ppatlace([adder, 0, 0], inf))
+					};
+					Pseries(ev[\notes][i], Pseq([
+						Pn(0, n1),
+						adder,
+						adder.neg
+					])).collect { |deg| Mode(\d).cps(deg) }
+				}),
+				\timeMul, 0.5, //1 / (Pkey(\range) + 1),
+				\delta, Pwhite(1.4, 3.0, inf)
+			)
+		}),
+		addMultiSpeed: {
+			var parms;
+			~multiSpeedParmsStream ?? { ~makeStreamForKey.(\multiSpeedParms) };
+			if(~ffreqCtl.autoSynth.isNil) {
+				~ffreqCtl.automate({ LFNoise1.kr(1.8).exprange(3000, 6000) },
+					target: ~chan.synthgroup, addAction: \addToHead);
+			};
+			parms = ~multiSpeedParmsStream.next(());
+			if(parms.notNil) {
+				~runGesture.(parms);
+			};
+		},
+		autoRunMultiSpeed: {
+			if(~mSpeedPlayer.isNil) {
+				~mSpeedPlayer = ~multiSpeedParms.play;
+			} {
+				~mSpeedPlayer.stop;
+				~mSpeedPlayer = nil;
+			}
+		}
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\openingSteps);

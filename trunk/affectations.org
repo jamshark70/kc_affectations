@@ -133,10 +133,10 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
-*** Sounds/processes [2/7]
+*** Sounds/processes [3/7]
 **** DONE Harmony w/ arms - refine
 **** DONE Slide/inversion gesture    
-**** TODO [#A] Multiple speeds
+**** DONE [#A] Multiple speeds
      Coming... want to modulate between no pitch, normal pitch and "crispy" pitch
 **** TODO Leaning - sketched, come back to this after doing multiple speeds
 **** TODO Falling

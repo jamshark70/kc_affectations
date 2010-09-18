@@ -251,19 +251,36 @@ SynthDescLib.at(\bufGrainPanKlankDist).controls.do(_.postln); ""
 p.kAmpCtl = GenericGlobalControl(\kAmp, nil, 1, \amp);
 p.kAmpCtl.gui;
 
+p.ffreqCtl = ~ffreq = GenericGlobalControl(\ffreq, nil, 18000, \freq);
+p.rqCtl = ~rq = GenericGlobalControl(\rq, nil, 1, \myrq);
+
+[~ffreq, ~rq].do({ |gc| gc => VP(3) });
+p.kAmpCtl => VP(3);
+
+~ffreq.watch.automate({ LFNoise1.kr(1.8).exprange(3000, 6000) }, target: BP(\st).chan.synthgroup, addAction: \addToHead);
+~ffreq.stopWatching.stopAuto;
+
 p.gestures.klankMachine = { |parms|
 	Pbind(
 		#[pan, distance], ~xyPat.(parms),
-		\instrument, \bufGrainPanKlankDist,
+		\instrument, Pif(parms[\prob].asPattern.coin, \bufGrainPanKlankDist, \rest),
 		\delta, parms[\newDelta] ? 0.5,
-		\time, 0.15,  // exciter time only - note dur is from filtDecay
+		\time, min(0.15, Pkey(\delta) * 0.7),  // exciter time only - note dur is from filtDecay
 		\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
 		\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
 		\filtAttack, Pkey(\filtDecay) * 0.05,
 		\filtAmp, ~kAmpCtl.asMap,
-		\amp, 0.5
+		\ffreq, ~ffreqCtl.asMap,
+		\lprq, 0.32, //~rqCtl.asMap,
+		\amp, 0.5,
+		\harm, Pstutter(Pwhite(3, 6, inf), Pwrand([
+			(1..5),
+			(1, 3 .. 9),
+			Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+		], #[0.4, 0.4, 0.2], inf).collect([_])),
+		\amps, Pkey(\harm).reciprocal
 	)
-};
+}
 
 p.autoRun = false;
 
@@ -295,6 +312,68 @@ q = Pbind(
 q.stop;
 p.stop;
 
+
+x = [
+	#[40, 50, 59, 66, 79, 85],
+	#[43, 52, 54, 59, 69, 78],
+	#[45, 55, 62, 73, 76, 83]
+].mapMode(\d);
+
+q = Pbind(
+	\play, {
+		p.runGesture(currentEnvironment)
+	},
+	\gest, \klankMachine,
+	\yEnds, #[5, 20],
+	\range, Pn(Pshuf((0..5), 1), inf),
+	\x, Pstutter(Pwhite(6, 14, inf), Pxrand(x, inf).trace),
+	\newDelta, Pkey(\range).linexp(0, 5, 1.2, 0.09) * Pwhite(1.0, 1.2, inf),
+	\numEv, (8 / Pkey(\newDelta)).round,
+	\prob, Pkey(\range).linlin(0, 5, 1, 0.66),
+	\freq, Pfunc({ |ev|
+		var i = ev[\range],
+			n = ev[\numEv],
+			n1 = (n * rrand(0.4, 0.65)).roundUp,
+			n2 = ((n - n1) * 0.5).trunc,
+			adder = Pwrand(#[0, 1, 2, 3], #[1.5, 2, 2, 1].normalizeSum, n2);
+		if(i >= 4) {
+			adder = Pfin(n2, Ppatlace([adder, 0, 0], inf))
+		};
+		Pseries(ev[\x][i], Pseq([
+			Pn(0, n1),
+			adder,
+			adder.neg
+		])).collect { |deg| Mode(\d).cps(deg) }
+	}),
+	\timeMul, 0.5, //1 / (Pkey(\range) + 1),
+	\delta, Pwhite(1.4, 3.0, inf)
+).play;
+
+q.stop;
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
+// test move to defs
+
+Fact(\opening) => BP(\op);
+Fact(\openingSteps) => BP(\st);
+
+p = BP(\st);
+
+p.listMethods
+p.autoRun = false;
+
+p.addMultiSpeed;
+
+p.autoRunMultiSpeed;  // toggles state - do again to stop
+
+p.ffreqCtl.watch.automate({ LFNoise1.kr(1.8).exprange(3000, 6000) }, target: BP(\st).chan.synthgroup, addAction: \addToHead);
+p.ffreqCtl.stopWatching.stopAuto;
 
 
 
