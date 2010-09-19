@@ -203,30 +203,62 @@ f.lock.listVars
 f.lpcEv
 
 
-p = Pbind(
-	\chan, VC(\wp).env.target,
-	\instrument, z.defname.asSymbol,
-	\busRate, \control,
-	\numCh, 1,
-	\gate, 0.1,
-	\deg, (Pwhite(35, 45, inf) +.x Pseries(0, Prand(#[-1, -2, -3], 2))).clump(2),
-	\freq, Pfunc { |ev| Mode(\g).cps(ev[\deg]) },
-	\delta, Pwhite(0.9, 1.4, inf),
-	\sustain, 7,
-	\bufbase, Prand(VC(\wp).env.wt.flop[0], inf),
-	\envAtk, 0.05,
-	\envDcy, 0.12,
-	\fenv_tscale, Pkey(\sustain),
-	\fenvProp, 0.07,
-	\freqmul, { ~lock.bus.asMap },  // asControlInput .value's this
-	\lpcEv, Pbind(
-		\instrument, \krwobble,
-		\speedEnv, Pfunc({ Env(#[1.2, 5, 0.7], #[0.3, 0.7]) }),
-		\widthEnv, Pfunc({ Env(#[1, 1.05, 1], #[0.7, 0.3], \exp) })
-	) <> Pfunc { |inev| inev.copy[\chan] = nil }
-).play(protoEvent: ProtoEvent(\polySynthKrBusLock).copy);
+(play: {
+	p.runGesture(currentEnvironment)
+}) => ProtoEvent(\runKlankMachine);
+ProtoEvent.composite(#[polySynthKrBusLock, runKlankMachine]) => ProtoEvent(\leaning);
 
-p.stop;
+q = Pseq([
+	Pbind(
+		\protoEvent, \polySynthKrBusLock,
+		\chan, VC(\wp).env.target,
+		\instrument, VC(\wp).nodes[0].defname.asSymbol,
+		\busRate, \control,
+		\numCh, 1,
+		\gate, 0.1,
+		\deg, (Pwhite(35, 45, inf) +.x Pseries(0, Prand(#[-1, -2, -3], 2))).clump(2),
+		\freq, Pfunc { |ev| Mode(\g).cps(ev[\deg]) },
+		// \delta, Pwhite(0.9, 1.4, inf),
+		\delta, Pwhite(0.2, 0.4, inf) * Pseq(#[1, 2.1], { rrand(2, 4) }),
+		\sustain, 9,
+		\bufbase, Prand(VC(\wp).env.wt.flop[0], inf),
+		\envAtk, 0.05,
+		\envDcy, 0.12,
+		\fenv_tscale, Pkey(\sustain),
+		\fenvProp, 0.07,
+		\freqmul, { ~lock.bus.asMap },  // asControlInput .value's this
+		\lpcEv, Pbind(
+			\instrument, \krwobble,
+			\speedEnv, Pfunc({ Env(#[1.2, 5, 0.7], #[0.3, 0.7]) }),
+			\widthEnv, Pfunc({ Env(#[1, 1.05, 1], #[0.7, 0.3], \exp) })
+		) <> Pfunc { |inev| inev.copy[\chan] = nil }
+	),
+	(protoEvent: \runKlankMachine,
+		gest: \klankMachine, prob: 1, newDelta: 0.11, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, startFrame: p.pt.choose * 44100, delta: 1
+	)
+], 1).play(protoEvent: ProtoEvent(\leaning).copy);
+
+q.stop;
+
+
+prob
+newDelta
+freq
+timeMul
+kAmp
+harm
+yEnds, xEnds
+gest
+
+p = BP(\st);
+p.autoRun = false;
+
+// startFrame was the missing bit
+p.runGesture((gest: \klankMachine, prob: 1, newDelta: 0.09, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, startFrame: p.pt.choose * 44100));
+
+
+
+
 
 
 /**** TODO Falling */

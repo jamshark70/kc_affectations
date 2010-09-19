@@ -133,12 +133,12 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
-*** Sounds/processes [3/7]
+*** Sounds/processes [4/7]
 **** DONE Harmony w/ arms - refine
 **** DONE Slide/inversion gesture    
 **** DONE [#A] Multiple speeds
      Coming... want to modulate between no pitch, normal pitch and "crispy" pitch
-**** TODO Leaning - sketched, come back to this after doing multiple speeds
+**** DONE Leaning - sketched, come back to this after doing multiple speeds
 **** TODO Falling
 **** TODO Conflict
 **** TODO [#C] Distinguish locomotive themes

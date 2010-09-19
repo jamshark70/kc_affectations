@@ -1948,7 +1948,7 @@ make: { |name|
 				Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
 			},
 			klankMachine: { |parms|
-				Pbind(
+				var	list = [
 					#[pan, distance], ~xyPat.(parms),
 					\instrument, Pif((parms[\prob] ? 1).asPattern.coin, \bufGrainPanKlankDist, \rest),
 					\delta, parms[\newDelta] ? 0.5,
@@ -1957,17 +1957,23 @@ make: { |name|
 					\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
 					\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
 					\filtAttack, Pkey(\filtDecay) * 0.05,
-					\filtAmp, ~kAmpCtl.asMap,
+					\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
 					\ffreq, ~ffreqCtl.asMap,
 					\lprq, 0.32, //~rqCtl.asMap,
 					\amp, 0.5,
-					\harm, Pstutter(Pwhite(3, 6, inf), Pwrand([
-						(1..5),
-						(1, 3 .. 9),
-						Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
-					], #[0.4, 0.4, 0.2], inf).collect([_])),
+					\harm, parms[\harm] ?? {
+						Pstutter(Pwhite(3, 6, inf), Pwrand([
+							(1..5),
+							(1, 3 .. 9),
+							Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+						], #[0.4, 0.4, 0.2], inf).collect([_]))
+					},
 					\amps, Pkey(\harm).reciprocal
-				)
+				];
+				if(parms[\startFrame].notNil) {
+					list = list ++ [start: parms[\startFrame]];
+				};
+				Pbind(*list)
 			}
 		),
 	
