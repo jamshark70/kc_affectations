@@ -234,7 +234,7 @@ q = Pseq([
 		) <> Pfunc { |inev| inev.copy[\chan] = nil }
 	),
 	(protoEvent: \runKlankMachine,
-		gest: \klankMachine, prob: 1, newDelta: 0.11, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, startFrame: p.pt.choose * 44100, delta: 1
+		gest: \klankMachine, prob: 1, newDelta: 0.11, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, start: p.pt.choose * 44100, delta: 1
 	)
 ], 1).play(protoEvent: ProtoEvent(\leaning).copy);
 

@@ -1970,8 +1970,8 @@ make: { |name|
 					},
 					\amps, Pkey(\harm).reciprocal
 				];
-				if(parms[\startFrame].notNil) {
-					list = list ++ [start: parms[\startFrame]];
+				if(parms[\start].notNil) {
+					list = list ++ [start: parms[\start]];
 				};
 				Pbind(*list)
 			}
