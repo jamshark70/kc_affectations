@@ -241,28 +241,140 @@ q = Pseq([
 q.stop;
 
 
-prob
-newDelta
-freq
-timeMul
-kAmp
-harm
-yEnds, xEnds
-gest
-
 p = BP(\st);
 p.autoRun = false;
 
 // startFrame was the missing bit
-p.runGesture((gest: \klankMachine, prob: 1, newDelta: 0.09, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, startFrame: p.pt.choose * 44100));
-
-
-
+p.runGesture((gest: \klankMachine, prob: 1, newDelta: 0.09, freq: 900, timeMul: 0.05, kAmp: 1, harm: (1, 3 .. 9), yEnds: #[5, 20], numEv: 12, start: p.pt.choose * 44100));
 
 
 
 /**** TODO Falling */
 /**** TODO Conflict */
+
+Fact(\opening) => BP(\op);
+Fact(\openingSteps) => BP(\st);
+
+p = BP(\st);
+p.autoRun = false;
+p.ffreqCtl.value = 4000;
+
+p.runGesture((gest: \klankMachine,
+	prob: 1,
+	excTime: 0.08,
+	newDelta: 0.35,
+	freq: #[37, 43, 47].midicps,
+	timeMul: 0.05,
+	kAmp: 1,
+	harm: (1, 3 .. 9),
+	yEnds: #[18, 5],
+	numEv: 4,
+	start: p.pt.choose * 44100,
+	rate: Pexprand(0.6, 0.8, inf)
+));
+
+// higher variation is almost snare-drummy
+
+(
+if(r.isPlaying) { r.stop };
+r = fork {
+	var g, c = Condition.new;
+	loop {
+		p.use {
+			g = p.makeGesture((
+				gest: \klankMachine,
+				prob: 1,
+				excTime: 0.08,
+				newDelta: rrand(0.22, 0.4),
+				// ominous
+				// freq: \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps,
+				// freq: \patRejectLastN.eval(Pwhite(76.0, 94.0, inf), 3).clump(3).midicps,
+				freq: { rrand(76.0, 94.0).midicps } ! 3,
+				timeMul: 0.03,
+				kAmp: 1,
+				harm: (1, 3 .. 9),
+				yEnds: #[18, 5],
+				numEv: rrand(4, 7),
+				start: p.pt.choose * 44100,
+				rate: 1.2, //Pexprand(0.6, 0.8, inf),
+				shapebuf: b,
+				// chorusDelay: Pwhite(0.05, 0.09, inf),
+				// chorusAmt: Pwhite(0.5, 0.9, inf) * Pkey(\chorusDelay),
+				chorusAmps: #[0.4, 0.4, 0.4],
+				glrvbamt: 0.25,
+				lcrvbamt: 0.14
+			)).asStream;
+		};
+		g = CleanupStream(g, { c.unhang });
+		p.use { ~spawner.par(g) };
+		c.hang;
+		1.wait;
+	}
+};
+)
+
+r.stop;
+
+x = (Pseries.fromEndpoints(-1.0, 1.0, 512).asStream.all * 6.1887796806608).distort;
+x.plot2;
+
+b = Buffer.sendCollection(s, x.as(Signal).asWavetable, wait: 0.05);
+b.sendCollection(x.as(Signal).asWavetable, wait: 0.05);
+
+q = BP(\st).chan.playfx(Instr("busfx.dist"), [0, 2]); q.gui;
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
+p.gestures.klankMachine = { |parms|
+	var	instr = if(parms[\shapebuf].notNil) { \bufGrainPanKlShpDist } { \bufGrainPanKlankDist },
+		list = [
+			#[pan, distance], ~xyPat.(parms),
+			\instrument, Pif((parms[\prob] ? 1).asPattern.coin, instr, \rest),
+			\delta, parms[\newDelta] ? 0.5,
+			// exciter time only - note dur is from filtDecay
+			\time, parms[\excTime] ?? { min(0.15, Pkey(\delta) * 0.7) },
+			\rate, parms[\rate] ? 1,
+			\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
+			\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
+			\filtAttack, Pkey(\filtDecay) * 0.05,
+			\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
+			\ffreq, ~ffreqCtl.asMap,
+			\lprq, 0.32, //~rqCtl.asMap,
+			\amp, 0.5,
+			\harm, parms[\harm] ?? {
+				Pstutter(Pwhite(3, 6, inf), Pwrand([
+					(1..5),
+					(1, 3 .. 9),
+					Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+				], #[0.4, 0.4, 0.2], inf).collect([_]))
+			},
+			\amps, Pkey(\harm).reciprocal,
+			\chorusDelay, parms[\chorusDelay] ? 0.03,
+			\chorusAmt, parms[\chorusAmt] ? 0.02,
+			\chorusAmps, [parms[\chorusAmps] ? #[1, 1, 1]],
+			\glrvbamt, parms[\glrvbamt] ? 0.075,
+			\lcrvbamt, parms[\lcrvbamt] ? 0.035
+		];
+	if(parms[\start].notNil) {
+		list = list ++ [start: parms[\start]];
+	};
+	if(parms[\shapebuf].notNil) {
+		list = list ++ [
+			shapebuf: parms[\shapebuf],
+			shapeXf: parms[\shapeXf] ? 1
+		]
+	};
+	Pbind(*list)
+};
+
+
+
+
 /**** TODO Multiple speeds */
 
 Fact(\opening) => BP(\op);

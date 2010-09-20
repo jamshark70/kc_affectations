@@ -277,7 +277,7 @@ SynthDef(\bufGrainPanComb, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMa
 SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
 		attack = 0.001, decay = 0.02, outbus, filtFreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
 		filtAmp = 1,
-		/* shapebuf = -1, shapeXf = 1, */ chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
+		chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
 		ffreq = 2000, lprq = 1|
 	var harm = \harm.kr((1..5)),
 		amps = \amps.kr((1..5).reciprocal),
@@ -290,8 +290,6 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1, ampM
 			- Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtAttack),
 		shaped, dly, cfreqRand = chorusFreq * 0.2;
 	sig = sig + (Limiter.ar(filt) * filtAmp);
-//	shaped = Select.ar(shapebuf < 0, [Shaper.ar(shapebuf, sig), sig]);
-//	sig = XFade2.ar(sig, shaped, shapeXf);
 	dly = sig;
 	chorusAmps.do { |amp|
 		dly = DelayL.ar(dly, chorusDelay + chorusAmt,
@@ -302,7 +300,39 @@ SynthDef(\bufGrainPanKlank, { |start, time, bufnum, pan, rate = 1, amp = 1, ampM
 			)) * amp;
 		sig = sig + dly;
 	};
-// 	sig = LeakDC.ar(sig);
+	sig = RLPF.ar(sig, ffreq, lprq);
+	DetectSilence.ar(sig, 0.001, doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+}).add;
+
+SynthDef(\bufGrainPanKlShp, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
+		attack = 0.001, decay = 0.02, outbus, filtFreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
+		filtAmp = 1,
+		shapebuf = 0, shapeXf = 1, chorusFreq = 0.05, chorusAmt = 0.02, chorusDelay = 0.03,
+		ffreq = 2000, lprq = 1|
+	var harm = \harm.kr((1..5)),
+		amps = \amps.kr((1..5).reciprocal),
+		decays = \decays.kr(1 ! 5),
+		chorusAmps = \chorusAmps.kr(1 ! 3),
+		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+			* EnvGen.kr(Env.linen(attack, time, decay)),
+		// Klank(decay) - Klank(attack) is like a bank of Formlets
+		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtDecay)
+			- Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtAttack),
+		shaped, dly, cfreqRand = chorusFreq * 0.2;
+	sig = sig + (Limiter.ar(filt) * filtAmp);
+	shaped = Shaper.ar(shapebuf, sig);
+	sig = LeakDC.ar(XFade2.ar(sig, shaped, shapeXf));
+	dly = sig;
+	chorusAmps.do { |amp|
+		dly = DelayL.ar(dly, chorusDelay + chorusAmt,
+			SinOsc.kr(
+				chorusFreq + Rand(cfreqRand.neg, cfreqRand),
+				Rand(0, 2pi),
+				chorusAmt, chorusDelay
+			)) * amp;
+		sig = sig + dly;
+	};
 	sig = RLPF.ar(sig, ffreq, lprq);
 	DetectSilence.ar(sig, 0.001, doneAction: 2);
 	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
@@ -389,7 +419,7 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 } => Func(\makeWateryFx);
 
 
-#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayPanEnvShift, pvplayStereo].do { |name|
+#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayPanEnvShift, pvplayStereo, bufGrainPanKlShp].do { |name|
 	\addRvbOut.eval((name ++ "Dist").asSymbol, SynthDescLib.at(name).def.func).add;
 };
 
@@ -1766,11 +1796,16 @@ make: { |name|
 			} {
 				"BP(%) not found; can't use any pv gestures.".format(~pvSource.asCompileString).warn
 			};
+
+			~shapebuf = Buffer.sendCollection(s, 
+				(Pseries.fromEndpoints(-1.0, 1.0, 512).asStream.all * 6.1887796806608).distort
+				.as(Signal).asWavetable, wait: 0.05
+			);
 		},
 		useGui: { |vpi| ~ampCtl => VP(vpi) },
 		free: {
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
-			[~ampCtl, ~kAmpCtl, ~ffreqCtl].free;
+			[~ampCtl, ~kAmpCtl, ~ffreqCtl, ~shapebuf].free;
 		},
 		stopCleanup: {
 			~spawner = nil;
@@ -1948,30 +1983,44 @@ make: { |name|
 				Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
 			},
 			klankMachine: { |parms|
-				var	list = [
-					#[pan, distance], ~xyPat.(parms),
-					\instrument, Pif((parms[\prob] ? 1).asPattern.coin, \bufGrainPanKlankDist, \rest),
-					\delta, parms[\newDelta] ? 0.5,
-					// exciter time only - note dur is from filtDecay
-					\time, min(0.15, Pkey(\delta) * 0.7),
-					\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
-					\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
-					\filtAttack, Pkey(\filtDecay) * 0.05,
-					\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
-					\ffreq, ~ffreqCtl.asMap,
-					\lprq, 0.32, //~rqCtl.asMap,
-					\amp, 0.5,
-					\harm, parms[\harm] ?? {
-						Pstutter(Pwhite(3, 6, inf), Pwrand([
-							(1..5),
-							(1, 3 .. 9),
-							Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
-						], #[0.4, 0.4, 0.2], inf).collect([_]))
-					},
-					\amps, Pkey(\harm).reciprocal
-				];
+				var	instr = if(parms[\shapebuf].notNil) { \bufGrainPanKlShpDist }
+						{ \bufGrainPanKlankDist },
+					list = [
+						#[pan, distance], ~xyPat.(parms),
+						\instrument, Pif((parms[\prob] ? 1).asPattern.coin, instr, \rest),
+						\delta, parms[\newDelta] ? 0.5,
+						// exciter time only - note dur is from filtDecay
+						\time, parms[\excTime] ?? { min(0.15, Pkey(\delta) * 0.7) },
+						\rate, parms[\rate] ? 1,
+						\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
+						\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
+						\filtAttack, Pkey(\filtDecay) * 0.05,
+						\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
+						\ffreq, ~ffreqCtl.asMap,
+						\lprq, 0.32, //~rqCtl.asMap,
+						\amp, 0.5,
+						\harm, parms[\harm] ?? {
+							Pstutter(Pwhite(3, 6, inf), Pwrand([
+								(1..5),
+								(1, 3 .. 9),
+								Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+							], #[0.4, 0.4, 0.2], inf).collect([_]))
+						},
+						\amps, Pkey(\harm).reciprocal,
+						\chorusDelay, parms[\chorusDelay] ? 0.03,
+						\chorusAmt, parms[\chorusAmt] ? 0.02,
+						\chorusAmps, [parms[\chorusAmps] ? #[1, 1, 1]],
+						\glrvbamt, parms[\glrvbamt] ? 0.075,
+						\lcrvbamt, parms[\lcrvbamt] ? 0.035
+					];
 				if(parms[\start].notNil) {
 					list = list ++ [start: parms[\start]];
+				};
+				if(parms[\shapebuf].notNil) {
+					list = list ++ [
+						shapebuf: parms[\shapebuf],
+						shapeXf: parms[\shapeXf] ? 1
+					]
 				};
 				Pbind(*list)
 			}
