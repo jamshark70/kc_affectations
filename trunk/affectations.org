@@ -157,7 +157,20 @@
 
 
 ** Arms
-*** Sounds/processes [0/0]
+*** Sounds/processes [0/9]
+**** TODO Sunrise
+**** TODO Hand stacking
+**** TODO 9:28 sequence [0/2]
+***** TODO Apply inversions note sequences to another sound
+***** TODO What else?
+**** TODO Axial variations [0/2]
+***** TODO Shiva
+***** TODO Three levels
+**** TODO Duet partnering (S & I)
+**** TODO Manipulating Laura
+**** TODO Stephen solo
+**** TODO Cradling - drawing bow
+**** TODO Laura solo
 *** Data needed from Lorne
 *** Data to send to Lorne
 
