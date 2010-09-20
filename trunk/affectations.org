@@ -133,16 +133,17 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
-*** Sounds/processes [4/7]
+*** Sounds/processes [6/7]
 **** DONE Harmony w/ arms - refine
 **** DONE Slide/inversion gesture    
 **** DONE [#A] Multiple speeds
      Coming... want to modulate between no pitch, normal pitch and "crispy" pitch
 **** DONE Leaning - sketched, come back to this after doing multiple speeds
-**** TODO Falling
-**** TODO Conflict
+**** DONE Falling - reuse leaning, and extend clicky things
+**** DONE Conflict - prototyped, stomping and snare-drumming
 **** TODO [#C] Distinguish locomotive themes
 *** Data needed from Lorne
+**** 
 *** Data to send to Lorne
 
 
