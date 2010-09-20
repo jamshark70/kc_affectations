@@ -143,7 +143,16 @@
 **** DONE Conflict - prototyped, stomping and snare-drumming
 **** TODO [#C] Distinguish locomotive themes
 *** Data needed from Lorne
-**** 
+**** The entire opening sequence, up to about 3:30, there isn't much to read except stepping speed (foot markers going up and down) and the horizontal spread between the dancers. Their speeds may be different -- that's useful for me to know.
+**** c. 3:30 -- slower, more harmony -- movement velocity
+**** lying on backs -- another buildup leading to this, then hold (a) chord(s)
+***** the more they swing their legs, the more activity
+**** slide and inversions -- three triggers
+**** leaning -- they're stationary -- I'd like to know when they stop moving
+**** conflict -- can we tell when they change direction (attack/retreat)?
+**** Falling -- trigger when somebody goes down (y spread becomes small and they stop moving)
+**** Partnering at 7:20 -- I'll do a variation on the slide/inversion gestures, but I've no idea what you can read. It seems to go from set pose to set pose, so I guess (relative) pauses versus activity would be the most feasible/helpful.
+
 *** Data to send to Lorne
 
 
