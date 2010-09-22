@@ -435,6 +435,79 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 
 	topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
 	if(MBM.exists(0).not) { MIDIBufManager(nil, nil) => MBM.prNew(0) };
+
+();
+Event.addEventType(\dataWrap, {
+	~type = ~evType;
+	~play.value;  // do real action
+	\eventDataToViz.eval;
+});
+
+{	var	parms, addr, server;
+	if(~dataToViz ? true and: {
+		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
+	}) {
+		if(~vizKeys.notNil) {
+			if(~vizKeys.isKindOf(Dictionary)) {
+				parms = Array(~vizKeys.size * 2);
+				~vizKeys.keysValuesDo { |key, val|
+					parms.add(key);
+					if(val.isSymbol) { parms.add(val.envirGet) }
+					{ parms.add(val.value(key.envirGet, key)) }
+				};
+			} {
+				// asArray b/c envirPairs is stupidly defined only for Array
+				parms = ~vizKeys.asArray.envirPairs;
+			};
+		} {
+			parms = ~evArgs ?? { ~getMsgFunc.valueEnvir.valueEnvir };
+		};
+		if(parms.notNil) {
+			if(parms.includes(\latency).not) {
+				parms = parms.add(\latency).add(~latency ?? {
+					if(~server.size > 0) {
+						server = ~server.first;
+					} {
+						server = ~server ?? { Server.default };
+					};
+					server.latency
+				});
+			};
+			addr.sendBundle(nil,
+				((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray);
+			// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
+		};
+	};
+} => Func(\eventDataToViz);
+
+// wrapper for custom events
+{	|key, newKey|
+	var	protoEv;
+	if(ProtoEvent.exists(key)) {
+		protoEv = ProtoEvent(key);
+		if(protoEv[\originalPlayFunction].isNil) {
+			protoEv = protoEv.copy;
+			protoEv[\originalPlayFunction] = protoEv[\play];
+			protoEv[\play] = { |server|
+				~originalPlayFunction.(server);
+				\eventDataToViz.eval;
+			};
+			newKey ?? { newKey = (key ++ "Data").asSymbol };
+			protoEv => ProtoEvent(newKey);
+		} {
+			"ProtoEvent(%) is already wrapped - don't rewrap.".format(key.asCompileString).warn;
+			nil
+		}
+	} {
+		"ProtoEvent(%) doesn't exist, can't wrap.".format(key.asCompileString).warn;
+		nil
+	};
+} => Func(\dataWrapProtoEvent);
+
+#[polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger].do { |key|
+	\dataWrapProtoEvent.eval(key);
+};
+
 };
 
 true   // avoid stupid "found nil" warning

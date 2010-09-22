@@ -77,6 +77,7 @@
 ** Data for Lorne:
 *** TODO Voicer events need different arg handling
 *** TODO Check in chucklib event updates
+*** TODO Check in idiot GC fix
 *** Position data
 *** Other CC data
 *** Note data per instrument

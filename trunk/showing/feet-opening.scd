@@ -60,6 +60,33 @@ s.waitForBoot {
 				~mVol = GenericGlobalControl(\mvolume, nil, -4, #[-20, 0, \db]);
 				~mVol.gui(~win);
 				~win.startRow;
+				StaticText(~win, Rect(0, 0, 120, 20))
+					.align_(\center)
+					.string_("IP:port of v4");
+				~addrBox = TextField(~win, Rect(0, 0, ~width - 122, 20))
+					.action_({ |view|
+						var	str = view.value, ip, port, colonI,
+							badFmt = {
+								fork {
+									view.background_(Color.red).string_("WRONG FORMAT");
+									0.8.wait;
+									view.background_(Color.clear).string_(str);
+								}
+							};
+						if((colonI = str.indexOf($:)).notNil) {
+							ip = str[ .. colonI-1];
+							port = str[colonI+1 .. ].tryPerform(\asInteger) ? -9999;
+							if(ip.count(_ == $.) != 3 or: { port == -9999 }) {
+								badFmt.value;
+							} {
+								Library.put(\vizAddr, NetAddr(ip, port));
+								view.string_(Library.at(\vizAddr).asString);
+							};
+						} {
+							badFmt.value;
+						};
+					});
+				~win.startRow;
 				~quitButton = Button(~win, Rect(0, 0, ~width, 30))
 					.states_([["Quit this demo"]])
 					.action_(e {

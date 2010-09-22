@@ -430,7 +430,7 @@ keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayNotify),
+		event: (eventKey: \singleSynthPlayNotifyData),
 		sfpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav",
 		pvpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop-pv512.aiff",
 		inChannels: 2,
@@ -441,7 +441,7 @@ make: { |name|
 		readyToPlay: nil,
 		alwaysReset: true,
 		numSplashEv: 5,
-		maxSynths: 8,
+		maxSynths: 5,
 		trajectoryKey: \traj,
 		initAmp: 0.36,
 		userprep: {
@@ -457,6 +457,7 @@ make: { |name|
 					~numPvFrames = (~pvbuf.numFrames - 3) / ~fftSize;
 					// [~fftSize, ~hop, ~winType, ~numPvFrames].debug("pv specs");
 					~readyToPlay = true;
+					~externalInitFuncs.value;
 				});
 			});
 			if((sf = SoundFile.openRead(~sfpath.standardizePath)).notNil) {
@@ -565,6 +566,13 @@ make: { |name|
 					~makeStreamForKey.(str[ .. str.size - 7].asSymbol);
 				}
 			}
+		},
+		registerInitFunc: { |func|
+			if(~readyToPlay ? false) {
+				func.value
+			} {
+				~externalInitFuncs = ~externalInitFuncs.add(func);
+			};
 		}
 	));
 	0 => BP(name);
@@ -575,7 +583,7 @@ PR(\abstractProcess).clone {
 	~bufPath = "58454_sinatra314_footsteps_wooden_floor_loop.wav";
 
 // 	~event = (eventKey: \singleSynthPlayer);
-	~event = (eventKey: \polySynthPlayer);
+	~event = (eventKey: \polySynthPlayerData);
 	~quant = #[1, -0.25].asTimeSpec;
 	~alwaysReset = true;
 	~def = \bufGrainPanFilt;
@@ -1606,7 +1614,7 @@ type: \vc) => Fact(\waterpad);
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthPlayer),
+		event: (eventKey: \polySynthPlayerData),
 		bufSource: \op,
 		inChannels: 2,
 		master: ~master,
@@ -1689,7 +1697,11 @@ make: { |name|
 	BP(name).free;
 
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthPlayer, instrument: \bufGrainPanFiltDist),
+		event: (
+			eventKey: \polySynthPlayerData,
+			instrument: \bufGrainPanFiltDist,
+			vizPath: [\note, { ~parms.tryPerform(\at, \gest) }]
+		),
 		alwaysReset: true,
 	
 		bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
@@ -1790,9 +1802,11 @@ make: { |name|
 			~readLabels.();
 	
 			if(BP.exists(~pvSource)) {
-				#[pvbuf, fftSize, hop, numPvFrames].do { |key|
-					key.envirPut(BP(~pvSource)[key]);
-				}
+				BP(~pvSource).registerInitFunc(e {
+					#[pvbuf, fftSize, hop, numPvFrames].do { |key|
+						key.envirPut(BP(~pvSource)[key]);
+					}
+				});
 			} {
 				"BP(%) not found; can't use any pv gestures.".format(~pvSource.asCompileString).warn
 			};
@@ -1819,7 +1833,7 @@ make: { |name|
 				parms[\gest] ?? { parms[\gest] = ~gestStream.next };
 				if(parms[\gest].notNil) {
 					parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
-					~spawner.par(~makeGesture.(parms))
+					~spawner.par(~makeGesture.(parms.debug("\nparms").debug("stream added")))
 				} {
 					"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
 					.postf(~collIndex.asCompileString);
@@ -1927,7 +1941,7 @@ make: { |name|
 				Pbind(
 					\instrument, \pvplayPanDist,
 					\pvbuf, ~pvbuf,
-					\pt, BPStream(\ptIndex).clump(3),
+					\pt, BPStream(\ptIndex), //.clump(3),
 					\start, ~start,
 					\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
 					#[pan, distance], ~xyPat.(parms),
