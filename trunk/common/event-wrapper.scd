@@ -180,10 +180,61 @@ o.remove;
 o = OSCresponderNode(Library.at(\vizAddr).copy, '/pbind', { |t, r, m| m.postcs }).add;
 o = OSCresponderNode(Library.at(\vizAddr).copy.port_(nil), nil, { |t, r, m| m.postcs }).add;
 
-o = OSCresponderNode(Library.at(\vizAddr).copy, '/note', { |t, r, m| m.postcs }).add.removeWhenDone;
+o = OSCresponderNode(Library.at(\vizAddr).copy, '/note', { |t, r, m| m.postcs }).add;
 o.inspect
 
 o = OSCpathResponder(Library.at(\vizAddr).copy, ['/note', 'slowSteps'], { |t, r, m| m.postcs }).add.removeWhenDone;
+
+var bp = BP(\st);
+bp.ampCtl.value = 0;
+bp.gest = Pn(\slowSteps, 1);
+bp.numEv = 2; // Pwhite(4, 7, inf);
+bp.gDelta = Pwhite(2.5, 4.0, inf);
+bp.slowRate = Pwhite(0.5, 0.8, inf);
+bp.defaultParms = nil;
+bp.kdecay = Pexprand(0.014, 0.017, inf);
+bp.makeStreamForKey(\kfreq);	// reset this one
+bp.autoRun = true;		
+bp.gestures.oneKlankStepsCallback = { |parms|
+	CleanupStream(~gestures[\oneKlankSteps].(parms).asStream, parms[\callback])
+};
+
+~resp.remove;
+~resp = OSCresponderNode(s.addr, '/n_go', { |t, r, m| m[1].debug("synth") }).add;
+
+BP(\st).event.eventKey = \polySynthPlayNotifyData;
+BP(\st).event.notifyDependents = { e = currentEnvironment };
+BP(\st).reset;
+
+e.node
+e.evArgs.pairsDo({ |a, b| [a, b].postln }); ""
+e.msgArgs.do(_.postln); ""
+
+BP(\st).play;
+BP(\st).stop;
+
+BP(\st).free;
+
+BP(\st).slowDelta = 5;
+
+BP(\st).gestures.slowSteps = { |parms|
+	Pbind(
+		\instrument, \pvplayPanDist,
+		\pvbuf, ~pvbuf,
+		\pt, BPStream(\ptIndex).clump(3),
+		\start, ~start,
+		\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
+		#[pan, distance], ~xyPat.(parms),
+		\delta, BPStream(\slowDelta),
+		\rate, BPStream(\slowRate).clump(3),
+		\time, Pkey(\delta) * 0.2,
+		\amp, BPStream(\amp) * (-4.dbamp),
+		\shiftS, BPStream(\slowShift).clump(3),
+		\shiftE, Pkey(\shiftS)
+	).trace
+};
+
+
 
 o.inspect
 OSCresponder.all.detect { |r| r.cmdName == '/test' }.inspect
@@ -192,8 +243,7 @@ OSCresponder.all.do({ |r| r.cmdName.postln }); ""
 thisProcess.recvOSCfunc = nil;
 thisProcess.recvOSCfunc = { |t, a, m|
 	if(#['status.reply', '/status.reply', '/info'].includes(m[0]).not) {
-		~ad = a;
-		[a, m].postcs;
+		m.postcs;
 	}
 };
 

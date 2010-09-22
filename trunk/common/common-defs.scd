@@ -474,7 +474,7 @@ Event.addEventType(\dataWrap, {
 				});
 			};
 			addr.sendBundle(nil,
-				((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray);
+				((~vizPath.collect(_.valueEnvir) ? ~collIndex ? #[note]).asArray ++ parms).asOSCArgArray);
 			// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
 		};
 	};

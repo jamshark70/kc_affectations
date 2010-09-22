@@ -1700,7 +1700,7 @@ make: { |name|
 		event: (
 			eventKey: \polySynthPlayerData,
 			instrument: \bufGrainPanFiltDist,
-			vizPath: [\note, { ~parms.tryPerform(\at, \gest) }]
+			vizPath: [{ "/%/%".format(~collIndex, ~parms.tryPerform(\at, \gest)) }]
 		),
 		alwaysReset: true,
 	
@@ -1833,7 +1833,7 @@ make: { |name|
 				parms[\gest] ?? { parms[\gest] = ~gestStream.next };
 				if(parms[\gest].notNil) {
 					parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
-					~spawner.par(~makeGesture.(parms.debug("\nparms").debug("stream added")))
+					~spawner.par(~makeGesture.(parms))
 				} {
 					"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
 					.postf(~collIndex.asCompileString);
@@ -1941,7 +1941,7 @@ make: { |name|
 				Pbind(
 					\instrument, \pvplayPanDist,
 					\pvbuf, ~pvbuf,
-					\pt, BPStream(\ptIndex), //.clump(3),
+					\pt, BPStream(\ptIndex).clump(3),
 					\start, ~start,
 					\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
 					#[pan, distance], ~xyPat.(parms),
