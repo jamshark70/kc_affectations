@@ -75,6 +75,8 @@
 * Residency <2010-09-27 Mon>--<2010-10-02 Sat>
 ** TODO Place to put in IP address/port
 ** Data for Lorne:
+*** TODO Voicer events need different arg handling
+*** TODO Check in chucklib event updates
 *** Position data
 *** Other CC data
 *** Note data per instrument
