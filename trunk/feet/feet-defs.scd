@@ -430,7 +430,7 @@ keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayNotifyData),
+		event: (eventKey: \singleSynthPlayNotifyData, vizPath: #[perc]),
 		sfpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav",
 		pvpath: topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop-pv512.aiff",
 		inChannels: 2,
@@ -1700,7 +1700,7 @@ make: { |name|
 		event: (
 			eventKey: \polySynthPlayerData,
 			instrument: \bufGrainPanFiltDist,
-			vizPath: [{ "/%/%".format(~collIndex, ~parms.tryPerform(\at, \gest)) }]
+			vizPath: #[perc]
 		),
 		alwaysReset: true,
 	
@@ -1880,6 +1880,8 @@ make: { |name|
 			},
 			oneKlank: { |parms|
 				Pbind(
+					\vizPath, #[note],
+					\vizKeys, Library.at(\defaultVizKeys).copy.put(3, \filtFreq),
 					\instrument, Pn(\bufGrainPanKlankDist, 1),
 					\delta, 0.5,
 					\amp, BPStream(\amp),

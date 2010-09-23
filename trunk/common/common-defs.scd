@@ -1,7 +1,6 @@
 // everybody needs these...
 
 
-
 s.waitForBoot {
 
 	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
@@ -443,42 +442,116 @@ Event.addEventType(\dataWrap, {
 	\eventDataToViz.eval;
 });
 
-{	var	parms, addr, server;
+// original version, may be useful later
+// {	var	path, parms, addr, server;
+// 	if(~dataToViz ? true and: {
+// 		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
+// 	}) {
+// 		if(~vizKeys.notNil) {
+// 			if(~vizKeys.isKindOf(Dictionary)) {
+// 				parms = Array(~vizKeys.size * 2);
+// 				~vizKeys.keysValuesDo { |key, val|
+// 					parms.add(key);
+// 					if(val.isSymbol) { parms.add(val.envirGet) }
+// 					{ parms.add(val.value(key.envirGet, key)) }
+// 				};
+// 			} {
+// 				// asArray b/c envirPairs is stupidly defined only for Array
+// 				parms = ~vizKeys.asArray.envirPairs;
+// 			};
+// 		} {
+// 			parms = ~evArgs ?? { ~getMsgFunc.valueEnvir.valueEnvir };
+// 		};
+// 		if(parms.notNil) {
+// 			if(parms.includes(\latency).not) {
+// 				parms = parms.add(\latency).add(~latency ?? {
+// 					if(~server.size > 0) {
+// 						server = ~server.first;
+// 					} {
+// 						server = ~server ?? { Server.default };
+// 					};
+// 					server.latency
+// 				});
+// 			};
+// 			path = (~vizPath.collect(_.valueEnvir) ?? { ~collIndex ?? { #[note] } }).asArray;
+// 			addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
+// 			// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
+// 		};
+// 	};
+// } => Func(\eventDataToViz);
+
+
+Library.put(\defaultVizKeys, [
+	{ ~collIndex.hash },
+	\soundID, 
+	{	var	server;
+		~latency ?? {
+			if(~server.size > 0) {
+				server = ~server.first;
+			} {
+				server = ~server ?? { Server.default };
+			};
+			server.latency
+		}
+	}, 
+	{ ~freq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) }, 
+	{ ~sustain ?? { ~time } }, 
+	\amp, 
+	\pan, 
+	\distance
+]);
+
+{	var	path, parms, val, addr, server, mapped, getmapped = false;
 	if(~dataToViz ? true and: {
 		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
 	}) {
-		if(~vizKeys.notNil) {
-			if(~vizKeys.isKindOf(Dictionary)) {
-				parms = Array(~vizKeys.size * 2);
-				~vizKeys.keysValuesDo { |key, val|
-					parms.add(key);
-					if(val.isSymbol) { parms.add(val.envirGet) }
-					{ parms.add(val.value(key.envirGet, key)) }
-				};
-			} {
-				// asArray b/c envirPairs is stupidly defined only for Array
-				parms = ~vizKeys.asArray.envirPairs;
-			};
-		} {
-			parms = ~evArgs ?? { ~getMsgFunc.valueEnvir.valueEnvir };
+		~vizKeys ?? { ~vizKeys = Library.at(\defaultVizKeys) };
+		// don't need string parm names
+		// array: [value | lookup symbol | func]
+		// Lorne should interpret -inf as 'not populated'
+		parms = ~vizKeys.collect { |item|
+			val = (if(item.isSymbol) { item.envirGet }
+				{ item.value }) ? -inf;
+			if(val.size > 0) { val[0] } { val };  // NO ARRAYS
+		};
+		mapped = parms.collect { |val|
+			// only symbols will be converted to strings
+			if(val.isSymbol and: { (val = val.asString)[0].toLower == $c }) {
+				getmapped = true;
+				val
+			} // { nil }
 		};
 		if(parms.notNil) {
-			if(parms.includes(\latency).not) {
-				parms = parms.add(\latency).add(~latency ?? {
-					if(~server.size > 0) {
-						server = ~server.first;
-					} {
-						server = ~server ?? { Server.default };
-					};
-					server.latency
-				});
+			fork {
+				var cond, getbuses;
+				if(getmapped) {
+					cond = Condition.new;
+					getbuses = mapped.select(_.notNil).collect { |str| str[1..].asInteger };
+					OSCresponderNode(s.addr, '/c_set', { |time, resp, msg|
+						var j = 2;
+						if(msg[1, 3..] == getbuses) {
+							mapped.do { |map, i|
+								if(map.notNil) { parms[i] = msg[j]; j = j + 2 };
+							};
+							resp.remove;
+							cond.unhang;
+						};
+					}).add;
+					s.sendMsg(\c_get, *getbuses);
+					cond.hang;
+				};
+
+				path = (~vizPath.collect(_.valueEnvir) ?? { #[note] }).asArray;
+				if(path.size > 1 and: { path[1].isInteger.not}) {
+					path[1] = path[1].hash  // Lorne wants numbers
+				};
+				addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
+				// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
 			};
-			addr.sendBundle(nil,
-				((~vizPath.collect(_.valueEnvir) ? ~collIndex ? #[note]).asArray ++ parms).asOSCArgArray);
-			// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
 		};
 	};
 } => Func(\eventDataToViz);
+
 
 // wrapper for custom events
 {	|key, newKey|

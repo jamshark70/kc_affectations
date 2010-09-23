@@ -180,7 +180,9 @@ o.remove;
 o = OSCresponderNode(Library.at(\vizAddr).copy, '/pbind', { |t, r, m| m.postcs }).add;
 o = OSCresponderNode(Library.at(\vizAddr).copy.port_(nil), nil, { |t, r, m| m.postcs }).add;
 
+[o, p].do(_.remove);
 o = OSCresponderNode(Library.at(\vizAddr).copy, '/note', { |t, r, m| m.postcs }).add;
+p = OSCresponderNode(Library.at(\vizAddr).copy, '/perc', { |t, r, m| m.postcs }).add;
 o.inspect
 
 o = OSCpathResponder(Library.at(\vizAddr).copy, ['/note', 'slowSteps'], { |t, r, m| m.postcs }).add.removeWhenDone;
