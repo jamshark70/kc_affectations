@@ -78,6 +78,7 @@
 *** TODO Voicer events need different arg handling
 *** DONE Check in chucklib event updates
 *** DONE Check in idiot GC fix
+*** TODO [#A] Check in WeighBag fix
 *** Position data
 *** Other CC data
 *** Note data per instrument

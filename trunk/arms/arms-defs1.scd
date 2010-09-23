@@ -405,7 +405,13 @@ isMono: false,
 customize: nil,
 make: { |name|
 	var	args, out;
-	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master);
+	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master,
+		completionFunc: { |chan|
+			~chorus = chan.playfx(Instr("busfx.chorus"), [0, 2, 0.011924888841111, 0.15615231995716, 0.0044072173729238, 1.1, 0.5]);
+			StaticEQ(2, \hishelf, 3654.349, 4.274.dbamp, 1, \eq, 301.329, -5.641.dbamp, 1.286)
+				.play(chan);
+			~chorus.doWhenPlaying { ~chorus.synth.moveToHead(chan.effectgroup) };
+		});
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
 	};
