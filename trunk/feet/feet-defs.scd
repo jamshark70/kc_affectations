@@ -457,7 +457,7 @@ make: { |name|
 					~numPvFrames = (~pvbuf.numFrames - 3) / ~fftSize;
 					// [~fftSize, ~hop, ~winType, ~numPvFrames].debug("pv specs");
 					~readyToPlay = true;
-					~externalInitFuncs.value;
+					~externalInitFuncs.do(_.value);
 				});
 			});
 			if((sf = SoundFile.openRead(~sfpath.standardizePath)).notNil) {
@@ -522,7 +522,8 @@ make: { |name|
 					], inf), Pkey(\time) * 0.1),
 					instrument: Pfunc { |ev|
 						if(~activeSynths.size < ~maxSynths) { ev[\instrument] } { \rest }
-					}
+					},
+					soundID: Pkey(\pan).collect { |map| map.asString[1..].asFloat }
 				]
 			)
 		),
@@ -1702,6 +1703,7 @@ make: { |name|
 			instrument: \bufGrainPanFiltDist,
 			vizPath: #[perc]
 		),
+		soundID: Pseries(0, 1, inf),
 		alwaysReset: true,
 	
 		bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
@@ -1847,7 +1849,7 @@ make: { |name|
 			Pchain(
 				~gestures[parms[\gest]].value(parms),
 				~baseValuePat.value(parms),
-				(parms: parms)
+				(parms: parms, soundID: ~soundIDStream.next)
 			)
 		},
 	
@@ -2046,6 +2048,7 @@ make: { |name|
 			~numEvStream ?? { ~makeStreamForKey.(\numEv) };
 			~gDeltaStream ?? { ~makeStreamForKey.(\gDelta) };
 			~gestStream ?? { ~makeStreamForKey.(\gest) };
+			~soundIDStream ?? { ~makeStreamForKey.(\soundID) };
 			Pspawner { |sp|
 				~spawner = sp;
 				if(~autoRun) {
