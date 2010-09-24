@@ -137,6 +137,8 @@
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
+*** Notes
+**** Silence when Laura walks in slowly (multispeed part toward end)
 *** Sounds/processes [6/7]
 **** DONE Harmony w/ arms - refine
 **** DONE Slide/inversion gesture    
@@ -163,12 +165,13 @@
 ** Arms
 *** Sounds/processes [0/9]
 **** TODO Sunrise
-**** TODO Hand stacking
+**** TODO Hand stacking - MUCH SLOWER NOW
 **** TODO 9:28 sequence [0/2]
 ***** TODO Apply inversions note sequences to another sound
 ***** TODO What else?
 **** TODO Axial variations [0/2]
 ***** TODO Shiva
+***** Between these 2, use axial sound with sparse notes
 ***** TODO Three levels
 **** TODO Duet partnering (S & I)
 **** TODO Manipulating Laura
@@ -180,6 +183,11 @@
 
 
 ** Head
+*** Notes
+**** Transition from arms needs more thought
+**** Cue some specifics - "filter sweeps" - off their activity
+**** Nice to have: special fx for some gestures like head shaking
+**** How does this flow with the existing music?
 *** Sounds/processes [0/0]
 *** Data needed from Lorne
 *** Data to send to Lorne
@@ -203,9 +211,10 @@
 
 ** Torso
 *** TODO [0/1] Watch video!
+**** Silence to open this section would be nice after drums
 **** TODO What to do with the hopping theme?
 **** Pauses on the box
-*** Sounds [4/4]
+*** Sounds [4/5]
 **** Silences!
 **** DONE Bells
 **** DONE Washes
@@ -220,11 +229,16 @@
      Nice for Stephen's solo, with melodic fragments
      Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
      Later, integrate tinkles with chords(?) -- rework Klank as effect
+**** TODO Steady pitches with modulation based on movement
 *** Data needed from Lorne
 *** Data to send to Lorne
 
 
 ** Body
+*** Notes
+**** Laura's solo: lpc chaos toward end, then bells/space from torso
+**** How to work in hints of drums?
+**** Stephen's feet on Ilana's back - fantastic!
 *** Sounds/processes [0/0]
 *** Data needed from Lorne
 *** Data to send to Lorne
