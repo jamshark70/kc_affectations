@@ -165,7 +165,8 @@
 ** Arms
 *** Sounds/processes [0/9]
 **** TODO Sunrise
-**** TODO Hand stacking - MUCH SLOWER NOW
+**** TODO [0/1] Hand stacking - MUCH SLOWER NOW
+***** TODO Ask Lorne for hand height
 **** TODO 9:28 sequence [0/2]
 ***** TODO Apply inversions note sequences to another sound
 ***** TODO What else?
