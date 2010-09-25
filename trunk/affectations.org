@@ -299,7 +299,7 @@
 * Environment building
   1. Clean install directories.
   2. Get debian packages needed to build sc (if not already done).
-     sudo apt-get install build-essential libjack0.100.0-dev libsndfile1-dev libasound2-dev libavahi-client-dev libicu-dev libreadline6-dev libfftw3-dev libxt-dev pkg-config scons
+     sudo apt-get install build-essential libjack0.100.0-dev libsndfile1-dev libasound2-dev libavahi-client-dev libicu-dev libreadline6-dev libfftw3-dev libxt-dev pkg-config scons git-core subversion
   3. Check out and build sc (r10246).
      mkdir ~/share
      cd ~/share
