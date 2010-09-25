@@ -127,7 +127,57 @@
     14:14 -- hand play, should start with the bleeps and bloops for the face dance
 
 *** TODO Head
-*** TODO Torso
+**** Face dance
+     Can't see a lot of specifics in the run-through videos, but I remember
+basically from the earlier close-up video. Mainly I'll need trigger
+messages when something happens on Ilana's face. Later in the face
+dance, the event density will increase (maybe a lot) and that should
+be synced with video. Whether I'm driving (sending note data to Lorne)
+or Lorne sends me data about the desired activity level doesn't matter
+much to me. Probably it will be both.
+
+**** Rest of the section
+     I'd like to cue some changes in the music based on movement. Possible
+parameters are the height of the additive synthesis structures,
+triggers to initiate the sweeps up (maybe including data about how
+fast), when to introduce new pieces of the drum rhythms, brightness or
+dullness of the drum sounds... just brainstorming.
+
+Since this section is basically written from my side, for me it's a
+matter of adding movement responsiveness to something that is already
+working. At this late date, it would be worth doing this only if it
+will be a big improvement on what I have already -- changes introduce
+risk and the payoff needs to be good to justify it.
+
+Sorry this is not very specific. I have yet to watch the video while
+playing the music so that the drums end right around 29:30. Then I
+might notice some correspondences that would be worth picking up.
+
+*** DONE Torso
+    Drums can dwindle away toward 30:10, when Laura appears above the screen. Then silence. Well, I'd like to have some silence in this part before Stephen's solo begins. The silence could be interrupted by some sounds.
+
+Mostly for Lorne -- for a lot of these places, I'm hearing more or less steady state sounds that develop some "internal modulation" as the dancers twist and bend and otherwise move away from center. That's probably a challenge to read, but I would love to have some measurement of how far away they are from "center" (at the beginning of this section, "center" is upright with head and torso squarely forward). It probably gets easier to read when their hands come out around 30:50, but it might be impossible in those first 30-40 seconds when the only visible markers will be the head and neck. (Bowing might be readable from changes in the vertical distance between forehead and neckline.)
+
+31:45 -- Stephen solo (amazing work by the way) -- should be pretty easy to tell the difference between axial and locomotive moments. One thing I specifically want to catch is the hopping movement at 32:31. Also the arm raising. Standing still and initiating shoulder movement from the torso is probably going to be invisible to the video, but I feel like the sound should still reflect it.
+
+33:10 -- Ilana enters, then Laura at 33:40. Same challenges.
+
+c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to track the energy ball as it moves from person to person.
+
+34:35 -- Locomotion again, then arm movements like throwing energy into space.
+
+34:55 -- An inversion, similar to previous sections. I'd like to echo that musically.
+
+35:05 -- some poses, and exchanging places behind the screen. Probably motion versus stillness is more useful than anything else.
+
+35:35 -- echoing Stephen's solo material in unison (not completely unison)
+
+(36:10 -- Short repeat of energy exchange)
+
+37:00 -- Remove props, then Ilana's solo. Lots to read here: center versus off-center, axial versus locomotive, L-R pan position.
+
+38:14 -- Stephen and Laura duet. Amount of movement is interesting, as is body orientation (standing versus lying down or in the middle of a lift). I'll leave this for a detailed reading later, since this seems to belong more to the whole body section. By the time Laura comes back in at 40:28, we are definitely blending material from other sections.
+
 *** TODO Body
 
 ** Debugging
