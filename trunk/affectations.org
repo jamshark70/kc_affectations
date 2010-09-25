@@ -293,3 +293,45 @@
             footsteps (Streety NR).wav (http://www.freesound.org/samplesViewSingle.php?id=25077)
         By martian (http://www.freesound.org/usersViewSingle.php?id=84709)
             footstep on wood foley.wav (http://www.freesound.org/samplesViewSingle.php?id=19292)
+
+
+
+* Environment building
+  1. Clean install directories.
+  2. Get debian packages needed to build sc (if not already done).
+     sudo apt-get install build-essential libjack0.100.0-dev libsndfile1-dev libasound2-dev libavahi-client-dev libicu-dev libreadline6-dev libfftw3-dev libxt-dev pkg-config scons
+  3. Check out and build sc (r10246).
+     mkdir ~/share
+     cd ~/share
+     svn co -r10246 https://supercollider.svn.sourceforge.net/svnroot/supercollider/trunk sc-svn
+     cd common
+     scons
+     sudo scons install
+  4. Check out and build sc3-plugins (r444).
+     cd ~/share/sc-svn
+     svn co -r444 https://sc3-plugins.svn.sourceforge.net/svnroot/sc3-plugins sc3-plugins
+     cd common
+     scons
+     sudo scons install
+  5. Check out quarks (r1629).
+     1. In sc/emacs, "Quarks.gui"
+     2. Select dewdrop_lib, MathLib and cruciallib (buttons at left).
+     3. Click "save" and wait (it may issue several svn co commands).
+  6. Check out my git repos.
+     cd ~/wherever/you/want
+     git clone http://jamshark70@github.com/jamshark70/kc_affectations.git
+  7. Private extensions --> ~/share/SuperCollider/Extensions.
+     1. Extract trunk/sc-private-extensions.tar.gz into a separate directory.
+	cp trunk/sc-private-extensions.tar.gz ~/aDir
+	cd ~/aDir
+	tar -xvzf sc-private-extensions.tar.gz
+     2. mkdir ~/share/SuperCollider/Extensions/PrivateExtensions
+     3. cp *.sc ~/share/SuperCollider/Extensions/PrivateExtensions
+     4. tar -xvzf fixes.tar.gz ~/share/sc-svn/common/build/SCClassLibrary
+     5. cd ~/share/sc-svn/common
+     6. sudo scons install
+  8. Restart sc interpreter.
+** DONE Check all private-extensions into git.
+
+
+* Environment update notes
