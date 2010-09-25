@@ -310,7 +310,7 @@
   4. Check out and build sc3-plugins (r444).
      cd ~/share/sc-svn
      svn co -r444 https://sc3-plugins.svn.sourceforge.net/svnroot/sc3-plugins sc3-plugins
-     cd common
+     cd sc3-plugins
      scons
      sudo scons install
   5. Check out quarks (r1629).
