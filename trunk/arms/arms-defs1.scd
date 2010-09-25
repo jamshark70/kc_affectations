@@ -318,7 +318,6 @@ PR(\abstractProcess).clone {
 	~gate = 0.8;
 	~freqlag = 0.3;
 	~detune = 1.003;
-	~gate = 0.8;
 	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger));
 	~ffreq = Pexprand(2300, 8000, inf);
 	~rq = Pexprand(0.1, 1.0, inf);
@@ -331,12 +330,10 @@ PR(\abstractProcess).clone {
 //			\level, BPStream(\level),
 			\node, Pfunc { ~node ?? { 0 } },
 			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
-			\node, Pfunc { ~node ?? { 0 } },
 			\root, 7,
 			\freq, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps,
 			\delta, BPStream(\dur),
 // 			\legato, BPStream(\legato),
-			\gate, BPStream(\gate),
 			\freqlag, BPStream(\freqlag),
 			\detune, BPStream(\detune),
 			\gate, BPStream(\gate),

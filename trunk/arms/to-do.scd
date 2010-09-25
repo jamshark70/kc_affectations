@@ -57,7 +57,7 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, 
 Fact(\armsChordVC) => VC(\ac);
 
 k = VoicerMIDISocket(0, VP(2).v);
-k.noteOnArgsPat = Pbind(\mod_lev, Pkey(\velocity).linlin(0, 127, 0.5, 6.0), \finalAmp, -15.dbamp);
+k.noteOnArgsPat = Pbind(\mod_lev, Pkey(\velocity).linlin(0, 127, 0.5, 6.0), \finalAmp, -15.dbamp).trace;
 
 q = VC(\ac).env.target.playfx(Instr("busfx.chorus")/*.listArgs*/, [0, 2]); q.gui;
 
@@ -387,7 +387,7 @@ Proto {
 		inval
 	};
 	~asStream = { Routine { |inval| ~embedInStream.(inval) } };
-	~asPattern = { Prout { |inval| ~embedInStream.debug.(inval) } };
+	~asPattern = { Prout { |inval| ~embedInStream.(inval) } };
 	~play = { |clock, protoEvent, quant|
 		~asPattern.().play(clock, protoEvent, quant)
 	};
@@ -409,44 +409,73 @@ q.next(());
 // control top pitch
 // can lorne give height? --> root pitch?
 
+~lastPoint = 200@200;
+
+w = Window("test", Rect(800, 100, 400, 400));
+u = UserView(w, w.view.bounds.insetBy(2, 2))
+.drawFunc_({ |view|
+	Pen.fillOval(Rect.aboutPoint(~lastPoint, 3, 3))
+});
+w.front;
+
+PeakMonitor(VC(\ac).env.target)
+
 (
 p = PR(\psetp2).copy.prep(
 	Pbind(
-		\root, Pstutter(Pwhite(1, 3, inf), Pseq([
+		\root, Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
 			Pwhile1({ |inval, next| next < 40 },
 				Pseries(26, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf), inf)
 			),
-			Pwhile1({ |inval, next| next > 26 },
+			Pwhile1({ |inval, next| next >= 21 },
 				Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
 			)
-		])),
-		\num, Pwhite(3, 6, inf)
-	),
+		])), //.trace(prefix: "root: "),
+		\num, Pexprand(2.5, 6.499, inf).round //Pwhite(3, 6, inf)
+	), //.trace,
 	Pseq([
 		Pbind(
 			\voicer, VC(\ac).v,
 			\finalAmp, -18.dbamp,
-			\pan, 0,
-			\distance, 8,
-			// \distance, Pseq([
-			// 	Pseries.fromEndpoints(18, 5, 42),
-			// 	Pseries.fromEndpoints(5, 18, 42)
-			// ]),
+			\angle, Pseries(
+				{ 2pi.rand },
+				Pwhite(0.1, 0.4, inf) * Pstutter(inf, Prand(#[-1, 1], 1)),
+				inf
+			).asStream,  // asStream retains continuity between Pbinds
+			\radius, Paccumbounce(0.2, 1, Pexprand(0.04, 0.1, inf)).asStream,
+			\pan, cos(Pkey(\angle)) * Pkey(\radius),
+			\distance, (sin(Pkey(\angle)) * Pkey(\radius)).linlin(-1, 1, 5, 20),
 			\dur, Plazy({ |ev|
-				Pgeom.fromEndpoints(0.4, 0.15, ev[\num]) * Pexprand(0.5, 2.0, inf)
+				Pgeom.fromEndpoints(rrand(0.2, 0.32), rrand(0.09, 0.14), ev[\num])
+					* Pexprand(0.75, 1.333, inf)
 			}),
-			\freq, Pkey(\root) + Pseries(0, 
-				Pwrand(#[1, 2, 3, 4], #[1, 4, 3, 2].normalizeSum, inf), Pkey(\num).asStream),
+			\freq, Pwhile1({ |ev, next| next <= 54 },
+				Pkey(\root) + Pseries(0, 
+					Pwrand(#[1, 2, 3, 4], #[1, 4, 3, 2].normalizeSum, inf), Pkey(\num).asStream)
+			),
 			\mode, \g,
 			\gate, 0.5, // Pkey(\dur).linlin(0.1, 0.5, 0.6, 0.2),
 			\mod_lev, 2.5,
-			\length, Pkey(\dur) * 4.5, // Pwhite(2.0, 3.5, inf),
-			\attackTimeScale, 0.1,
+			// \length, 0.15,
+			// \length, Pkey(\dur) * 4.5,
+			// \length, Pwhite(2.0, 3.5, inf),
+			// earlier notes in 1 chord will hold longer -- all cut off w/in 1.5 sec of each other
+			\length, Pwhite(3.0, 4.5, inf) - Pseries(0, Pkey(\dur), inf),
+			\attackTimeScale, 0.25,
 			\decayTimeScale, 1
-		),
+		)/*.collect { |ev|
+			defer {
+				topEnvironment[\lastPoint] = Point(
+					ev[\pan].linlin(-1, 1, 0, 396),
+					ev[\distance].linlin(5, 20, 396, 0)
+				);
+				u.refresh;
+			};
+			ev
+		}*/,
 		Pbind(
 			\freq, #[],
-			\dur, Pwhite(0.3, 0.9, 1),
+			\dur, Pwhite(0.15, 0.35, 1),
 			\length, 0.2,
 			\gate, 0.1
 		)
@@ -461,8 +490,215 @@ p.isPlaying;
 
 /**** TODO 9:28 sequence [0/2] ****/
 /***** TODO Apply inversions note sequences to another sound ****/
+
+~slideNotes = (
+	lauraslide: Pseries(
+		{ rrand(-7, 0) },
+		Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	),
+	inversion1: Pseries(
+		{ rrand(-3, 4) },
+		Pstutter(
+			Pseq([Pfuncn({ |ev| (ev[\numEv] * 0.6).round }), 100], 1),
+			Pseq([1, -1], 1)
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	),
+	inversion2: Pseries(
+		{ rrand(0, 8) },
+		Pstutter(
+			Pseries(1, 1, inf),
+			Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	)
+);
+
+(
+var	timer = Ptime().asStream;
+p = PR(\psetp2).copy.prep(
+	Pbind(
+		\gest, Pseq(#[inversion1, inversion2, lauraslide], 1),
+		\numEv, Pwhite(12, 19, inf),
+		\totalDur, Pwhite(2.5, 4.0, inf),
+		\timeIsNow, timer
+	),
+	Pseq([
+		Pbind(
+			// \voicer, VC(\ac).v,
+			\voicer, VC(\sp).v,
+			\finalAmp, -18.dbamp,
+			\pan, Plazy({ |ev|
+				Pseries.fromEndpoints(rrand(-1.0, -0.5), rrand(0.5, 1.0), ev[\numEv])
+				* #[-1, 1].choose
+			}),
+			\distance, Plazy({ |ev|
+				Pseries.fromEndpoints(rrand(15.0, 18.0), rrand(5.0, 7.0), ev[\numEv])
+			}),
+			\dur, Plazy({ |ev|
+				Pgeom.fromEndpoints(rrand(0.12, 0.22), rrand(0.06, 0.09), ev[\numEv])
+					* Pexprand(0.75, 1.333, inf)
+			}),
+			\freq, Pwhile1({ |ev, next| next <= 54 },
+				Pnsym(Pfin(1, Pkey(\gest)), ~slideNotes) + 28
+			),
+			\mode, \g,
+			\ffreq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\freq]) * 4 },
+			\gate, Pkey(\freq).linlin(14, 54, 0.1, 0.8),
+			\mod_lev, 2.5,
+			// \length, 0.15,
+			// \length, Pkey(\dur) * 4.5,
+			// \length, Pwhite(2.0, 3.5, inf),
+			// earlier notes in 1 chord will hold longer -- all cut off w/in 1.5 sec of each other
+			\length, (Pwhite(0.8, 1.2, inf) * Pkey(\totalDur)) - Pseries(0, Pkey(\dur), inf),
+			\attackTimeScale, Pkey(\gate).linlin(0.1, 0.8, 1.4, 0.15),
+			\decayTimeScale, 1
+		)/*.collect { |ev|
+			defer {
+				topEnvironment[\lastPoint] = Point(
+					ev[\pan].linlin(-1, 1, 0, 396),
+					ev[\distance].linlin(5, 20, 396, 0)
+				);
+				u.refresh;
+			};
+			ev
+		}*/,
+		Pbind(
+			\freq, #[],
+			\dur, Pfuncn { timer.next } - Pkey(\timeIsNow) + Pwhite(0.25, 0.65, 1),
+			\length, 0.2,
+			\gate, 0.1
+		)
+	], 1)
+).play(nil, ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto.copy.putAll((glrvbamt: 0.7, lcrvbamt: 0.16))));
+)
+
+p.stop;
+
+p.isPlaying
+
 /***** TODO What else? ****/
+
+
 /**** TODO Axial variations [0/2] ****/
+
+Fact(\armsmelVC) => VC(\am);
+VC(\am) => VP(0);
+
+k.free;
+k = VoicerMIDISocket(0, VP(0).v);
+
+BP(\am).free;
+PR(\melody) => BP(\am);
+
+p = BP(\am);
+p.prepareForPlay;
+
+p.triggerOneEvent(0);
+
+p.stop(0);
+
+p.do(_.free);
+p = 3.collect { |i|
+	var	bp = PR(\melody) => BP(("am" ++ i).asSymbol);
+	bp.pan = #[0, -0.8, 0.8][i];
+	0 => bp;
+};
+
+p.do { |bp, i|
+	bp.event.distFar_(50).lcrvbamt_(0.035);
+	// bp.distance = sin(Pseries(-0.5pi + 0.4.rand2, rrand(0.1, 0.18), inf)).linlin(-1, 1, 42, 12);
+	// bp.gate = Pswitch1(
+	// 	[	Pexprand(0.1, 0.4, inf),
+	// 		Pwhite(0.45, 0.75, inf)
+	// 	], Pwrand(#[0, 1], #[0.9, 0.1], inf)
+	// );
+	bp.gate = Pseg(
+		Pstutter(2, Pseq([
+			Pexprand(0.1, 0.22, 1),
+			Pwhite(0.6, 0.9, 1)
+		], inf)),
+		// hold, then slide
+		Ppatlace([
+			Pwhite(3.0, 8.0, inf),
+			Pwhite(1.1, 2.2, inf)
+		], inf)
+	);
+	// /*if(i == 0) {*/ bp.gate = bp.gate.trace(prefix: "%: ".format(i)) /*}*/;
+	bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
+};
+
+
+p.do(_.prepareForPlay);
+p.do(_.triggerOneEvent(0));
+
+p.stop;
+
+p.do { |bp| bp.reset };
+i = 1;
+
+k.free;
+k = BasicMIDISocket(1, { |num|
+	if(num == 60) {
+		min(3, i).do { |j|
+			BP(("am" ++ j).asSymbol).triggerOneEvent(0);
+		};
+		i = i + 1;
+	};
+});
+
+
+BP(\sm).free;
+PR(\armsSkidMel).chuck(BP(\sm), nil, (
+	master: ~master,
+	glrvbmc: ~glrvbmc,
+	lcrvbmc: ~lcrvbmc
+));
+
+BP(\sm).amp = 0.9;
+
+BP(\sm).reset;
+
+2.do { BP(\sm).triggerOneEvent(0) };
+
+
+p.free;
+p = 3.collect { |i|
+	PR(\armsSkidMel).chuck(BP((\sm ++ i).asSymbol), nil, (
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		amp: 0.9
+	));
+};
+
+p.do { |bp|
+	// bp.rewriteLevel = Pn(0, 1) ++ Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	bp.rewriteLevel = Pseq([0, 1, 2, Pwhite(1, 3, inf)], 1);
+	bp.loTime = Pwhite(0.22, 0.45, inf);
+	bp.hiTime = Pkey(\loTime) * Pexprand(1.0, 1.25, inf);
+};
+
+p.do { |bp| bp.reset };
+i = Pwhite(0.0, Pgeom(2.0, 0.95, inf), inf).asStream;
+
+k.free;
+k = BasicMIDISocket(1, { |num|
+	if(num == 60) {
+		fork {
+			p.scramble.do { |bp|
+				2.do { bp.triggerOneEvent(0) };
+				i.next.wait;
+			};
+		};
+	};
+});
+
+s.controlBusAllocator.debug
+BusDict
+
+
 /***** TODO Shiva ****/
 /***** TODO Three levels ****/
 /**** TODO Duet partnering (S & I) ****/
