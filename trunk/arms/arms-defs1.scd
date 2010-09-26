@@ -146,8 +146,9 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 				[proportion, 1 - proportion] * decay, \exp)
 		}, rdecay, time,
 		/*filterFunc:*/ { |sig, rfreq, rdecay|
-			var	dt = rfreq.reciprocal;
-			CombL.ar(sig, dt + 0.1, dt, rdecay)
+			var	dt = rfreq.reciprocal,
+				lpffreq = NamedControl.kr(\lpffreq, 4000);
+			LPF.ar(CombL.ar(sig, dt + 0.1, dt, rdecay), lpffreq)
 		},
 		amp,
 		{ |trig, decay|
@@ -194,12 +195,13 @@ PR(\abstractProcess).clone {
 			.asWavetable);
 
 		~timeMulCtl = GenericGlobalControl(\timeMul, nil, 1.6, #[0.5, 3.5]);
+		~lpffreqCtl = GenericGlobalControl(\lpffreq, nil, 4000, \freq);
 	};
-	~useGui = { |vpi| ~timeMulCtl => VP(vpi) };
+	~useGui = { |vpi| [~timeMulCtl, ~lpffreqCtl].do { |gc| gc => VP(vpi) } };
 
 	~freeCleanup = {
 		[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\stopsReceivingFrom, ~chan) };
-		[~buf, ~chan, ~timeMulCtl].free;
+		[~buf, ~chan, ~timeMulCtl, ~lpffreqCtl].free;
 	};
 
 	~nfreq = Pexprand(40.0, 1800.0, inf);
@@ -238,6 +240,7 @@ PR(\abstractProcess).clone {
 	};
 	~hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 35) };
 	~loffreq = Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf);
+	~lpffreq = Plazy { ~lpffreqCtl.asPattern };
 	~mode = \g;
 
 	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
@@ -294,6 +297,7 @@ PR(\abstractProcess).clone {
 			\hiffreq, BPStream(\hiffreq),
 			\loffreq, BPStream(\loffreq),
 			\rdecay, BPStream(\rdecay),
+			\lpffreq, BPStream(\lpffreq),
 			\xylock, Pfunc { PR(\busLock).copy.prep((numCh: 2, rate: \control)) },
 			#[pan, distance], Pfunc { |ev|
 				(ev[\xylock].bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol }

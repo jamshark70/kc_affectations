@@ -88,7 +88,7 @@ make: { |name|
 	var	tempAmps = { |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows,
 		out;
 
-	~target = MixerChannel(name, s, 2, 2, level: -23.dbamp, outbus: ~master, completionFunc: { |chan|
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
 		var	patch = chan.playfx(Instr("busfx.chorus2"), [0, 1, 2, 3, 0.006957213735427, 0.1708276390401, 0.0034747717625074, 1.1689647098094, 0.3]);
 		patch.doWhenPlaying({
 			patch.synth.moveToTail(chan.effectgroup);
@@ -143,9 +143,9 @@ make: { |name|
 	}, [\freq, \amp, #[0, 1000, \linear, 1, 0], #[0, 20], EnvSpec(Env.adsr), #[0, 1], #[0.9, 1.1, \linear, 0, 1], \freq, #[1, 0.001], EnvSpec(Env.one), nil, #[0, 20, \lin, 1, 0], #[0, 20, \lin, 1, 0], \freq, \freq, #[0.01, 10, \exp, 0, 1], #[0.01, 10, \exp, 0, 1]]);
 
 	~defname = (name ++ "def").asSymbol;
-	\addRvbOut.eval(~defname, { |pan, finalAmp = 1, freq = 440, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1|
+	\addRvbOut.eval(~defname, { |pan, finalAmp = 1, freq = 440, freqlag = 0, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1|
 		var	sig = WrapInstr("osc2.vosc3matrix").valueArray([
-			freq, gate,
+			Lag.kr(freq, freqlag), gate,
 			~bufs[0].bufnum,  // bufbase
 			{	var	rate = Rand(0.7, 1.4),
 					dur = rate.reciprocal,
@@ -765,8 +765,8 @@ PR(\abstractProcess).clone {
 			~lastEvent !? {
 				~lastEvent[\nodes].do { |node, i|
 					// releases only if node hasn't been stolen
-					~event[\voicer].releaseNode(node, ~lastEvent[\newFreq].wrapAt(i),
-						lat: (~lastEvent[\lag] ? 0) + (node.server.latency ? 0))
+					node.release(0, (~lastEvent[\lag] ? 0) + (node.server.latency ? 0),
+						~lastEvent[\newFreq].wrapAt(i))
 				};
 			};
 			~lastEvent = ev;
@@ -799,10 +799,15 @@ BP(\sm).reset;
 
 2.do { BP(\sm).triggerOneEvent(0) };
 
+BP(\sm).loTime = Pexprand(0.4, 0.6, inf);
+
 BP(\sm).def = \combskid;
 BP(\sm).rdecay = 2;
 BP(\sm).listVars;
 BP(\sm).hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) };
+
+BP(\sm).lpffreq = Plazy({ Pn(~lpffreqCtl.asMap, inf) });
+BP(\sm).lpffreq = Pexprand(1200, 7000, inf);
 
 p.free;
 p = 3.collect { |i|
@@ -841,6 +846,54 @@ BusDict
 
 
 /**** TODO Duet partnering (S & I) ****/
+
+~nodes = nil;
+p = Pbind(
+	// \protoEvent, Pseq([\polySynthPlayNotify, Pn(\polySynthTrigger, inf)], 1),
+	\instrument, VC(\sp).v.nodes[0].defname,
+	\node, Pfunc { ~nodes ? 0 },
+	\chan, VC(\sp).env.target,
+	\mode, \g,
+	\high, Pseq([0, 1, Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], inf)], 1),
+	\prevHigh, Pdelay(Pkey(\high)),
+	\top, Pswitch1([
+		Paccumbounce(30, 40, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf)),
+		Paccumbounce(38, 47, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf))
+	], Pkey(\high)),
+	\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+		.clump(3),
+	\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
+	\delta, Pwhite(1, 4, inf),
+	\freqlag, Pkey(\delta) * 0.6,
+	\finalAmp, -12.dbamp,
+	\protoEvent, Pseq([
+		\polySynthPlayNotify,
+		Pif(Pkey(\prevHigh) > 0, \polySynthPlayNotify, \polySynthTrigger)
+	], 1),
+	\sustain, Pif(Pkey(\high) > 0, Pkey(\delta) - 0.6, inf),
+	\lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+		Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
+	\notifyDependents, { topEnvironment[\nodes] = ~node },
+	\collIndex, \fuckingDummyCuzIPutInADumbCondition
+).collect { |ev|
+	var	sustain;
+	if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+		thisThread.clock.sched(sustain, {
+			Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+				[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
+			nil
+		});
+	};
+	ev
+}.play(nil, ProtoEvent(\monoSupport).copy.proto_(~rvbEvent.proto.copy/*.putAll((glrvbamt: 0.7, lcrvbamt: 0.16))*/));
+
+p.stop; ~nodes.do(_.release);
+
+[\n_set, #[0, 1, 2], \gate, 0].flop
+~nodes
+
+(1537..1539).do(s.sendMsg(\n_free, _))
+
 /**** TODO Manipulating Laura ****/
 /**** TODO Stephen solo ****/
 /**** TODO Cradling - drawing bow ****/
