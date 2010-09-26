@@ -227,7 +227,8 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 ***** DONE Three levels
 **** TODO Duet partnering (S & I) - can I reuse 9:28 code?
 ***** Continue 3 levels until they open up side by side
-***** Lifting, tilting, bending - intermix some sweepy chords with 3 levels
+***** Lifting, tilting, bending - intermix some portamento chords with 3 levels
+****** Stagger slides?
 ***** Locomotive before they pick up Laura
 **** TODO Manipulating Laura: Axial theme but with robotic edge (comb filter maybe?)
 ***** Almost there - what does it need?
