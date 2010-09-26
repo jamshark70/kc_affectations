@@ -50,6 +50,8 @@ VP(0).v.gui;
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
 
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
 
 
 /**** check ac sound ****/
@@ -81,6 +83,7 @@ numRows: 8,
 numCols: 8,
 env: Env.adsr(1, 0.4, 0.8, 1.2, curve: -2),
 fenv: Env.one,
+graphInsert: nil,
 make: { |name|
 	var	tempAmps = { |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows,
 		out;
@@ -160,6 +163,7 @@ make: { |name|
 			/*basefreq:*/ 48.midicps, /*topfreq:*/ (11*12).midicps,
 			attackTimeScale, decayTimeScale
 		]);
+		~graphInsert !? { sig = ~graphInsert.(sig) };
 		Pan2.ar(sig, pan, finalAmp)
 	}).add;
 
@@ -582,6 +586,7 @@ p.isPlaying
 
 
 /**** TODO Axial variations [0/2] ****/
+/***** TODO Shiva ****/
 
 Fact(\armsmelVC) => VC(\am);
 VC(\am) => VP(0);
@@ -607,7 +612,7 @@ p = 3.collect { |i|
 };
 
 p.do { |bp, i|
-	bp.event.distFar_(50).lcrvbamt_(0.035);
+	bp.event.distFar_(50).lcrvbamt_(0.035).ampMul_(nil);
 	// bp.distance = sin(Pseries(-0.5pi + 0.4.rand2, rrand(0.1, 0.18), inf)).linlin(-1, 1, 42, 12);
 	// bp.gate = Pswitch1(
 	// 	[	Pexprand(0.1, 0.4, inf),
@@ -631,7 +636,11 @@ p.do { |bp, i|
 
 
 p.do(_.prepareForPlay);
+p.do(_.asEventStreamPlayer);
 p.do(_.triggerOneEvent(0));
+
+BP(\am0).eventStreamPlayer.event
+BP(\am0).event
 
 p.stop;
 
@@ -644,10 +653,138 @@ k = BasicMIDISocket(1, { |num|
 		min(3, i).do { |j|
 			BP(("am" ++ j).asSymbol).triggerOneEvent(0);
 		};
+		if(0.5.coin) { BP(\tc).triggerOneEvent(0.1) };
 		i = i + 1;
 	};
 });
 
+BP.all.stop;
+
+
+// quieter, supporting chords
+
+VC(\btp).free;
+// Fact(\shimmerpad) => VC(\sp);
+
+Fact(\shimmerpad).chuck(VC(\btp), nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1), //.postcs
+	// need some EQ pre-reverb
+	graphInsert: { |sig|
+		var	hishelf = EQSpec1.newSpec(\hishelf, freq: 8705, k: -6.667.dbamp, rq: 1, sr: 44100);
+		sig = HPF.ar(sig, 668);
+		sig = StaticEQ.eqFuncs[\hishelf].(sig, hishelf.k, hishelf.a0);
+	}
+));
+
+VC(\btp) => VP(1);
+
+
+p = Pbind(
+	\voicer, VC(\btp).v,
+	\mode, \g,
+	\freq, (Pwhite(35, 46, inf) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+		.clump(3),
+	\dur, 4,
+	\length, 4,
+	\gate, 0.1,
+	\attackTimeScale, 2.5,
+	\decayTimeScale, 2.5,
+	\finalAmp, -6.dbamp,
+	\distance, Pwhite(12.0, 18.0, inf),
+	\pan, Pwhite(-0.7, 0.7, inf),
+	\fenvsens, 0
+).play(nil, ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto.copy/*.putAll((glrvbamt: 0.7, lcrvbamt: 0.16))*/));
+
+p.stop;
+
+VC(\btp).v.globalControls[\ffreq].watch.automate({
+	SinOsc.kr(LFNoise1.kr(0.2).exprange(0.05, 0.12)).exprange(6100, 16500)
+}, target: VC(\btp).env.target.fadergroup, addAction: \addToHead);
+
+VC(\btp).v.globalControls[\ffreq].stopWatching.stopAuto;
+
+// MultiEQ(2).edit(VC(\sp).env.target);
+
+VC(\btp).v.playingNodes.choose.synth.trace;
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~bpFilter = { |key|
+		key = key.asString;
+		key[..1] == "am" and: { key[2..].every(_.isDecDigit) }
+	};
+	~prep = {
+		~setBPs.();
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	};
+	~setBPs = { |bpFilter(~bpFilter)|
+		~bps = BP.all.select { |bp| bpFilter.(bp.collIndex) };
+	};
+
+	~stopCleanup = {
+		~event[\voicer].tryPerform(\releaseAll);
+	};
+
+	~mode = \g;
+	~freq = Pfunc { |ev|
+		var	result = Array.new(~bps.size), midi;
+		~bps.do { |bp|
+			if(bp[\node].notNil and: { (midi = bp[\lastEvent].tryPerform(\at, \midi)).notNil }) {
+				result.add(midi.mapMode(ev[\mode]));
+			};
+		};
+		result
+	};
+	~dur = 4;
+	~length = inf;
+	~gate = 0.1;
+	~attackTimeScale = 2.5;
+	~decayTimeScale = 2.5;
+	~finalAmp = -6.dbamp;
+	~distance = Pwhite(12.0, 18.0, inf);
+	~pan = Pwhite(-0.7, 0.7, inf);
+	~fenvsens = 0;
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\finalAmp, BPStream(\finalAmp),
+			\distance, BPStream(\distance),
+			\pan, BPStream(\pan),
+			\fenvsens, BPStream(\fenvsens)
+		).collect { |ev|
+			~lastEvent !? {
+				~lastEvent[\nodes].do { |node, i|
+					// releases only if node hasn't been stolen
+					~event[\voicer].releaseNode(node, ~lastEvent[\newFreq].wrapAt(i),
+						lat: (~lastEvent[\lag] ? 0) + (node.server.latency ? 0))
+				};
+			};
+			~lastEvent = ev;
+			ev
+		}
+	};
+} => PR(\thinChords);
+)
+
+BP(\tc).free;
+PR(\thinChords) => BP(\tc);
+BP(\tc) => VC(\btp);
+
+BP(\tc).prepareForPlay;
+
+
+
+/***** TODO Three levels ****/
 
 BP(\sm).free;
 PR(\armsSkidMel).chuck(BP(\sm), nil, (
@@ -662,6 +799,10 @@ BP(\sm).reset;
 
 2.do { BP(\sm).triggerOneEvent(0) };
 
+BP(\sm).def = \combskid;
+BP(\sm).rdecay = 2;
+BP(\sm).listVars;
+BP(\sm).hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) };
 
 p.free;
 p = 3.collect { |i|
@@ -699,8 +840,6 @@ s.controlBusAllocator.debug
 BusDict
 
 
-/***** TODO Shiva ****/
-/***** TODO Three levels ****/
 /**** TODO Duet partnering (S & I) ****/
 /**** TODO Manipulating Laura ****/
 /**** TODO Stephen solo ****/

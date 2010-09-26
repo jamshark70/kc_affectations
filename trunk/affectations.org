@@ -213,23 +213,24 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 
 ** Arms
-*** Sounds/processes [3/9]
+*** Sounds/processes [4/9]
 **** DONE Sunrise
 **** DONE [0/1] Hand stacking - MUCH SLOWER NOW
 ***** TODO Ask Lorne for hand height
 **** DONE 9:28 sequence [2/2]
 ***** DONE Apply inversions note sequences to another sound
 ***** DONE What else?
-**** TODO Axial variations [2/3]
+**** DONE Axial variations [3/3]
 ***** DONE Shiva: use 3 am's
-***** TODO ^^ Needs quiet chords in background - useful elsewhere
+***** DONE ^^ Needs quiet chords in background - useful elsewhere
 ***** Between these 2, use axial sound with sparse notes - extended now, needs some sweepy gestures too
 ***** DONE Three levels
-**** TODO Duet partnering (S & I)
+**** TODO Duet partnering (S & I) - can I reuse 9:28 code?
 ***** Continue 3 levels until they open up side by side
 ***** Lifting, tilting, bending - intermix some sweepy chords with 3 levels
 ***** Locomotive before they pick up Laura
 **** TODO Manipulating Laura: Axial theme but with robotic edge (comb filter maybe?)
+***** Almost there - what does it need?
 **** TODO Stephen solo (short!)
 **** TODO Cradling - drawing bow
 **** TODO Laura solo
@@ -389,3 +390,4 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 
 * Environment update notes
+** TODO Check in voicer releaseNode fix, tell Lorne
