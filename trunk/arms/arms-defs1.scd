@@ -66,7 +66,7 @@ type: \voicer) => Fact(\armsmelVC);
 // this is the more airy synth for the start of this section
 WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 	trig = 1, chDepth = 0.003, chSpeed = 0.1, chPre = 0.01,
-	fenv, rdecay = 0.01, time = 0.1,
+	fenv, rdecay = 0.01, time = 0.1, filterFunc,
 	amp = 0.1, aenv, numOverlaps = 3|
 	var	sig, chSig, rfreq, overlapTrigs/*, time*/;
 
@@ -79,7 +79,8 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 	fenv = fenv.dereference.value(trig, time);
 	overlapTrigs = PulseDivider.kr(trig, numOverlaps, (0 .. numOverlaps-1));
 	rfreq = EnvGen.kr(fenv, gate: overlapTrigs);
-	sig = Ringz.ar(sig, rfreq, rdecay);
+	sig = filterFunc.dereference.value(sig, rfreq, rdecay);
+	// sig = Ringz.ar(sig, rfreq, rdecay);
 	sig = Limiter.ar(sig);
 	aenv = aenv.dereference.value(trig, time);
 	Mix(sig * amp * EnvGen.kr(aenv, gate: overlapTrigs, timeScale: time, doneAction: 0))
@@ -90,7 +91,11 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 			low = TRand.kr(300, 600, trig);
 		Env([low, TRand.kr(1200, 2000, trig), low],
 			[proportion, 1 - proportion] * decay, \exp)
-	}), #[0.01, 1.0, \exp], #[0.01, 1.0, \exp], #[0.1, 10, \exp], EnvSpec(Env.perc(0.01, 0.99)),
+	}), #[0.01, 1.0, \exp], #[0.01, 1.0, \exp],
+	ObjectSpec(`{ |sig, rfreq, rdecay|
+		Ringz.ar(sig, rfreq, rdecay)
+	}),
+	#[0.1, 10, \exp], EnvSpec(Env.perc(0.01, 0.99)),
 	StaticSpec(1, 6, \lin, 1)
 ]);
 
@@ -110,7 +115,9 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 			var	proportion = TRand.kr(0.02, 0.9, trig); //,
 			Env([loffreq, hiffreq, loffreq],
 				[proportion, 1 - proportion] * decay, \exp)
-		}, rdecay, time, amp,
+		}, rdecay, time, { |sig, rfreq, rdecay|
+			Ringz.ar(sig, rfreq, rdecay)
+		}, amp,
 		{ |trig, decay|
 			var	proportion = TRand.kr(0.02, 0.9, trig);
 			Env([0, 1, 0], [proportion, 1 - proportion] * decay, #[3, -3])
@@ -120,6 +127,39 @@ WrapInstr("arms.airskid", { |noisebuf, nfreq = 440, beats = 1,
 	sig = sig * EnvGen.kr(Env.linen(0.1, sustain, 0.1, curve: -2), doneAction: 2);
 	Pan2.ar(sig, pan);
 }).add;
+
+
+\addRvbOut.eval(\combskid, { |noisebuf, nfreq = 440, beats = 4.64,
+	chDepth = 0.05, chSpeed = 1.2, chPre = 0.06,
+	loffreq = 440, hiffreq = 440, rdecay = 0.01,
+	loTime = 0.12, hiTime = 0.22, timeMul = 1,
+	amp = 1, pan, sustain = 1|
+	var	sig,
+		ddelta = Dstutter(2, Dwhite(0.0, 1.0, inf).linexp(0, 1, loTime, hiTime)),
+		trig = TDuty.kr(ddelta, 0, ddelta),
+		time = Latch.kr(trig, trig) * timeMul;
+	sig = WrapInstr("arms.airskid").valueArray([
+		noisebuf, nfreq, beats, trig, chDepth, chSpeed, chPre,
+		{ |trig, decay|
+			var	proportion = TRand.kr(0.02, 0.9, trig); //,
+			Env([loffreq, hiffreq, loffreq],
+				[proportion, 1 - proportion] * decay, \exp)
+		}, rdecay, time,
+		/*filterFunc:*/ { |sig, rfreq, rdecay|
+			var	dt = rfreq.reciprocal;
+			CombL.ar(sig, dt + 0.1, dt, rdecay)
+		},
+		amp,
+		{ |trig, decay|
+			var	proportion = TRand.kr(0.02, 0.9, trig);
+			Env([0, 1, 0], [proportion, 1 - proportion] * decay, #[3, -3])
+		},
+		/*numOverlaps:*/ 3
+	]);
+	sig = sig * EnvGen.kr(Env.linen(0.1, sustain, 0.1, curve: -2), doneAction: 2);
+	Pan2.ar(sig, pan);
+}).add;
+
 
 s.doWhenBooted {
 	SynthDef(\xylin, { |x1, x2, y1, y2, sustain = 1, out|
@@ -331,7 +371,8 @@ PR(\abstractProcess).clone {
 			\node, Pfunc { ~node ?? { 0 } },
 			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
 			\root, 7,
-			\freq, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67).midicps,
+			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67),
+			\freq, Pkey(\midi).midicps,
 			\delta, BPStream(\dur),
 // 			\legato, BPStream(\legato),
 			\freqlag, BPStream(\freqlag),
@@ -342,7 +383,7 @@ PR(\abstractProcess).clone {
 			\pan, BPStream(\pan),
 			\distance, BPStream(\distance),
 			\chan, VC(\am).env.target
-		)
+		).collect { |ev| ~lastEvent = ev; ev }
 		// now this is a problem - you don't know when the next trigger is,
 		// so you don't know when to release
 		// removing for now
