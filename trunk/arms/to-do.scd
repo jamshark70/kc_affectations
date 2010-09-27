@@ -847,6 +847,8 @@ BusDict
 
 /**** TODO Duet partnering (S & I) ****/
 
+// let this run for a bit, then hold a chord about the time they pick up Laura
+
 ~nodes = nil;
 p = Pbind(
 	// \protoEvent, Pseq([\polySynthPlayNotify, Pn(\polySynthTrigger, inf)], 1),
@@ -895,6 +897,169 @@ p.stop; ~nodes.do(_.release);
 (1537..1539).do(s.sendMsg(\n_free, _))
 
 /**** TODO Manipulating Laura ****/
+
+BP(\sm).free;
+PR(\armsSkidMel).chuck(BP(\sm), nil, (
+	master: ~master,
+	glrvbmc: ~glrvbmc,
+	lcrvbmc: ~lcrvbmc
+));
+
+BP(\sm).amp = 0.4;
+
+BP(\sm).reset;
+
+2.do { BP(\sm).triggerOneEvent(0) };
+
+BP(\sm).loTime = Pexprand(0.4, 0.6, inf);
+
+// THIS STUFF HERE!!
+BP(\sm).def = \combskid;
+BP(\sm).rdecay = 2;
+BP(\sm).listVars;
+BP(\sm).hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) };
+
+BP(\sm).lpffreq = Plazy({ Pn(~lpffreqCtl.asMap, inf) });
+BP(\sm).lpffreq = Pexprand(1200, 7000, inf);
+
+
 /**** TODO Stephen solo ****/
+// AVOID DEGREES THAT ARE TOO LOW
+
+BP(\sm).event.eventKey = \polySynthPlayer;
+BP(\sm).def = \airskid;
+
+BP(\sm).hiffreq = Pfunc { |ev|
+	var deg = ev[\degree];
+	deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.1, 0.5, 0.4]) } ! 2).integrate);
+	Mode(ev[\mode]).cps(deg + 42)
+};
+
+BP(\sm).loTime.postcs
+
+BP(\sm).delta = Pwhite(1.5, 4.0, inf);
+BP(\sm).sustain = Pkey(\delta) * Pwhite(1.8, 2.5, inf);
+
+
 /**** TODO Cradling - drawing bow ****/
+// rocking
+
+~nodes = nil;
+p = Prout({ |inval|
+	[
+		#[35, 40],
+		#[35, 41],
+		#[37, 42, 43, 38, 33]
+	].do { |degrees|
+		inval = Pbind(
+			\instrument, VC(\sp).v.nodes[0].defname,
+			\node, Pfunc { ~nodes ? 0 },
+			\chan, VC(\sp).env.target,
+			\mode, \g,
+			\last, Pseq([Pn(false, degrees.size-1), true], 1),
+			\top, Pseq(degrees, 1),
+			\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+			.clump(3),
+			\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
+			\delta, Pif(Pkey(\last), 2, 1),
+			\freqlag, 0.2,
+			\finalAmp, -12.dbamp,
+			\protoEvent, Pseq([
+				\polySynthPlayNotify,
+				Pn(\polySynthTrigger, inf)
+			], 1),
+			\sustain, Pif(Pkey(\last), Pkey(\delta) - 0.6, inf),
+			// \lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+			// 	Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
+			\notifyDependents, { topEnvironment[\nodes] = ~node },
+			\collIndex, \fuckingDummyCuzIPutInADumbCondition
+		).collect({ |ev|
+			var	sustain;
+			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+				thisThread.clock.sched(sustain, {
+					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+						[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
+					nil
+				});
+			};
+			ev
+		}).embedInStream(inval);
+	}
+}).play(nil, ProtoEvent(\monoSupport).copy.proto_(~rvbEvent.proto.copy/*.putAll((glrvbamt: 0.7, lcrvbamt: 0.16))*/));
+
+p.stop; ~nodes.do(_.release);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport);
+	~autoRun = false;
+
+	~topArrays = Pseq([
+		#[35, 40],
+		#[35, 41],
+		#[37, 42, 43, 38, 33]
+	], 1);
+
+	~makePhrase = { |degrees|
+		degrees ?? { degrees = ~topArraysStream.next };
+		Pbind(
+			\instrument, Pfunc { ~voicer.nodes[0].defname },
+			\node, Pfunc { ~nodes ? 0 },
+			\chan, VC(\sp).env.target,
+			\mode, \g,
+			\last, Pseq([Pn(false, degrees.size-1), true], 1),
+			\top, Pseq(degrees, 1),
+			\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+			.clump(3),
+			\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
+			\delta, Pif(Pkey(\last), 2, 1),
+			\freqlag, 0.2,
+			\finalAmp, -12.dbamp,
+			\protoEvent, Pseq([
+				\polySynthPlayNotify,
+				Pn(\polySynthTrigger, inf)
+			], 1),
+			\sustain, Pif(Pkey(\last), Pkey(\delta) - 0.6, inf),
+			// \lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+			// 	Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
+			\notifyDependents, { topEnvironment[\nodes] = ~node },
+			\collIndex, \fuckingDummyCuzIPutInADumbCondition
+		).collect({ |ev|
+			var	sustain;
+			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+				thisThread.clock.sched(sustain, {
+					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+						[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
+					nil
+				});
+			};
+			ev
+		})
+	};
+
+	~recvEventNotify = { |nodes, event|
+		~nodes = nodes;
+	};
+
+	~asPattern = {
+		~topArraysStream ?? { ~makeStreamForKey.(\topArrays) };
+		Pspawner({ |sp|
+			~spawner = sp;
+			if(~autoRun) {
+				"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
+				loop {
+					sp.seq(~makePhrase.());
+					// sp.wait(~gDeltaStream.next());
+				}
+			} {
+				loop {
+					sp.wait(0.1);
+				}
+			}
+		})
+	};
+} => PR(\rockingChords);
+
+
+
 /**** TODO Laura solo ****/

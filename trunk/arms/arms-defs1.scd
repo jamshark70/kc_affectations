@@ -240,7 +240,7 @@ PR(\abstractProcess).clone {
 	};
 	~hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 35) };
 	~loffreq = Pkey(\hiffreq) * Pexprand(1.03.reciprocal, 1.03, inf);
-	~lpffreq = Plazy { ~lpffreqCtl.asPattern };
+	~lpffreq = Plazy { Pn(~lpffreqCtl.asMap, inf) };
 	~mode = \g;
 
 	~pan1 = Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf);
@@ -277,7 +277,8 @@ PR(\abstractProcess).clone {
 			};
 			// why? event must .play before ev[\id] is available
 			thisThread.clock.sched(0, {
-				ev[\xylock].addNode(ev[\node]);
+				// this works if ev[\node] is either a node or array of nodes
+				ev[\node].do { |node| ev[\xylock].addNode(node) };
 				nil
 			});
 			ev
