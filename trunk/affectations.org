@@ -213,7 +213,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 
 ** Arms
-*** Sounds/processes [4/9]
+*** Sounds/processes [7/9]
 **** DONE Sunrise
 **** DONE [0/1] Hand stacking - MUCH SLOWER NOW
 ***** TODO Ask Lorne for hand height
@@ -225,15 +225,19 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 ***** DONE ^^ Needs quiet chords in background - useful elsewhere
 ***** Between these 2, use axial sound with sparse notes - extended now, needs some sweepy gestures too
 ***** DONE Three levels
-**** TODO Duet partnering (S & I) - can I reuse 9:28 code?
+**** DONE Duet partnering (S & I) - can I reuse 9:28 code?
 ***** Continue 3 levels until they open up side by side
 ***** Lifting, tilting, bending - intermix some portamento chords with 3 levels
-****** Stagger slides?
+****** Stagger slides? Yes!
+****** Let this run for a bit, then hold a chord about the time they pick up Laura
 ***** Locomotive before they pick up Laura
-**** TODO Manipulating Laura: Axial theme but with robotic edge (comb filter maybe?)
+**** DONE Manipulating Laura: Axial theme but with robotic edge (comb filter maybe?)
 ***** Almost there - what does it need?
-**** TODO Stephen solo (short!)
+**** DONE Stephen solo (short!)
+***** Starts locomotive, then quickly into axial - *harmonize* axial!
 **** TODO Cradling - drawing bow
+***** Rocking gesture? Yes.
+***** Couple of axial moves - harmonize, but not with airskid sound
 **** TODO Laura solo
 *** Data needed from Lorne
 *** Data to send to Lorne
@@ -392,3 +396,20 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 * Environment update notes
 ** TODO Check in voicer releaseNode fix, tell Lorne
+
+
+* TODO Email re: premiere
+  SCHEDULED: <2010-10-14 Thu>
+  (Note, I'm not dumb enough to put real email addresses here since this is checked into github!)
+  Family, Aunt Kathy, all Kohuts
+  DCMAT
+  MSTR
+  dctz
+  electro-music.com forum
+  Tao, HJY, Bang, Anthony, other faculty?
+  K. Fields
+  Mungo
+  Facebook
+  Penka, Chris, Syd, Joanne, Mark, Scott L., Steve J., Eric P.
+  Schelle, Contino
+  
