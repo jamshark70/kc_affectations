@@ -990,66 +990,103 @@ p = Prout({ |inval|
 p.stop; ~nodes.do(_.release);
 
 
+(
 PR(\abstractProcess).clone {
 	~event = (eventKey: \monoSupport);
 	~autoRun = false;
+	~alwaysReset = true;
+
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	};
 
 	~topArrays = Pseq([
 		#[35, 40],
 		#[35, 41],
-		#[37, 42, 43, 38, 33]
+		#[37, 42, 43, 38, 33],
+		Pfunc({
+			Pseq([
+				Paccumbounce(31, 38,
+					Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf) * #[-1, 1].choose,
+					rrand(1, 5)
+				),
+				Pwhite(40, 47, 1)
+			], 1)
+		})
 	], 1);
+	~rest = 1;
+	~mode = \g;
+
+	~runGesture = {
+		if(~spawner.notNil) {
+			~spawner.seq(~makePhrase.());
+		} {
+			"BP(%): Not playing; can't run phrase.".format(~collIndex.asCompileString).warn;
+		};
+	};
 
 	~makePhrase = { |degrees|
+		var	num;
 		degrees ?? { degrees = ~topArraysStream.next };
-		Pbind(
-			\instrument, Pfunc { ~voicer.nodes[0].defname },
-			\node, Pfunc { ~nodes ? 0 },
-			\chan, VC(\sp).env.target,
-			\mode, \g,
-			\last, Pseq([Pn(false, degrees.size-1), true], 1),
-			\top, Pseq(degrees, 1),
-			\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
-			.clump(3),
-			\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
-			\delta, Pif(Pkey(\last), 2, 1),
-			\freqlag, 0.2,
-			\finalAmp, -12.dbamp,
-			\protoEvent, Pseq([
-				\polySynthPlayNotify,
-				Pn(\polySynthTrigger, inf)
-			], 1),
-			\sustain, Pif(Pkey(\last), Pkey(\delta) - 0.6, inf),
-			// \lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
-			// 	Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
-			\notifyDependents, { topEnvironment[\nodes] = ~node },
-			\collIndex, \fuckingDummyCuzIPutInADumbCondition
-		).collect({ |ev|
-			var	sustain;
-			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
-				thisThread.clock.sched(sustain, {
-					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
-						[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
-					nil
-				});
-			};
-			ev
-		})
+		if(degrees.notNil) {
+			degrees = degrees.dereference;
+			if(degrees.isArray) { degrees = Pseq(degrees, 1) };
+			num = degrees.estimateLength.debug("num");
+			Pbind(
+				\instrument, ~event[\voicer].nodes[0].defname,
+				\node, Pfunc { ~nodes ? 0 },
+				\chan, ~event[\voicer].bus.asMixer,
+				\mode, ~mode,
+				\last, Pseq([Pn(false, num-1), true], 1),
+				\top, degrees,
+				\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+				.clump(3),
+				\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
+				\delta, Pif(Pkey(\last), 2, 1),
+				\freqlag, 0.2,
+				\finalAmp, -12.dbamp,
+				\protoEvent, Pseq([
+					\polySynthPlayNotify,
+					Pn(\polySynthTrigger, inf)
+				], 1),
+				\sustain, Pif(Pkey(\last), Pkey(\delta) - 0.6, inf)
+				// \lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+				// 	Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
+			).collect({ |ev|
+				var	sustain;
+				if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+					thisThread.clock.sched(sustain.debug("scheduled release"), e {
+						Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+							[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
+						~nodes = nil;
+					});
+				};
+				ev
+			})
+		}
 	};
 
 	~recvEventNotify = { |nodes, event|
 		~nodes = nodes;
 	};
+	~stopCleanup = {
+		~nodes !? {
+			~nodes[0].server.listSendBundle(~nodes[0].server.latency,
+				~nodes.collect { |node| node.releaseMsg })
+		};
+		~nodes = nil;
+	};
 
 	~asPattern = {
 		~topArraysStream ?? { ~makeStreamForKey.(\topArrays) };
+		~restStream ?? { ~makeStreamForKey.(\rest) };
 		Pspawner({ |sp|
 			~spawner = sp;
 			if(~autoRun) {
 				"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
 				loop {
 					sp.seq(~makePhrase.());
-					// sp.wait(~gDeltaStream.next());
+					sp.wait(~restStream.next());
 				}
 			} {
 				loop {
@@ -1058,8 +1095,49 @@ PR(\abstractProcess).clone {
 			}
 		})
 	};
+
+	~reset = { ~makeStreamForKey.(\topArrays) };
 } => PR(\rockingChords);
+)
 
+BP(\rc).free;
+PR(\rockingChords) => BP(\rc);
+VC(\sp) => BP(\rc);
+0 => BP(\rc);
+BP(\rc) => MT(1);
 
+BP(\rc).autoRun = true;
+BP(\rc).mode = \g;
+
+Paccumbounce.findRespondingMethodFor(\estimateLength);
+
+BP(\rc).reset = { ~makeStreamForKey.(\topArrays) };
+BP(\rc).v.reset;
+BP(\rc).v[\reset].postcs
+
+BP(\rc).alwaysReset = true;
+
+BP(\rc).topArrays = Pseq([
+		#[35, 40],
+		#[35, 41],
+		#[37, 42, 43, 38, 33],
+		Pfunc({
+			Pseq([
+				Paccumbounce(31, 38,
+					Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf) * #[-1, 1].choose,
+					rrand(1, 5)
+				),
+				Pwhite(40, 47, 1)
+			], 1)
+		})
+	], 1);
+
+x = BP(\rc).topArraysStream.next;
+
+x.dereference.estimateLength
+
+BP(\rc).nodes
+
+(1069..1071).do(s.sendMsg(\n_free, _))
 
 /**** TODO Laura solo ****/
