@@ -73,6 +73,10 @@
 
 
 * Residency <2010-09-27 Mon>--<2010-10-02 Sat>
+** Conflab with Lorne: <2010-09-29 Wed 08:00>
+** Dress: Friday <2010-10-01 Fri>
+** Dress: Saturday <2010-10-02 Sat>
+** Show: Sunday morning <2010-10-03 Sun 08:00>
 ** TODO Place to put in IP address/port
 ** Data for Lorne:
 *** TODO Voicer events need different arg handling
