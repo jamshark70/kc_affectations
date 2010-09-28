@@ -238,7 +238,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** TODO Cradling - drawing bow
 ***** Rocking gesture? Yes.
 ***** Couple of axial moves - harmonize, but not with airskid sound
+***** An echo of S&I duet - sliding chords - differentiate from rocking gesture
 **** TODO Laura solo
+***** Mostly locomotive - make more sparse
+***** What sound when she's on the ground?
+***** Continue locomotive swoops w/o gesture control when the screen comes in, but winding down
 *** Data needed from Lorne
 *** Data to send to Lorne
 
@@ -271,11 +275,10 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 
 ** Torso
-*** TODO [0/1] Watch video!
+*** DONE Watch video!
 **** Silence to open this section would be nice after drums
-**** TODO What to do with the hopping theme?
 **** Pauses on the box
-*** Sounds [4/5]
+*** Sounds [4/11]
 **** Silences!
 **** DONE Bells
 **** DONE Washes
@@ -291,6 +294,14 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
      Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
      Later, integrate tinkles with chords(?) -- rework Klank as effect
 **** TODO Steady pitches with modulation based on movement
+**** TODO Stephen's solo [0/2]
+***** TODO Hopping movement
+***** TODO Arm raising
+**** TODO Energy exchanges
+**** TODO Rework past inversion material
+**** TODO Poses/changing places
+**** TODO Ilana's solo - probably mostly inner-modulation sounds
+**** TODO S&L duet - maybe tinkly things growing into inner-mods
 *** Data needed from Lorne
 *** Data to send to Lorne
 
