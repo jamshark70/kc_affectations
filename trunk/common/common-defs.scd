@@ -56,6 +56,10 @@ s.waitForBoot {
 
 if(Library.at(\affectations, \commonLoaded) != true) {
 
+	{	|vpi|
+		~ctlGuiKeys.do { |key| key.envirGet => VP(vpi) };
+	} => Func(\bpUseGui);
+
 	#[c, db, d, eb, e, f, gb, g, ab, a, bb, b].do { |key, i|
 		Mode(\default).v.copy.root_(i) => Mode(key);
 		Mode(key).v.transposeRoot(0) => Mode((key ++ "0").asSymbol);

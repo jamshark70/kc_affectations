@@ -328,14 +328,6 @@ Proto {
 
 \shufBalance.eval([-1, 1, 2, 3], [6, 9, 11, 4])
 
-a = [1, 2, 3];
-a.take(1);
-a
-
-a = [1, 2, 3];
-a.take(2);
-a
-
 
 Error.debug = true;
 Error.debug = false;
@@ -368,6 +360,14 @@ p = Pbind(
 o.remove;
 o = OSCresponderNode(s.addr, '/n_end', { |t, r, m| /*r.remove;*/ [t, m].postln }).add;
 
+Pbind(
+	\type, \rest,
+	\delta, Pseg(
+		Pseq(#[0.5, 0.1, 0.5], 1),
+		3, \exp
+	),
+	\count, Pseries(1, 1, inf)
+).trace(\count).play;
 
 
 
@@ -689,6 +689,8 @@ p.do { |bp, i|
 	bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
 };
 
+
+p = BP(#[am0, am1, am2]);
 
 p.do(_.prepareForPlay);
 p.do(_.asEventStreamPlayer);
