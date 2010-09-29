@@ -259,20 +259,66 @@ VC(\sp).v.trace;
 IdentityWeighBag.with(#[1, 2, 3])
 .inspect
 
+// cuz WeighBag sux
+Proto {
+	~prep = { |array, counts|
+		~array = array;
+		~counts = counts;
+		~weights = counts.normalizeSum;
+		~numItems = counts.sum;
+		currentEnvironment
+	};
+	~add = { |item, num = 1|
+		var	i = ~array.indexOf(item);
+		if(i.notNil) {
+			~counts[i] = ~counts[i] + num;
+			~numItems = ~numItems + num;
+		} {
+			~array = ~array.add(item);
+			~counts = ~counts.add(num);
+		};
+		~weigh.();
+	};
+	~get = { |i| ~array[i] };
+	~remove = { |item|
+		var	i = ~array.indexOf(item);
+		if(i.notNil) {
+			if(~counts[i] > 1) {
+				~counts[i] = ~counts[i] - 1
+			} {
+				~array.removeAt(i);
+				~counts.removeAt(i);
+			};
+			~weigh.();
+		};
+	};
+	~choose = { ~array.wchoose(~weights) };
+
+	~weigh = {
+		~numItems = ~counts.sum;
+		~weights = ~counts / ~numItems;
+	};
+} => PR(\fixedWeighBag);
+
+
+
 { |array, weights|
-	var	bag = IdentityWeighBag.with(array, weights),
+	var	bag = PR(\fixedWeighBag).prep(array, weights),
 		balCounts = bag.counts div: 2,
+		bcsum = balCounts.sum,
 		indices = balCounts.collectIndices(_ > 0),
 		i,
 		result = Array(weights.sum);
 	// first half, use half of each
-	while { indices.size > 0 }
+"first while".debug;
+	while { bcsum > 0 }
 	{
-		result.add(bag.at(i = indices.choose));
+		result.add(bag.get(i = indices.wchoose(balCounts.normalizeSum)));
 		bag.remove(result.last);
 		balCounts[i] = balCounts[i] - 1;
-		if(balCounts[i] == 0) { indices.take(i) };
+		bcsum = bcsum - 1;
 	};
+"second while".debug;
 	while { bag.size > 0 } {
 		result.add(bag.choose);
 		bag.remove(result.last);
@@ -280,7 +326,16 @@ IdentityWeighBag.with(#[1, 2, 3])
 	result
 } => Func(\shufBalance);
 
-\shufBalance.eval([-1, 1, 2, 3], #[6, 9, 11, 4])
+\shufBalance.eval([-1, 1, 2, 3], [6, 9, 11, 4])
+
+a = [1, 2, 3];
+a.take(1);
+a
+
+a = [1, 2, 3];
+a.take(2);
+a
+
 
 Error.debug = true;
 Error.debug = false;
@@ -998,7 +1053,10 @@ PR(\abstractProcess).clone {
 
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
+		~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
 	};
+	~useGui = { |vpi| ~distCtl => VP(vpi) };
+	~freeCleanup = { ~distCtl.free };
 
 	~topArrays = Pseq([
 		#[35, 40],
@@ -1016,6 +1074,15 @@ PR(\abstractProcess).clone {
 	], 1);
 	~rest = 1;
 	~mode = \g;
+	~chordAdd = Pseries(0, Pwxrand(#[1, 2, 3, 4], #[2, 3, 2, 0.5].normalizeSum, 3)).clump(3);
+	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
+	~deltaBase = 1.2;
+	~delta = Plazy({ Pif(Pkey(\last), 2, 1) * BPStream(\deltaBase) });
+	~freqlag = 0.2;
+	~finalAmp = -12.dbamp;
+	~sustain = Pif(Pkey(\last), Pkey(\delta) - 0.6, inf);
+	~distance = Plazy({ Pn(~distCtl.asMap, inf) });
+	~pan = Pwhite(0.5, 0.9, inf) * Pfunc { #[-1, 0, 1].scramble };
 
 	~runGesture = {
 		if(~spawner.notNil) {
@@ -1031,31 +1098,30 @@ PR(\abstractProcess).clone {
 		if(degrees.notNil) {
 			degrees = degrees.dereference;
 			if(degrees.isArray) { degrees = Pseq(degrees, 1) };
-			num = degrees.estimateLength.debug("num");
+			num = degrees.estimateLength;
 			Pbind(
 				\instrument, ~event[\voicer].nodes[0].defname,
 				\node, Pfunc { ~nodes ? 0 },
 				\chan, ~event[\voicer].bus.asMixer,
-				\mode, ~mode,
 				\last, Pseq([Pn(false, num-1), true], 1),
-				\top, degrees,
-				\degree, (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
-				.clump(3),
-				\freq, Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) },
-				\delta, Pif(Pkey(\last), 2, 1),
-				\freqlag, 0.2,
-				\finalAmp, -12.dbamp,
 				\protoEvent, Pseq([
 					\polySynthPlayNotify,
 					Pn(\polySynthTrigger, inf)
 				], 1),
-				\sustain, Pif(Pkey(\last), Pkey(\delta) - 0.6, inf)
-				// \lag, Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
-				// 	Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf)),
+				\mode, BPStream(\mode),
+				\top, degrees,
+				\degree, Pkey(\top) -.x ~chordAdd,
+				\freq, BPStream(\freq),
+				\delta, BPStream(\delta),
+				\freqlag, BPStream(\freqlag),
+				\finalAmp, BPStream(\finalAmp),
+				\sustain, BPStream(\sustain),
+				\pan, ~panStream.next,
+				\distance, ~distanceStream.next
 			).collect({ |ev|
 				var	sustain;
 				if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
-					thisThread.clock.sched(sustain.debug("scheduled release"), e {
+					thisThread.clock.sched(sustain, e {
 						Func(\schedEventBundleArray).doAction(s.latency, 0, s,
 							[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
 						~nodes = nil;
@@ -1080,6 +1146,8 @@ PR(\abstractProcess).clone {
 	~asPattern = {
 		~topArraysStream ?? { ~makeStreamForKey.(\topArrays) };
 		~restStream ?? { ~makeStreamForKey.(\rest) };
+		~panStream ?? { ~makeStreamForKey.(\pan) };
+		~distanceStream ?? { ~makeStreamForKey.(\distance) };
 		Pspawner({ |sp|
 			~spawner = sp;
 			if(~autoRun) {
@@ -1109,6 +1177,8 @@ BP(\rc) => MT(1);
 BP(\rc).autoRun = true;
 BP(\rc).mode = \g;
 
+BP(\rc).chordAdd = Pseries(0, Pwxrand(#[1, 2, 3, 4], #[2, 3, 2, 0.1].normalizeSum, 3)).clump(3);
+
 Paccumbounce.findRespondingMethodFor(\estimateLength);
 
 BP(\rc).reset = { ~makeStreamForKey.(\topArrays) };
@@ -1127,7 +1197,9 @@ BP(\rc).topArrays = Pseq([
 					Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf) * #[-1, 1].choose,
 					rrand(1, 5)
 				),
-				Pwhite(40, 47, 1)
+				Pwhite(36, 47, 1)
+				// don't work: Pbinop's estimateLength is wrong
+				// Pexprand(35.9, 47.4, 1).round
 			], 1)
 		})
 	], 1);
@@ -1136,8 +1208,10 @@ x = BP(\rc).topArraysStream.next;
 
 x.dereference.estimateLength
 
+Pexprand.findRespondingMethodFor(\estimateLength)
+
 BP(\rc).nodes
 
-(1069..1071).do(s.sendMsg(\n_free, _))
+(1114..1116).do(s.sendMsg(\n_free, _))
 
 /**** TODO Laura solo ****/

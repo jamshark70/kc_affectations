@@ -504,6 +504,116 @@ free: {
 }, type: \voicer) => Fact(\armsChordVC);
 
 
+// from violin piece - modified
+(keys: #[master, glrvbmc, lcrvbmc],
+numRows: 8,
+numCols: 8,
+env: Env.adsr(1, 0.4, 0.8, 1.2, curve: -2),
+fenv: Env.one,
+graphInsert: nil,
+make: { |name|
+	var	tempAmps = { |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows,
+		out;
+
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
+		var	patch = chan.playfx(Instr("busfx.chorus2"), [0, 1, 2, 3, 0.006957213735427, 0.1708276390401, 0.0034747717625074, 1.1689647098094, 0.3]);
+		patch.doWhenPlaying({
+			patch.synth.moveToTail(chan.effectgroup);
+		});
+		// EQ?
+	});
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\receivesSignalFrom, ~target);
+	};
+
+		// generate a matrix of buffers
+		// if numCols is 8, 0-7 have the most partials, 8-15 have fewer, etc.
+		// each column is randomized differently for more animation in higher partials
+	~bufs = Buffer.allocConsecutive(~numRows * ~numCols, s, 2048, 1);
+	fork {
+		~bufs.do({ |buf, i|
+			var	amps = tempAmps[i div: ~numCols];
+0.06.wait;
+			buf.sine1(amps + ({ 0.12.rand2 } ! amps.size))
+		});
+"done generating buffers".debug;
+	};
+
+	WrapInstr([\osc2, \vosc3matrix], { arg freq, gate, bufbase, bufmod, env, vsens, detune,
+		ffreq, rq, fenv, fenvsens = 1,
+		numrows, numcols, basefreq, topfreq,
+		attackTimeScale, decayTimeScale;
+		var	sig1, sig2, amp, buf;
+		var	baselog = log2(basefreq),
+			freqmap = ((log2(freq) - baselog) * (numrows / (log2(topfreq) - baselog)))
+				.clip(0, numrows - 2.001),
+			fmapfloor = freqmap.floor,
+			fmapfrac = freqmap - fmapfloor,
+			detunedown = freq/detune,
+			detuneup = freq*detune,
+			// env timescale handling: [0] is filter eg, [1] is amp
+			envs = LocalIn.kr(2),
+			eg_test = envs.collect { |eg| Select.kr(Impulse.kr(0), [eg, 0]) },
+			// once envelope starts going down, attack phase is over
+			hit1 = PulseCount.kr(HPZ1.kr(eg_test) < 0) > 0,
+			timeScales = Select.kr(hit1, [attackTimeScale, decayTimeScale]);
+		amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate);
+		buf = bufbase + (fmapfloor * numcols) + bufmod;
+		#sig1, sig2 = VOsc3.ar([buf, buf+numcols], detunedown, freq, detuneup);
+		eg_test = [fenv, env].collect { |e, i|
+			EnvGen.kr(e, gate, timeScale: timeScales[i], doneAction: 2 * i);
+		};
+		LocalOut.kr(eg_test);
+		ffreq = (ffreq * Sensitivity.kr(1, eg_test[0], fenvsens)).clip(20, 20000);
+		RLPF.ar(XFade2.ar(sig1, sig2, fmapfrac.madd(2, -1), amp),
+			ffreq, rq, mul: eg_test[1]);
+	}, [\freq, \amp, #[0, 1000, \linear, 1, 0], #[0, 20], EnvSpec(Env.adsr), #[0, 1], #[0.9, 1.1, \linear, 0, 1], \freq, #[1, 0.001], EnvSpec(Env.one), nil, #[0, 20, \lin, 1, 0], #[0, 20, \lin, 1, 0], \freq, \freq, #[0.01, 10, \exp, 0, 1], #[0.01, 10, \exp, 0, 1]]);
+
+	~defname = (name ++ "def").asSymbol;
+	\addRvbOut.eval(~defname, { |pan, finalAmp = 1, freq = 440, freqlag = 0, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1|
+		var	sig = WrapInstr("osc2.vosc3matrix").valueArray([
+			Lag.kr(freq, freqlag), gate,
+			~bufs[0].bufnum,  // bufbase
+			{	var	rate = Rand(0.7, 1.4),
+					dur = rate.reciprocal,
+					pulse = Impulse.kr(rate),
+					buf = Demand.kr(pulse, 0, Dseq([
+						Dwhite(0.0, ~numCols * 0.25, 1),
+						Dwhite(~numCols * 0.7, ~numCols-1.001, 1)
+					], inf));
+				EnvGen.kr(Env([Rand(~numCols * 0.7, ~numCols-1.001), buf], [dur]), pulse)
+			},
+			~env,
+			vsens, /*detune:*/ 1.003,
+			ffreq, rq, ~fenv, fenvsens,
+			~numRows, ~numCols,
+			/*basefreq:*/ 48.midicps, /*topfreq:*/ (11*12).midicps,
+			attackTimeScale, decayTimeScale
+		]);
+		~graphInsert !? { sig = ~graphInsert.(sig) };
+		Pan2.ar(sig, pan, finalAmp)
+	}).add;
+
+	out = Voicer(25, ~defname, target: ~target);
+	
+	out.mapGlobal(\ffreq, nil, 14000, \freq);
+	out.mapGlobal(\rq, nil, 1.0, \myrq);
+	// out.mapGlobal(\fenvsens, nil, 1.0, #[0.1, 15, \exp]);
+	
+	// ~target.doWhenReady({ |chan|
+	// 	chan.playfx({ |outbus|
+	// 		RLPF.ar(In.ar(outbus, 1),
+	// 			out.globalControls[\ffreq].kr, 
+	// 			out.globalControls[\rq].kr
+	// 		)
+	// 	})
+	// });
+	
+	out
+}, free: { [~target, ~bufs].free }, type: \voicer) => Fact(\shimmerpad);
+
+
+
 { |notes| 
 	Penvir((),
 		Pwalk(notes, Pwrand([
@@ -950,3 +1060,70 @@ make: { |name|
 		}
 	} => BP(name);
 }, type: \bp) => Fact(\acTrig);
+
+
+
+// cuz WeighBag sux
+Proto {
+	~prep = { |array, counts|
+		~array = array;
+		~counts = counts;
+		~weights = counts.normalizeSum;
+		~numItems = counts.sum;
+		currentEnvironment
+	};
+	~add = { |item, num = 1|
+		var	i = ~array.indexOf(item);
+		if(i.notNil) {
+			~counts[i] = ~counts[i] + num;
+			~numItems = ~numItems + num;
+		} {
+			~array = ~array.add(item);
+			~counts = ~counts.add(num);
+		};
+		~weigh.();
+	};
+	~get = { |i| ~array[i] };
+	~remove = { |item|
+		var	i = ~array.indexOf(item);
+		if(i.notNil) {
+			if(~counts[i] > 1) {
+				~counts[i] = ~counts[i] - 1
+			} {
+				~array.removeAt(i);
+				~counts.removeAt(i);
+			};
+			~weigh.();
+		};
+	};
+	~choose = { ~array.wchoose(~weights) };
+
+	~weigh = {
+		~numItems = ~counts.sum;
+		~weights = ~counts / ~numItems;
+	};
+} => PR(\fixedWeighBag);
+
+
+
+{ |array, weights|
+	var	bag = PR(\fixedWeighBag).prep(array, weights),
+		balCounts = bag.counts div: 2,
+		bcsum = balCounts.sum,
+		indices = balCounts.collectIndices(_ > 0),
+		i,
+		result = Array(weights.sum);
+	// first half, use half of each
+	while { bcsum > 0 }
+	{
+		result.add(bag.get(i = indices.wchoose(balCounts.normalizeSum)));
+		bag.remove(result.last);
+		balCounts[i] = balCounts[i] - 1;
+		bcsum = bcsum - 1;
+	};
+	while { bag.size > 0 } {
+		result.add(bag.choose);
+		bag.remove(result.last);
+	};
+	result
+} => Func(\shufBalance);
