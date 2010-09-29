@@ -78,6 +78,7 @@
 ** Dress: Saturday <2010-10-02 Sat>
 ** Show: Sunday morning <2010-10-03 Sun 08:00>
 ** TODO Place to put in IP address/port
+** TODO [#A] Fragments of torso sounds
 ** Data for Lorne:
 *** TODO Voicer events need different arg handling
 *** DONE Check in chucklib event updates

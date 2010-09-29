@@ -1490,3 +1490,272 @@ PR(\abstractProcess).clone {
 
 
 
+// 3 levels
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: {
+	3.collect { |i|
+		PR(\armsSkidMel).chuck(BP((\sm ++ i).asSymbol), nil, (
+			master: ~master,
+			glrvbmc: ~glrvbmc,
+			lcrvbmc: ~lcrvbmc,
+			amp: 0.9,
+			rewriteLevel: Pseq([0, 1, 2, Pwhite(1, 3, inf)], 1),
+			loTime: Pwhite(0.22, 0.45, inf),
+			hiTime: Pkey(\loTime) * Pexprand(1.0, 1.25, inf)
+		)).prepareForPlay;
+	};
+}, type: \bp) => Fact(\threelevBP);
+
+
+(play: {
+// currentEnvironment.debug;
+	min(3, ~i).do { |j|
+		BP(("sm" ++ j).asSymbol).triggerOneEvent(0);
+	};
+	if(~playtc and: { BP.exists(\tc) }) { BP(\tc).triggerOneEvent(0.1) };
+}) => ProtoEvent(\l3Trig);
+
+
+(make: { |name|
+BP(name).free;
+PR(\shivaTrig).chuck(BP(name), nil, (
+	event: (eventKey: \l3Trig),
+	playtc: false,
+	i: 3
+));
+}, type: \bp) => Fact(\shivaTrig);
+
+
+
+// s & i
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport);
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;		
+	};
+
+	~mode = \g;
+	~high = Pseq([0, 1, Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], inf)], 1);
+	~prevHigh = Pdelay(Pkey(\high));
+	~top = Pswitch1([
+		Paccumbounce(30, 40, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf)),
+		Paccumbounce(38, 47, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf))
+	], Pkey(\high));
+	~degree = (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+		.clump(3);
+	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
+	~delta = Pwhite(1, 4, inf);
+	~freqlag = Pkey(\delta) * 0.6;
+	~finalAmp = -12.dbamp;
+	~protoEvent = Pseq([
+		\polySynthPlayNotify,
+		Pif(Pkey(\prevHigh) > 0, \polySynthPlayNotify, \polySynthTrigger)
+	], 1);
+	~sustain = Pif(Pkey(\high) > 0, Pkey(\delta) - 0.6, inf);
+	~lag = Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+		Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf));
+
+	~recvEventNotify = { |node| ~node = node };
+	~stopCleanup = { if(~node.notNil) { ~node.do(_.release) }; ~node = nil };
+
+	~asPattern = {
+		DebugPbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\node, Pfunc { ~node ? 0 },
+			\chan, ~event[\voicer].nodes[0].bus.asMixer,
+			\ffreq, ~event[\voicer].globalControls[\ffreq].asMap,
+			\rq, ~event[\voicer].globalControls[\rq].asMap,
+			\mode, BPStream(\mode),
+			\high, BPStream(\high),
+			\prevHigh, BPStream(\prevHigh),
+			\top, BPStream(\top),
+			\degree, BPStream(\degree),
+			\freq, BPStream(\freq),
+			\delta, BPStream(\delta),
+			\freqlag, BPStream(\freqlag),
+			\finalAmp, BPStream(\finalAmp),
+			\protoEvent, BPStream(\protoEvent),
+			\sustain, BPStream(\sustain),
+			\lag, BPStream(\lag)
+		).collect { |ev|
+			var	sustain;
+			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+				thisThread.clock.sched(sustain, {
+					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+						[\n_set, ~node.asArray.asOSCArgArray, \gate, 0].flop, true);
+					nil
+				});
+			};
+			ev
+		}
+	};
+} => PR(\siDuet);
+
+
+// laura manipulation
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\armsSkidMel).chuck(BP(name), nil, (
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		amp: 0.4,
+		def: \combskid,
+		rdecay: 2,
+		hiffreq: Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) },
+		lpffreq: Pexprand(1200, 7000, inf)
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\lauraManip);
+
+
+// Stephen solo
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\armsSkidMel).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthPlayer),
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		amp: 0.4,
+		// def: \combskid,
+		// rdecay: 2,
+		hiffreq: Pfunc({ |ev|
+			var deg = ev[\degree];
+			deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.3, 0.5, 0.4]) } ! 2).integrate);
+			Mode(ev[\mode]).cps(deg + 42)
+		}),
+		lpffreq: Pexprand(1200, 7000, inf),
+		delta: Pwhite(1.5, 4.0, inf),
+		sustain: Pkey(\delta) * Pwhite(1.8, 2.5, inf)
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\stephenSolo);
+
+
+// cradling/drawing bow
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport);
+	~autoRun = false;
+	~alwaysReset = true;
+
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;
+		~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
+	};
+	~useGui = { |vpi| ~distCtl => VP(vpi) };
+	~freeCleanup = { ~distCtl.free };
+
+	~topArrays = Pseq([
+		#[35, 40],
+		#[35, 41],
+		#[37, 42, 43, 38, 33],
+		Pfunc({
+			Pseq([
+				Paccumbounce(31, 38,
+					Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf) * #[-1, 1].choose,
+					rrand(1, 5)
+				),
+				Pwhite(40, 47, 1)
+			], 1)
+		})
+	], 1);
+	~rest = 1;
+	~mode = \g;
+	~chordAdd = Pseries(0, Pwxrand(#[1, 2, 3, 4], #[2, 3, 2, 0.5].normalizeSum, 3)).clump(3);
+	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
+	~deltaBase = 1.2;
+	~delta = Plazy({ Pif(Pkey(\last), 2, 1) * BPStream(\deltaBase) });
+	~freqlag = 0.2;
+	~finalAmp = -12.dbamp;
+	~sustain = Pif(Pkey(\last), Pkey(\delta) - 0.6, inf);
+	~distance = Plazy({ Pn(~distCtl.asMap, inf) });
+	~pan = Pwhite(0.5, 0.9, inf) * Pfunc { #[-1, 0, 1].scramble };
+
+	~runGesture = {
+		if(~spawner.notNil) {
+			~spawner.seq(~makePhrase.());
+		} {
+			"BP(%): Not playing; can't run phrase.".format(~collIndex.asCompileString).warn;
+		};
+	};
+
+	~makePhrase = { |degrees|
+		var	num;
+		degrees ?? { degrees = ~topArraysStream.next };
+		if(degrees.notNil) {
+			degrees = degrees.dereference;
+			if(degrees.isArray) { degrees = Pseq(degrees, 1) };
+			num = degrees.estimateLength;
+			Pbind(
+				\instrument, ~event[\voicer].nodes[0].defname,
+				\node, Pfunc { ~nodes ? 0 },
+				\chan, ~event[\voicer].bus.asMixer,
+				\last, Pseq([Pn(false, num-1), true], 1),
+				\protoEvent, Pseq([
+					\polySynthPlayNotify,
+					Pn(\polySynthTrigger, inf)
+				], 1),
+				\mode, BPStream(\mode),
+				\top, degrees,
+				\degree, Pkey(\top) -.x ~chordAdd,
+				\freq, BPStream(\freq),
+				\delta, BPStream(\delta),
+				\freqlag, BPStream(\freqlag),
+				\finalAmp, BPStream(\finalAmp),
+				\sustain, BPStream(\sustain),
+				\pan, ~panStream.next,
+				\distance, ~distanceStream.next
+			).collect({ |ev|
+				var	sustain;
+				if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+					thisThread.clock.sched(sustain, e {
+						Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+							[\n_set, ~nodes.asArray.asOSCArgArray, \gate, 0].flop, true);
+						~nodes = nil;
+					});
+				};
+				ev
+			})
+		}
+	};
+
+	~recvEventNotify = { |nodes, event|
+		~nodes = nodes;
+	};
+	~stopCleanup = {
+		~nodes !? {
+			~nodes[0].server.listSendBundle(~nodes[0].server.latency,
+				~nodes.collect { |node| node.releaseMsg })
+		};
+		~nodes = nil;
+	};
+
+	~asPattern = {
+		~topArraysStream ?? { ~makeStreamForKey.(\topArrays) };
+		~restStream ?? { ~makeStreamForKey.(\rest) };
+		~panStream ?? { ~makeStreamForKey.(\pan) };
+		~distanceStream ?? { ~makeStreamForKey.(\distance) };
+		Pspawner({ |sp|
+			~spawner = sp;
+			if(~autoRun) {
+				"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
+				loop {
+					sp.seq(~makePhrase.());
+					sp.wait(~restStream.next());
+				}
+			} {
+				loop {
+					sp.wait(0.1);
+				}
+			}
+		})
+	};
+
+	~reset = { ~makeStreamForKey.(\topArrays) };
+} => PR(\rockingChords);

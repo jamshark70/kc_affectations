@@ -340,10 +340,11 @@ PR(\abstractProcess).clone {
 
 	~playtc = 0.5.asPattern.coin;
 	~delta = Pwhite(1.5, 3.0, inf);
+	~i = Pseries(1, 1, inf);
 
 	~asPattern = {
 		Pbind(
-			\i, Pseries(1, 1, inf),
+			\i, BPStream(\i),
 			\playtc, BPStream(\playtc),
 			\delta, BPStream(\delta)
 		)
@@ -360,3 +361,155 @@ PR(\abstractProcess).clone {
 BP(\sh).free;
 PR(\shivaTrig) => BP(\sh);
 
+
+
+
+// 3 levels
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: {
+	3.collect { |i|
+		PR(\armsSkidMel).chuck(BP((\sm ++ i).asSymbol), nil, (
+			master: ~master,
+			glrvbmc: ~glrvbmc,
+			lcrvbmc: ~lcrvbmc,
+			amp: 0.9,
+			rewriteLevel: Pseq([0, 1, 2, Pwhite(1, 3, inf)], 1),
+			loTime: Pwhite(0.22, 0.45, inf),
+			hiTime: Pkey(\loTime) * Pexprand(1.0, 1.25, inf)
+		)).prepareForPlay;
+	};
+}, type: \bp) => Fact(\threelevBP);
+
+
+(play: {
+// currentEnvironment.debug;
+	min(3, ~i).do { |j|
+		BP(("sm" ++ j).asSymbol).triggerOneEvent(0);
+	};
+	if(~playtc and: { BP.exists(\tc) }) { BP(\tc).triggerOneEvent(0.1) };
+}) => ProtoEvent(\l3Trig);
+
+BP.all.free;
+Fact(\threelevBP).makev;
+
+PR(\shivaTrig).chuck(BP(\smt), nil, (
+	event: (eventKey: \l3Trig),
+	playtc: false,
+	i: 3
+));
+
+3.do { |i| BP(("sm" ++ i).asSymbol).pan = i-1; };
+
+BP.all.do(_.reset);
+
+
+
+// s & i
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport);
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;		
+	};
+
+	~mode = \g;
+	~high = Pseq([0, 1, Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], inf)], 1);
+	~prevHigh = Pdelay(Pkey(\high));
+	~top = Pswitch1([
+		Paccumbounce(30, 40, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf)),
+		Paccumbounce(38, 47, Pwrand(#[-1, 1, 2, 3], #[3, 3, 2, 1].normalizeSum, inf))
+	], Pkey(\high));
+	~degree = (Pkey(\top) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 2].normalizeSum, 3)))
+		.clump(3);
+	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
+	~delta = Pwhite(1, 4, inf);
+	~freqlag = Pkey(\delta) * 0.6;
+	~finalAmp = -12.dbamp;
+	~protoEvent = Pseq([
+		\polySynthPlayNotify,
+		Pif(Pkey(\prevHigh) > 0, \polySynthPlayNotify, \polySynthTrigger)
+	], 1);
+	~sustain = Pif(Pkey(\high) > 0, Pkey(\delta) - 0.6, inf);
+	~lag = Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+		Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf));
+
+	~recvEventNotify = { |node| ~node = node };
+	~stopCleanup = { if(~node.notNil) { ~node.do(_.release) }; ~node = nil };
+
+	~asPattern = {
+		DebugPbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\node, Pfunc { ~node ? 0 },
+			\chan, ~event[\voicer].nodes[0].bus.asMixer,
+			\ffreq, ~event[\voicer].globalControls[\ffreq].asMap,
+			\rq, ~event[\voicer].globalControls[\rq].asMap,
+			\mode, BPStream(\mode),
+			\high, BPStream(\high),
+			\prevHigh, BPStream(\prevHigh),
+			\top, BPStream(\top),
+			\degree, BPStream(\degree),
+			\freq, BPStream(\freq),
+			\delta, BPStream(\delta),
+			\freqlag, BPStream(\freqlag),
+			\finalAmp, BPStream(\finalAmp),
+			\protoEvent, BPStream(\protoEvent),
+			\sustain, BPStream(\sustain),
+			\lag, BPStream(\lag)
+		).collect { |ev|
+			var	sustain;
+			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
+				thisThread.clock.sched(sustain, {
+					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+						[\n_set, ~node.asArray.asOSCArgArray, \gate, 0].flop, true);
+					nil
+				});
+			};
+			ev
+		}
+	};
+} => PR(\siDuet);
+)
+
+BP(\si).free;
+PR(\siDuet) => BP(\si);
+VC(\sp) => BP(\si);
+0 => BP(\si);
+
+
+// laura manip
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\armsSkidMel).chuck(BP(name), nil, (
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		amp: 0.4,
+		def: \combskid,
+		rdecay: 2,
+		hiffreq: Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) },
+		lpffreq: Pexprand(1200, 7000, inf)
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\threelevBP);
+
+Fact(\threelevBP) => BP(\sm);
+
+
+
+BP(\sm).reset;
+
+2.do { BP(\sm).triggerOneEvent(0) };
+
+BP(\sm).loTime = Pexprand(0.4, 0.6, inf);
+
+// THIS STUFF HERE!!
+BP(\sm).def = \combskid;
+BP(\sm).rdecay = 2;
+BP(\sm).listVars;
+BP(\sm).hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) };
+
+BP(\sm).lpffreq = Plazy({ Pn(~lpffreqCtl.asMap, inf) });
+BP(\sm).lpffreq = Pexprand(1200, 7000, inf);

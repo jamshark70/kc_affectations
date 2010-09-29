@@ -951,7 +951,7 @@ p.stop; ~nodes.do(_.release);
 [\n_set, #[0, 1, 2], \gate, 0].flop
 ~nodes
 
-(1537..1539).do(s.sendMsg(\n_free, _))
+(1391..1393).do(s.sendMsg(\n_free, _))
 
 /**** TODO Manipulating Laura ****/
 
