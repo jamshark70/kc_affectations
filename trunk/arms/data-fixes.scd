@@ -2,12 +2,16 @@ ChuckableBrowser.newWindow;
 
 Dialog.getPaths { |paths| p = paths[0].postcs };
 "/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/arms/hands-1_data.txt"
+"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/NACL_Arms.log"
 
 "/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/locomotor_arms_solo_Laura_9-8-10.txt"
 
 d = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples/arms";
+p = d +/+ "NACL_Arms.log";
 p = d +/+ "hands-1_data2.txt";
 p = d +/+ "locomotor_arms_solo_Laura_9-8-10.txt";
+
+~sampleDir = d.dirname;
 
 File.exists(p);
 
@@ -26,7 +30,6 @@ protect {
 		var	databuf = FloatArray.newClear(width * 2000), i = 0, c = 0;
 		loop {
 			if(row.isNil or: { i >= databuf.size }) {
-// 				[(c = c+1), i].debug("written");
 				sf.writeData(databuf.extend(i));
 				databuf = FloatArray.newClear(width * 2000);
 				i = 0;
@@ -42,18 +45,15 @@ protect {
 		sf = SoundFile(p.splitext[0] ++ ".wav").headerFormat_("WAV").numChannels_(width);
 		if(sf.openWrite) {
 			while { (l = f.getLine).notNil } {
-				l = l.reject(_.isSpace).split($,).asFloat.extend(width, 0.0);
-// 				l2 = f.getLine;
-// 				if(l2.notNil) {
-// 					l2 = l2.reject(_.isSpace).split($,).asFloat;
-// 					l = if(l2[2] == 0) { l } { l2 };
-// 				};
-				write.(l);
+				if(l.size > 0) {
+					l = l.reject(_.isSpace).split($,).asFloat.extend(width, 0.0);
+					write.(l);
+				};
 			};
 			write.(nil);  // force flush
 		} { "Couldn't open output file".warn };
 	} { "Couldn't open input file".warn };
-} { f.close; sf.close };
+} { f.close; sf.close; "files closed".postln; };
 )
 
 
@@ -218,7 +218,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 	alwaysReset: true,
 	numCh: 5,
 	outCh: 8,
-	path: topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav",
+	path: topEnvironment[\sampleDir] +/+ "arms/NACL_Arms.wav", // "arms/hands-1_data2.wav",
 	userprep: {
 		~buf = Buffer.readAndQuery(s, ~path);
 		~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
@@ -336,6 +336,8 @@ s.makeBundle(nil, {
 	#[player, fixer].do { |key| BP(\di)[key].trace }
 });
 
+BP(\di).play;
+BP(\di).stop;
 
 
 // get raw max velocity (5th channel)
