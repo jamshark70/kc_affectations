@@ -1224,20 +1224,26 @@ PR(\abstractProcess).clone {
 	~event = (eventKey: \voicerNote);
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
+		~ymaxCtl = GenericGlobalControl(
+			\ymax,
+			SharedBus.new(\control, BP(\di).bus.index + 3, 1, s),
+			0, \bipolar
+		).watch;
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
 	};
-	~ctlGuiKeys = #[ampCtl];
+	~ctlGuiKeys = #[ampCtl, ymaxCtl];
 	~useGui = Func(\bpUseGui).v;
-	~freeCleanup = { ~ampCtl.free };
+	~freeCleanup = { [~ampCtl, ~ymaxCtl].free };
 
-	~root = Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
-		Pwhile1({ |inval, next| next < 40 },
-			Pseries(26, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf), inf)
-		),
-		Pwhile1({ |inval, next| next >= 21 },
-			Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
-		)
-	]));
+	// ~root = Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
+	// 	Pwhile1({ |inval, next| next < 40 },
+	// 		Pseries(26, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf), inf)
+	// 	),
+	// 	Pwhile1({ |inval, next| next >= 21 },
+	// 		Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
+	// 	)
+	// ]));
+	~root = Plazy({ ~ymaxCtl.asPattern.linlin(-0.7, -0.3, 23.5, 39.49).round });
 	~num = Pexprand(2.5, 6.499, inf).round;
 
 	~angle = Pseries(

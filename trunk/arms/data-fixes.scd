@@ -45,9 +45,12 @@ protect {
 		sf = SoundFile(p.splitext[0] ++ ".wav").headerFormat_("WAV").numChannels_(width);
 		if(sf.openWrite) {
 			while { (l = f.getLine).notNil } {
-				if(l.size > 0) {
+				if(l.any(_.isDecDigit)) {
 					l = l.reject(_.isSpace).split($,).asFloat.extend(width, 0.0);
 					write.(l);
+					l2 = l;
+				} {
+					write.(l2/*.debug("wrote l2")*/)
 				};
 			};
 			write.(nil);  // force flush
@@ -219,6 +222,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 	numCh: 5,
 	outCh: 8,
 	path: topEnvironment[\sampleDir] +/+ "arms/NACL_Arms.wav", // "arms/hands-1_data2.wav",
+	path: topEnvironment[\sampleDir] +/+ "arms/hand_stack-100930.wav",
 	userprep: {
 		~buf = Buffer.readAndQuery(s, ~path);
 		~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
@@ -339,6 +343,10 @@ s.makeBundle(nil, {
 BP(\di).play;
 BP(\di).stop;
 
+q = BP(\di);
+q.buf
+
+
 
 // get raw max velocity (5th channel)
 f = SoundFile.openRead(topEnvironment[\sampleDir] +/+ "arms/hands-1_data2.wav");
@@ -350,3 +358,48 @@ z.clump(5).flop.last.maxItem
 
 BP(\di).maxVel.spec_(#[0, 20, lin]).value_(9);
 BP(\di).maxVel.gui;
+
+
+// checking hand-stacking y data
+f = SoundFile.openRead(BP(\di).buf.path);
+f.readData(z = FloatArray.newClear(f.numFrames * f.numChannels));
+f.close;
+
+z = z.clump(5).flop;
+a = z[2];
+b = z[3];
+
+[a.minItem, a.maxItem]
+[b.minItem, b.maxItem]
+
+PR('stacking') => BP(\stk);
+Fact('armsChordVC') => VC(\ac);
+VC(\ac) => BP(\stk);
+
+BP(#[di, stk]).play(0);
+u = Updater(BP(\di), { |obj, what, more|
+	var	saveRoot,
+		stopFunc = { |obj, what, more|
+			if(more == \stopped) {
+				BP(\stk).removeDependant(stopFunc);
+				BP(\stk).root = saveRoot.debug("reset root");
+			}
+		};
+	if(more == \stopped) {
+		u.remove;
+		saveRoot = BP(\stk).root.debug("saved root");
+		BP(\stk).root = nil;
+		BP(\stk).addDependant(stopFunc);
+	};
+});
+
+BP.all.stop;
+u.remove;
+
+[-0.7, -0.3] * 0.5 + 0.5
+BP(\stk).root = Plazy({ ~ymaxCtl.asPattern.linlin(0.15, 0.35, 23.5, 39.49).round });
+
+BP(\stk).ymaxCtl.bus
+BP(\di).bus
+
+KrBusWatcher.newFrom(s).nodes
