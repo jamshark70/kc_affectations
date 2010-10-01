@@ -1217,3 +1217,18 @@ BP(\rc).nodes
 (1114..1116).do(s.sendMsg(\n_free, _))
 
 /**** TODO Laura solo ****/
+
+
+BP(\segTrig).free;
+PR(\busTrig).chuck(BP(\segTrig), nil, (message: '/segment'));
+BP(\segTrig).play;
+BP(\segTrig).stop;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/segment', { |t, r, m| m.postln }).add;
+
+s.sendMsg(\c_set, 4095, 1);
+s.sendBundle(nil, [\c_set, 4095, 1], [\n_trace, BP(\segTrig).node.nodeID]);
+
+
+BP(\segTrig).node.trace

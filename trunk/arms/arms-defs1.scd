@@ -210,11 +210,10 @@ PR(\abstractProcess).clone {
 	~sustain = Pkey(\delta) * Pwhite(3.0, 6.0, inf);
 	~loTime = Pexprand(0.12, 0.22, inf);
 	~hiTime = Pkey(\loTime);
-	~amp = 8.dbamp;
+	~amp = 0.9; // 8.dbamp;
 
 	~rewriteProb = 0.3;
 	~rewriteLevel = Plazy({
-"restarting rewriteLevel".debug;
 		Pseq([0, 0, 1, 2, Pwhite(1, 3, inf)], 1);
 	});
 	~phrases = [
@@ -227,7 +226,6 @@ PR(\abstractProcess).clone {
 	];
 	~degree = Plazy {
 		var	self = currentEnvironment;
-"restarting degree".debug;
 		Pswitch(
 			~phrases.collect { |row|
 				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
@@ -346,7 +344,7 @@ PR(\abstractProcess).clone {
 		#[8, 11, 10, 5, 2, 3, 4],
 		#[-2, -5, 0, 1, 0, 4]
 	];
-	~degree = Plazy {
+	~degree = Plazy({
 		var	self = currentEnvironment;
 		Pswitch(
 			~phrases.collect { |row|
@@ -360,11 +358,12 @@ PR(\abstractProcess).clone {
 			},
 			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
 		)
-	};
+	});
 
 	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf);
 // 	~legato = Pwrand(#[1.01, 0.9, 0.4], #[0.7, 0.2, 0.1], inf); // 1.01;
 	~gate = 0.8;
+	~amp = -14.dbamp;
 	~freqlag = 0.3;
 	~detune = 1.003;
 	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger));
@@ -391,7 +390,8 @@ PR(\abstractProcess).clone {
 			\rq, BPStream(\rq),
 			\pan, BPStream(\pan),
 			\distance, BPStream(\distance),
-			\chan, VC(\am).env.target
+			\chan, VC(\am).env.target,
+			\ampMul, BPStream(\amp)
 		).collect { |ev| ~lastEvent = ev; ev }
 		// now this is a problem - you don't know when the next trigger is,
 		// so you don't know when to release
@@ -686,12 +686,13 @@ PR(\abstractProcess).clone {
 	~arpeg = \armsCh;
 	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 0.6, 4);
 // 	~gate = 0.2;
+	~amp = -14.dbamp;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
 // 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
 
-	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
+//	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
 
 	~durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
 	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
@@ -874,7 +875,8 @@ PR(\abstractProcess).clone {
 				\dur, BPStream(\dur),
 				\length, BPStream(\sustain),
 				\attackTimeScale, BPStream(\attScale),
-				\decayTimeScale, BPStream(\decScale)
+				\decayTimeScale, BPStream(\decScale),
+				\finalAmp, BPStream(\amp)
 			) //.trace
 		])
 	};
@@ -1483,10 +1485,11 @@ PR(\abstractProcess).clone {
 
 	~playtc = 0.5.asPattern.coin;
 	~delta = Pwhite(1.5, 3.0, inf);
+	~i = Pseries(1, 1, inf);
 
 	~asPattern = {
 		Pbind(
-			\i, Pseries(1, 1, inf),
+			\i, BPStream(\i),
 			\playtc, BPStream(\playtc),
 			\delta, BPStream(\delta)
 		)
@@ -1589,7 +1592,7 @@ make: {
 (play: {
 // currentEnvironment.debug;
 	min(3, ~i).do { |j|
-		BP(("sm" ++ j).asSymbol).triggerOneEvent(0);
+		2.do { BP(("sm" ++ j).asSymbol).triggerOneEvent(0) };
 	};
 	if(~playtc and: { BP.exists(\tc) }) { BP(\tc).triggerOneEvent(0.1) };
 }) => ProtoEvent(\l3Trig);
@@ -1638,7 +1641,7 @@ PR(\abstractProcess).clone {
 	~stopCleanup = { if(~node.notNil) { ~node.do(_.release) }; ~node = nil };
 
 	~asPattern = {
-		DebugPbind(
+		Pbind(
 			\instrument, ~event[\voicer].nodes[0].defname,
 			\node, Pfunc { ~node ? 0 },
 			\chan, ~event[\voicer].nodes[0].bus.asMixer,

@@ -586,6 +586,32 @@ Library.put(\defaultVizKeys, [
 	\dataWrapProtoEvent.eval(key);
 };
 
+Proto {
+	~event = (eventKey: \dummy);
+	~alwaysReset = true;
+	~busIndex = 4095;
+	~message = \trigbus;
+	~replyID = 1;
+	~prep = {
+		~bus = SharedBus(\control, ~busIndex, 1, s);
+		SynthDef(~message.asSymbol, { |bus, replyID = 1|
+			var	trig = InTrig.kr(~busIndex, 1);
+			SendReply.kr(trig, ~message, trig, replyID);
+		}).add;
+	};
+
+	~preparePlay = {
+		~node ?? { ~node = Synth(~message, [bus: ~bus, replyID: ~reply]) };
+	};
+	~stopCleanup = {
+		~node !? { ~node.free };
+	};
+
+	~asPattern = {
+		Pbind(\delta, 1)
+	};
+} => PR(\busTrig);
+
 };
 
 true   // avoid stupid "found nil" warning

@@ -438,7 +438,7 @@ PR(\abstractProcess).clone {
 	~stopCleanup = { if(~node.notNil) { ~node.do(_.release) }; ~node = nil };
 
 	~asPattern = {
-		DebugPbind(
+		Pbind(
 			\instrument, ~event[\voicer].nodes[0].defname,
 			\node, Pfunc { ~node ? 0 },
 			\chan, ~event[\voicer].nodes[0].bus.asMixer,
