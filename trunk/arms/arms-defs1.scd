@@ -213,7 +213,10 @@ PR(\abstractProcess).clone {
 	~amp = 8.dbamp;
 
 	~rewriteProb = 0.3;
-	~rewriteLevel = Pseq([1, 2, Pwhite(1, 3, inf)], 1);
+	~rewriteLevel = Plazy({
+"restarting rewriteLevel".debug;
+		Pseq([0, 0, 1, 2, Pwhite(1, 3, inf)], 1);
+	});
 	~phrases = [
 		#[2, 5, 4],
 		#[2, 7, 6, 4, 8],
@@ -224,6 +227,7 @@ PR(\abstractProcess).clone {
 	];
 	~degree = Plazy {
 		var	self = currentEnvironment;
+"restarting degree".debug;
 		Pswitch(
 			~phrases.collect { |row|
 				PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~rewriteLevelStream.next }, 1), [
@@ -927,18 +931,19 @@ make: { |name|
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
 		playTestFile: false,
+		startFrame: 0,
 		userprep: {
 			~buf = Buffer.readAndQuery(s, ~path);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
 	
-			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
+			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, startFrame = 0, loop = 0|
 				var	fr = BufFrames.ir(buf),
 					dur = fr / frameRate,
 					notLoop = loop <= 0,
 					end = fr + (10000 * notLoop),
-					stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
-					ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
+					stopper = Line.kr(0, 1, dur - (startFrame / frameRate), doneAction: notLoop*2),
+					ph = Phasor.kr(0, frameRate * ControlDur.ir, start: startFrame, end: end),
 					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
 		
 				Out.kr(outbus, data);
@@ -1026,6 +1031,7 @@ make: { |name|
 					(
 						instrument: if(~playTestFile) { ("data" ++ ~numCh).asSymbol } { \rest },
 						buf: ~buf, loop: 0, bus: ~recvBus,
+						startFrame: ~startFrame,
 						delta: ~buf.numFrames / 30,
 						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
@@ -1495,6 +1501,72 @@ PR(\abstractProcess).clone {
 } => PR(\shivaTrig);
 
 
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~bpFilter = { |key|
+		key = key.asString;
+		key[..1] == "am" and: { key[2..].every(_.isDecDigit) }
+	};
+	~prep = {
+		~setBPs.();
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	};
+	~setBPs = { |bpFilter(~bpFilter)|
+		~bps = BP.all.select { |bp| bpFilter.(bp.collIndex) };
+	};
+
+	~stopCleanup = {
+		~event[\voicer].tryPerform(\releaseAll);
+	};
+
+	~mode = \g;
+	~freq = Pfunc { |ev|
+		var	result = Array.new(~bps.size), midi;
+		~bps.do { |bp|
+			if(bp[\node].notNil and: { (midi = bp[\lastEvent].tryPerform(\at, \midi)).notNil }) {
+				result.add(midi.mapMode(ev[\mode]));
+			};
+		};
+		result
+	};
+	~dur = 4;
+	~length = inf;
+	~gate = 0.1;
+	~attackTimeScale = 2.5;
+	~decayTimeScale = 2.5;
+	~finalAmp = -6.dbamp;
+	~distance = Pwhite(12.0, 18.0, inf);
+	~pan = Pwhite(-0.7, 0.7, inf);
+	~fenvsens = 0;
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\finalAmp, BPStream(\finalAmp),
+			\distance, BPStream(\distance),
+			\pan, BPStream(\pan),
+			\fenvsens, BPStream(\fenvsens)
+		).collect { |ev|
+			~lastEvent !? {
+				~lastEvent[\nodes].do { |node, i|
+					// releases only if node hasn't been stolen
+					node.release(0, (~lastEvent[\lag] ? 0) + (node.server.latency ? 0),
+						~lastEvent[\newFreq].wrapAt(i))
+				};
+			};
+			~lastEvent = ev;
+			ev
+		}
+	};
+} => PR(\thinChords);
+
+
 
 // 3 levels
 (
@@ -1530,7 +1602,7 @@ PR(\shivaTrig).chuck(BP(name), nil, (
 	playtc: false,
 	i: 3
 ));
-}, type: \bp) => Fact(\shivaTrig);
+}, type: \bp) => Fact(\l3Trig);
 
 
 
