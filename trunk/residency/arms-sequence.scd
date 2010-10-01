@@ -124,8 +124,7 @@ s.waitForBoot {
 			BP(\acDisp) => VC(\ac);
 			0 => BP(\acDisp);
 	
-			// TEST
-			BP(\di).playTestFile = true;
+			BP(\di).playTestFile = false;
 	
 			0
 		},
@@ -150,7 +149,7 @@ s.waitForBoot {
 			0 => BP(\sr);
 			0
 		},
-		bpCmd: (id: \lc1, name: \di, quant: 0,
+		bpCmd: (id: \lc_data, name: \di, quant: 0,
 			yetToStopParent: true,
 			clearDoneSignal: {
 				var cmd = ~iterator.findActive(\lcWait);
