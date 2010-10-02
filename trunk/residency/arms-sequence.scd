@@ -59,8 +59,9 @@ s.waitForBoot {
 		func: \dummy
 	);
 
-	{ |searchID|
+	{ |segID, searchID|
 		(	cmdID: searchID,
+			segID: segID,
 			sbounds: Window.screenBounds,
 			// play: \dummy,
 			setDoneSignal: {
@@ -73,14 +74,25 @@ s.waitForBoot {
 					~doneSignal = nil
 				} {
 					~resp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
-						r.remove;
-						~stop.();
+						var	inSeg = m[3];
+						case { inSeg == ~segID } {
+							r.remove;
+							~stop.();
+						}
+						{ inSeg > ~segID } {
+							"NEED TO SKIP SEGMENT HERE -- JUST ADVANCING NOW!".debug;
+							r.remove;
+							~stop.();
+						}
+						{ "Trigger segment % ignored; waiting for segment %\n"
+							.postf(inSeg, ~segID)
+						};
 					}).add;
 					defer(e {
 						~window = Window("move on",
 							Rect(~sbounds.right - 120, ~sbounds.height - 300, 120, 60));
 						Button(~window, ~window.view.bounds.insetBy(2, 2))
-							.states_([["next seg"]])
+							.states_([["to seg %".format(~segID)]])
 							.action_(e { ~stop.() });
 						~window.front.userCanClose_(false);
 					});
@@ -88,6 +100,7 @@ s.waitForBoot {
 			},
 			clearDoneSignal: {
 				~doneSignal.do(_.stop);  // this is the previous loopcmd!
+				~resp.remove;
 				~window !? { defer(e { ~window.close }) };
 			};
 		)
@@ -139,7 +152,7 @@ s.waitForBoot {
 				{ 2.do { BP(\am).triggerOneEvent(0) }; 0 }
 			]
 		),
-		funcCmd: \nextThingParms.eval(\am1),
+		funcCmd: \nextThingParms.eval(2, \am1),
 		\cmdSync,
 	
 		{ "///// 10:37 -- locomotive".debug; 0 },
@@ -168,7 +181,7 @@ s.waitForBoot {
 				\cmdSync
 			]
 		),
-		funcCmd: \nextThingParms.eval(\lc1).put(\id, \lcWait),
+		funcCmd: \nextThingParms.eval(3, \lc1).put(\id, \lcWait),
 		\cmdSync,
 	
 		///// 10:52 -- lifting from center (again a few seconds later)
@@ -200,7 +213,7 @@ s.waitForBoot {
 				\cmdSync
 			]
 		),
-		funcCmd: \nextThingParms.eval(\lc2).put(\id, \lcWait),
+		funcCmd: \nextThingParms.eval(4, \lc2).put(\id, \lcWait),
 		\cmdSync,
 	
 		{ "///// 11:24 -- hand stacking".debug; 0 },
@@ -249,7 +262,7 @@ s.waitForBoot {
 				bp.autoRun = true
 			}
 		),
-		funcCmd: \nextThingParms.eval(\ai),
+		funcCmd: \nextThingParms.eval(6, \ai),
 		\cmdSync,
 	
 		{ "///// 12:10 -- Shiva".debug; 0 },
@@ -272,7 +285,7 @@ s.waitForBoot {
 			],
 			clearDoneSignal: { BP(\shivaTrig).stop }
 		),
-		funcCmd: \nextThingParms.eval(\shiva),
+		funcCmd: \nextThingParms.eval(8, \shiva),
 		\cmdSync,
 	
 		///// 12:45 -- swaying, into another partnering sequence
@@ -298,7 +311,7 @@ s.waitForBoot {
 			],
 			clearDoneSignal: { BP(\l3Trig).stop }
 		),
-		funcCmd: \nextThingParms.eval(\threelev),
+		funcCmd: \nextThingParms.eval(9, \threelev),
 		\cmdSync,
 		
 		///// 14:37 -- Stephen/Ilana partnering
@@ -326,7 +339,7 @@ s.waitForBoot {
 				\cmdSync
 			]
 		),
-		funcCmd: \nextThingParms.eval(\s_i),
+		funcCmd: \nextThingParms.eval(10, \s_i),
 		\cmdSync,
 	
 		// (bit of locomotive before laura-manipulation?)
@@ -339,7 +352,7 @@ s.waitForBoot {
 				\cmdSync
 			]
 		),
-		funcCmd: \nextThingParms.eval(\lc3).put(\id, \lcWait),
+		funcCmd: \nextThingParms.eval(10, \lc3).put(\id, \lcWait),
 		\cmdSync,
 	
 		{ "///// 15:08 -- picking up Laura, then manipulating her through the axial theme".debug; 0 },
@@ -353,7 +366,7 @@ s.waitForBoot {
 			],
 			clearDoneSignal: { BP(\lm).stop }
 		),
-		funcCmd: \nextThingParms.eval(\lauraManip),
+		funcCmd: \nextThingParms.eval(11, \lauraManip),
 		\cmdSync,
 	
 		{ "///// 15:42 -- locomotive".debug; 0 },
@@ -383,7 +396,7 @@ s.waitForBoot {
 				\cmdSync
 			]
 		),
-		funcCmd: \nextThingParms.eval(\lc4).put(\id, \lcWait),
+		funcCmd: \nextThingParms.eval(12, \lc4).put(\id, \lcWait),
 		\cmdSync,
 	
 		{ "///// 15:49 -- short solo from Stephen".debug; 0 },
@@ -402,7 +415,7 @@ s.waitForBoot {
 			],
 			clearDoneSignal: { BP(\ssol).stop }
 		),
-		funcCmd: \nextThingParms.eval(\stsolo),
+		funcCmd: \nextThingParms.eval(13, \stsolo),
 		\cmdSync,
 	
 		{ "///// 15:55 -- cradling, drawing bow sequence".debug; 0 },
@@ -412,7 +425,7 @@ s.waitForBoot {
 				bp.autoRun = true
 			}
 		),
-		funcCmd: \nextThingParms.eval(\rc),
+		funcCmd: \nextThingParms.eval(14, \rc),
 		\cmdSync,
 	
 	/*
@@ -453,3 +466,9 @@ s.sendMsg(\c_set, 4094, 1);
 s.sendMsg(\c_set, 4095, 1);
 
 t.stop;
+
+
+s.sendMsg(\c_set, 4095, 1);
+s.sendMsg(\c_set, 4095, 2);
+s.sendMsg(\c_set, 4095, 3);
+s.sendMsg(\c_set, 4095, 8);
