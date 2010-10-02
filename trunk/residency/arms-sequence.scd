@@ -9,6 +9,7 @@ t.stop; t.play;
 // and if you need to stop:
 t.stop;  // by itself
 
+~seq.gotoSection(5);
 ~seq.play;
 
 "\n\n\n\n\n\n".post;
@@ -214,7 +215,7 @@ s.waitForBoot {
 		// )),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A1",
+			name: "A1-axial",
 			segID: 1,
 			initProcesses: {
 				\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
@@ -264,7 +265,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A2",
+			name: "A2-locomotive",
 			segID: 2,
 			initProcesses: {
 				\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
@@ -302,7 +303,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A3",
+			name: "A3-sunrise",
 			segID: 3,
 			initProcesses: {
 				\chuckIf.eval(PR(\sunrise), BP, \sr);
@@ -336,7 +337,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A4",
+			name: "A4-stacking",
 			segID: 4,
 			initProcesses: {
 				\chuckIf.eval(PR(\stacking), BP, \st, nil, (
@@ -365,7 +366,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A5",
+			name: "A5-partnering",
 			segID: 5,
 			initProcesses: {
 				\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
@@ -398,7 +399,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "",
+			name: "A6-Shiva",
 			segID: 6,
 			initProcesses: {
 				\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
@@ -441,6 +442,51 @@ s.waitForBoot {
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
+					id: 7,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "A7-partnering",
+			segID: 7,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \ai, quant: 0, prepareBP: { |bp|
+							bp.autoRun = false;
+						}),
+						loopCmd: (
+							cmds: [
+								{ PR(\loopCmd).copy.putAll((
+									cmds: [
+										{ BP(\ai).runGesture; 0 },
+										funcCmd: topEnvironment[\trigParms],
+										\cmdSync										
+									],
+									repeats: rrand(2, 3)
+								)) },
+								\cmdSync,
+								{ PR(\loopCmd).copy.putAll((
+									cmds: [
+										{ BP(\shivaTrig).triggerOneEvent(0); 0 },
+										funcCmd: topEnvironment[\trigParms],
+										\cmdSync										
+									],
+									repeats: rrand(2, 4),
+									clearDoneSignal: { BP(\shivaTrig).stop }
+								)) },
+								\cmdSync
+							]
+						),
+						\cmdSync
+					],
+					// onStop: {  },
+					dur: \trigger,  // or \sync
 					id: 8,  // trig id
 					init: Func(\nextThingTrig).v,
 					clear: Func(\clearNextTrig).v
@@ -449,7 +495,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A8",
+			name: "A8-axial 3 levels",
 			segID: 8,
 			initProcesses: {
 				if(BP.exists(\sm0).not) { Fact(\threelevBP).makev(Library.at(\rvbs)) };
@@ -485,12 +531,12 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A9",
+			name: "A9-S&I duet",
 			segID: 9,
 			initProcesses: {
 				\chuckIf.eval(PR(\siDuet), BP, \sid);
 				VC(\sp) => BP(\sid);
-				BP(\sid).finalAmp = -22.dbamp;
+				BP(\sid).finalAmp = 0.045;
 				BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
 					Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 				);
@@ -529,7 +575,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A9.5",
+			name: "A9.5-locomotive(short)",
 			segID: 9.5,
 			// initProcesses: {},
 			// unloadProcesses: {},
@@ -556,7 +602,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A10",
+			name: "A10-manipulation",
 			segID: 10,
 			initProcesses: {
 				\chuckIf.eval(Fact(\lauraManip), BP, \lm, nil, Library.at(\rvbs));
@@ -588,7 +634,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A11",
+			name: "A11-locomotive(short)",
 			segID: 11,
 			// initProcesses: {},
 			// unloadProcesses: {},
@@ -615,7 +661,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A12",
+			name: "A12-Stephen solo",
 			segID: 12,
 			initProcesses: {
 				\chuckIf.eval(PR(\armsSkidMel), BP, \ssol, nil, (
@@ -659,12 +705,12 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "A13",
+			name: "A13-cradling",
 			segID: 13,
 			initProcesses: {
 				\chuckIf.eval(PR(\rockingChords), BP, \rc);
 				VC(\sp) => BP(\rc);
-				BP(\rc).finalAmp = -22.dbamp;
+				BP(\rc).finalAmp = -0.048;
 			},
 			// unloadProcesses: {},
 			seqPattern: {
@@ -857,3 +903,4 @@ x.stop
 x.currentIterator.activeCmds
 
 ~seq.listVars
+~seq.sectionNames

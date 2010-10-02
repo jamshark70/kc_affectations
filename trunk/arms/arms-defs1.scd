@@ -1384,7 +1384,7 @@ PR(\abstractProcess).clone {
 
 	~runGesture = { |parms|
 		if(~spawner.notNil) {
-			~spawner.seq(~makePhrase.(parms));
+			~spawner.par(~makePhrase.(parms));
 		} {
 			"BP(%): Not playing; can't run phrase.".format(~collIndex.asCompileString).warn;
 		};

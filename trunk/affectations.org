@@ -76,7 +76,12 @@
 ** Conflab with Lorne: <2010-09-29 Wed 08:00>
 ** Dress: Friday <2010-10-01 Fri>
 ** Dress: Saturday <2010-10-02 Sat>
-** Show: Sunday morning <2010-10-03 Sun 08:00>
+** Show: Sunday morning [2/5] <2010-10-03 Sun 08:00>
+*** DONE Handle segment IDs
+*** DONE Segment 7
+*** TODO Laura solo
+*** TODO Stacking y-pos
+*** TODO Feet section play out
 ** TODO Place to put in IP address/port
 ** TODO [#A] Fragments of torso sounds
 ** Data for Lorne:
