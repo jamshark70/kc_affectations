@@ -612,6 +612,8 @@ Proto {
 	};
 } => PR(\busTrig);
 
+(thisProcess.nowExecutingPath.dirname +/+ "transports.scd").loadPath;
+
 };
 
 true   // avoid stupid "found nil" warning

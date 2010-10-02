@@ -971,6 +971,9 @@ make: { |name|
 			}).add;
 	
 			~visualizer.();
+			topEnvironment[\seq] !? {
+				topEnvironment[\seq].addDependant(currentEnvironment)
+			};
 		},
 		visualizer: {
 			defer(e {
@@ -993,6 +996,9 @@ make: { |name|
 		},
 		userfree: {
 			[~buf, ~maxVel, ~maxRatio].free;
+			topEnvironment[\seq] !? {
+				topEnvironment[\seq].removeDependant(currentEnvironment)
+			};
 			~closeWin.();
 		},
 		preparePlay: {

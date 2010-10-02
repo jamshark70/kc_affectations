@@ -244,7 +244,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 
 
 ** Arms
-*** Sounds/processes [7/9]
+*** Sounds/processes [8/9]
 **** DONE Sunrise
 **** DONE [0/1] Hand stacking - MUCH SLOWER NOW
 ***** TODO Ask Lorne for hand height
@@ -266,7 +266,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 ***** Almost there - what does it need?
 **** DONE Stephen solo (short!)
 ***** Starts locomotive, then quickly into axial - *harmonize* axial!
-**** TODO Cradling - drawing bow
+**** DONE Cradling - drawing bow
 ***** Rocking gesture? Yes.
 ***** Couple of axial moves - harmonize, but not with airskid sound
 ***** An echo of S&I duet - sliding chords - differentiate from rocking gesture

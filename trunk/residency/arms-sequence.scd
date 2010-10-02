@@ -221,6 +221,11 @@ s.waitForBoot {
 				\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
 					filename: "arms/NACL_Arms.wav"
 				));
+				BP(\di).update = { |obj, what|
+					if(what == \stop and: { obj === topEnvironment[\seq] }) {
+						BP(~collIndex).stop;
+					};
+				};
 				\chuckIf.eval(PR(\armsSkidMel), BP, \am, nil, (
 					glrvbmc: topEnvironment[\glrvbmc],
 					lcrvbmc: topEnvironment[\lcrvbmc],
@@ -416,7 +421,7 @@ s.waitForBoot {
 				));
 				if(BP.exists(\am0).not) { Fact(\shivaBPs).makev(Library.at(\rvbs)) };
 				\chuckIf.eval(PR(\thinChords), BP, \tc);
-				BP(\tc).finalAmp = 0.3;
+				BP(\tc).finalAmp = 0.2;
 				BP(\tc) => VC(\btp);
 				\chuckIf.eval(PR(\shivaTrig), BP, \shivaTrig);
 				BP(#[am0, am1, am2]).do { |bp| bp.amp = -4.dbamp };
@@ -458,8 +463,11 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \ai, quant: 0, prepareBP: { |bp|
+							bp.eventStream = nil;
+							bp.reset;
 							bp.autoRun = false;
 						}),
+						0.1,
 						loopCmd: (
 							cmds: [
 								{ PR(\loopCmd).copy.putAll((
@@ -710,7 +718,7 @@ s.waitForBoot {
 			initProcesses: {
 				\chuckIf.eval(PR(\rockingChords), BP, \rc);
 				VC(\sp) => BP(\rc);
-				BP(\rc).finalAmp = -0.048;
+				BP(\rc).finalAmp = 0.03;
 			},
 			// unloadProcesses: {},
 			seqPattern: {
@@ -726,6 +734,23 @@ s.waitForBoot {
 					// onStop: {},
 					dur: \trigger,  // or \sync
 					id: 14,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "A14-Laura solo",
+			segID: 14,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 15,  // trig id
 					init: Func(\nextThingTrig).v,
 					clear: Func(\clearNextTrig).v
 				), 1)
@@ -849,6 +874,7 @@ s.waitForBoot {
 	}).sections_(~sections);
 
 	~seq.loadResources(0);
+	PR(\transports).chuck(BP(\transports), nil, (model: ~seq));
 
 	0.5.wait;
 
@@ -869,8 +895,6 @@ BP.all.stop;
 
 BP.all.do(_.reset);
 
-BP.all.free;
-VC.all.free;
 
 t.activeCmds.do(_.listVars);
 
@@ -904,3 +928,6 @@ x.currentIterator.activeCmds
 
 ~seq.listVars
 ~seq.sectionNames
+
+BP.all.free;
+VC.all.free;

@@ -58,7 +58,8 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).a
 
 Fact(\armsChordVC) => VC(\ac);
 
-k = VoicerMIDISocket(0, VP(2).v);
+k.free;
+k = VoicerMIDISocket(0, VC(\ac).v);
 k.noteOnArgsPat = Pbind(\mod_lev, Pkey(\velocity).linlin(0, 127, 0.5, 6.0), \finalAmp, -15.dbamp).trace;
 
 q = VC(\ac).env.target.playfx(Instr("busfx.chorus")/*.listArgs*/, [0, 2]); q.gui;
@@ -1217,6 +1218,26 @@ BP(\rc).nodes
 (1114..1116).do(s.sendMsg(\n_free, _))
 
 /**** TODO Laura solo ****/
+
+Fact(\armsChordVC) => VC(\ac);
+
+BP(#[acDisp, dataIn]).free;
+Fact(\dataIn) => BP(\di);
+PR(\armsChord) => BP(\acDisp);
+VC(\ac) => BP(\acDisp);
+
+BP(\acDisp).addChord(\diss1, #[g, 39, 47, 52, 57, 60, 62, 68, 75, 85]);
+BP(\acDisp).addChord(\diss2, #[g, 42, 49, 52, 60, 65, 71, 73, 79, 89]);
+
+BP(\acDisp).fullCh.keys
+BP(\acDisp).chords = (
+	
+);
+
+BP(\acDisp).chord = Pseq(#[diss1, diss2], inf);
+BP(\acDisp).spawnChild(0);
+
+
 
 
 BP(\segTrig).free;
