@@ -162,7 +162,7 @@ s.waitForBoot {
 		~stop = { |notifyTime, manualStop = true|
 			if(~isRunning.()) {
 				~status = \idle;
-				~currentIterator.stop((manualStop: manualStop ? true).debug("tlseq stop parms"));
+				~currentIterator.stop((manualStop: manualStop ? true));
 				~done.(manualStop);
 				~clearDoneSignal.();
 				~clock.schedAbs((notifyTime ?? { ~clock.beats }), e {
@@ -510,7 +510,7 @@ s.waitForBoot {
 							cmds: [
 								{	var	self = currentEnvironment;
 									PR(\bpCmd).copy.putAll((name: \sid, quant: 0, prepareBP: { |bp|
-										bp.high = self[\highPats].next.dereference.debug.trace
+										bp.high = self[\highPats].next.dereference
 									}))
 								},
 								\cmdSync,
@@ -771,17 +771,17 @@ s.waitForBoot {
 		~stop = { ~nextSectionToPlay = nil } <> ~stop;
 		~update = { |obj, what, args|
 			var	section;
-			[obj, what, args].debug("section sequencer got update");
+			// [obj, what, args].debug("section sequencer got update");
 			if(obj === ~sections[~currentSection]) {
 				switch(what)
 				{ \done } {
-					args.debug("section sequencer update - savedCmds");
+					// args.debug("section sequencer update - savedCmds");
 					~savedCmds = args;
 					obj.removeDependant(currentEnvironment);
 					if(~isRunning.()) {
 						~currentSection = ~nextSectionToPlay ?? { ~currentSection + 1 };
 						~nextSectionToPlay = nil;
-						~currentSection.debug("section done, moving to");
+						// ~currentSection.debug("section done, moving to");
 						currentEnvironment.changed(\section, ~currentSection);
 						~clock.value.sched(0, ~sectionRoutine);
 					};
