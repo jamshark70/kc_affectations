@@ -189,17 +189,16 @@ s.waitForBoot {
 					], inf),
 					Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf)
 				], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 0.8], #[120])).collect(_.binaryValue));
-				bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
+				bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[500]);
 				bp.numEv = Pwhite(6, 14, inf);
-				120
-			},
-			mixerAutoSynthCmd: (mixer: topEnvironment[\master], name: \ctlPoint, outName: \outbus,
-				value: 0, time: 20, curve: -2.1),
-			\cmdSync,
-			funcCmd: (func: {
-//				topEnvironment[\master].stopRecord;
-				~iterator.stop;
-			})
+			}//,
+// 			mixerAutoSynthCmd: (mixer: topEnvironment[\master], name: \ctlPoint, outName: \outbus,
+// 				value: 0, time: 20, curve: -2.1),
+// 			\cmdSync,
+// 			funcCmd: (func: {
+// //				topEnvironment[\master].stopRecord;
+// 				~iterator.stop;
+// 			})
 		]);
 	};
 	~feetGui.prep;

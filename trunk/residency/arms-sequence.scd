@@ -72,7 +72,7 @@ s.waitForBoot {
 		var	sbounds = Window.screenBounds;
 		~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
 			var	inSeg = m[3], i;
-			case { inSeg == item[\id] } {
+			case { inSeg == item[\id] or: { inSeg == 99999 } } {
 				r.remove;
 				// stop section, section sequencer will advance
 				// false = not a manual stop, don't kill non-sync commands
@@ -220,6 +220,7 @@ s.waitForBoot {
 			name: "A2-locomotive",
 			segID: 2,
 			initProcesses: {
+				var	p;
 				\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
 				\chuckIf.eval(PR(\armsChord), BP, \acDisp, nil, (
 					angleBus: BP(\di).bus.index + 1, // ??
@@ -228,6 +229,13 @@ s.waitForBoot {
 				BP(\acDisp) => VC(\ac);
 				0 => BP(\acDisp);
 				
+				p = BP(\acDisp);
+				p.startAuto = p[\saveStartAuto] ? p[\startAuto];
+				p.row = p[\saveRow] ? p[\row];
+				p.chord = p[\saveChord] ? p[\chord];
+				p.fullCh.removeAt(\diss1);
+				p.fullCh.removeAt(\diss2);
+
 				BP(\di).playTestFile = false;
 			},
 			// unloadProcesses: {},
@@ -294,7 +302,7 @@ s.waitForBoot {
 			name: "A4-stacking",
 			segID: 4,
 			initProcesses: {
-				\chuckIf.eval(PR(\stacking), BP, \st, nil, (
+				\chuckIf.eval(PR(\stacking), BP, \st, nil, /*(
 					// TEST
 					root: Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
 						Pwhile1({ |inval, next| next < 40 },
@@ -304,7 +312,7 @@ s.waitForBoot {
 							Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
 						)
 					]));
-				));
+				)*/);
 				VC(\ac) => BP(\st);
 				0 => BP(\st);
 			},
@@ -498,7 +506,7 @@ s.waitForBoot {
 			initProcesses: {
 				\chuckIf.eval(PR(\siDuet), BP, \sid);
 				VC(\sp) => BP(\sid);
-				BP(\sid).finalAmp = 0.045;
+				BP(\sid).finalAmp = 0.037;
 				BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
 					Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 				);
@@ -677,7 +685,7 @@ s.waitForBoot {
 			initProcesses: {
 				\chuckIf.eval(PR(\rockingChords), BP, \rc);
 				VC(\sp) => BP(\rc);
-				BP(\rc).finalAmp = 0.03;
+				BP(\rc).finalAmp = 0.025;
 			},
 			// unloadProcesses: {},
 			seqPattern: {
@@ -703,11 +711,82 @@ s.waitForBoot {
 		PR(\tlsAff).copy.putAll((
 			name: "A14-Laura solo",
 			segID: 14,
-			// initProcesses: {},
+			initProcesses: {
+				var p = BP(\acDisp);
+				SynthDef(\rotSpeedAuto2, { |outbus, time = 1, proportion = 0.5, speedMul = 1,
+					topSpeed = 1|
+					ReplaceOut.kr(outbus,
+						LFNoise1.kr(Rand(0.5, 1.0) * speedMul).linlin(-1, 1, 0.1, topSpeed)
+						* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
+							timeScale: time, doneAction: 2)
+					);
+				}).add;
+
+				p[\saveStartAuto] ?? { p.saveStartAuto = p[\startAuto] };
+				p.startAuto = {
+					var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+					~procTime = time;
+					s.makeBundle(nil, {
+						~rotSpeed.automate(\rotSpeedAuto2,
+							[time: time, proportion: proportion /*, topSpeed: 2 */],
+							~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+							\addToHead);
+						~angle.automate(\angleAuto,
+							[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
+							~rotSpeed.autoSynth, \addAfter);
+						~yxRatio.automate(\yxRatioAuto, 
+							[inbus: BP(\di).bus.index + 7],
+							~rotSpeed.autoSynth, \addAfter);
+					});
+					OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+						resp.remove;
+						if(BP.exists(~collIndex)) {
+							BP(~collIndex).stop(0);
+						};
+					}).add;
+				};
+
+				p[\saveRow] ?? { p.saveRow = p.row };
+				p.row = Plazy({
+					var	proportion = rrand(0.3, 0.8);
+					Env(#[0.0, 2.12, 0.0], [proportion, 1 - proportion] * ~procTime, \sin).asStream
+				});
+
+				p.addChord(\diss1, #[g, 39, 47, 52, 57, 60, 62, 68, 75, 85]);
+				p.addChord(\diss2, #[g, 42, 49, 52, 60, 65, 71, 73, 79, 89]);
+
+				p[\saveChord] ?? { p.saveChord = p.chord };
+				p.chord = Pif(Pwhite(0.0, 1.0, inf) < Env(#[0, 1], #[50]),
+					Pseq(#[diss1, diss2], inf),
+					Pxrand(#[c_ish, em, g, am], inf)
+				);
+				if(p.bpsKeys.includes(\chordTime).not) {
+					p.bpsKeys = p.bpsKeys ++ #[chordTime];
+				};
+			},
 			// unloadProcesses: {},
 			seqPattern: {
+				var	playfunc = Pwrand([
+					{ BP(\acDisp).spawnChild(0) },
+					{ 2.do { BP(\ssol).triggerOneEvent(0) } },
+					{ BP(\ai).runGesture }
+				], #[4, 1, 3].normalizeSum, inf).asStream;
 				Pn((
-					sequence: [],
+					sequence: [
+						bpCmd: (name: \ai),
+						0.1,
+						loopCmd: (
+							cmds: [
+								{	
+									PR(\funcCmd).copy.putAll((
+										func: playfunc.next,
+										dur: if(0.3.coin) { rrand(2.0, 3.5) } { rrand(5.0, 8.0) }
+									))
+								},
+								\cmdSync
+							]
+						),
+					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
 					id: 15,  // trig id

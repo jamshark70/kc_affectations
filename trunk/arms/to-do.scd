@@ -1234,10 +1234,63 @@ BP(\acDisp).chords = (
 	
 );
 
+p = BP(\acDisp);
+
+SynthDef(\rotSpeedAuto2, { |outbus, time = 1, proportion = 0.5, speedMul = 1, topSpeed = 1|
+	ReplaceOut.kr(outbus,
+		LFNoise1.kr(Rand(0.5, 1.0) * speedMul).linlin(-1, 1, 0.1, topSpeed)
+			* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
+				timeScale: time, doneAction: 2)
+	);
+}).add;
+
+p.listMethods
+p.saveStartAuto = p[\startAuto];
+
+p.startAuto = {
+	var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+	~procTime = time;
+	s.makeBundle(nil, {
+		~rotSpeed.automate(\rotSpeedAuto2,
+			[time: time, proportion: proportion /*, topSpeed: 2 */],
+			~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+			\addToHead);
+		~angle.automate(\angleAuto,
+			[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
+			~rotSpeed.autoSynth, \addAfter);
+		~yxRatio.automate(\yxRatioAuto, 
+			[inbus: BP(\di).bus.index + 7],
+			~rotSpeed.autoSynth, \addAfter);
+	});
+	OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+		resp.remove;
+		if(BP.exists(~collIndex)) {
+			BP(~collIndex).stop(0);
+		};
+	}).add;
+};
+
+p.saveRow = p.row;
+
+p.row = Plazy({
+	var	proportion = rrand(0.3, 0.8);
+	Env(#[0.0, 2.12, 0.0], [proportion, 1 - proportion] * ~procTime, \sin).asStream.trace
+});
+
 BP(\acDisp).chord = Pseq(#[diss1, diss2], inf);
+
 BP(\acDisp).spawnChild(0);
+BP(BP(\acDisp).lastSpawned) => VP(0);
 
+BP(BP(\acDisp).lastSpawned).rotSpeed.autoSynth.trace;
 
+p.listVars
+p.fullCh[\diss1]
+
+p.bpsKeys = p.bpsKeys ++ #[chordTime];
+
+p.chordTime.postcs
+p.chordTime = Pwhite(6.0, 11.0, inf).trace;
 
 
 BP(\segTrig).free;

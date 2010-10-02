@@ -742,7 +742,8 @@ PR(\abstractProcess).clone {
 			initChords: {
 				~fullCh = self[\fullCh];
 			},
-			chord: (~chordStream ?? { ~makeStreamForKey.(\chord) }).next
+			chord: (~chordStream ?? { ~makeStreamForKey.(\chord) }).next,
+			startAuto: ~startAuto
 		);
 		// this is so I can change patterns in the dispatcher
 		// and they get spawned thru to the children
