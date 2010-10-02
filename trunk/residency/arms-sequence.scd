@@ -68,54 +68,6 @@ s.waitForBoot {
 		func: \dummy
 	);
 
-/*	{ |segID, searchID|
-		(	cmdID: searchID,
-			segID: segID,
-			sbounds: Window.screenBounds,
-			// play: \dummy,
-			setDoneSignal: {
-				~doneSignal = List.new;
-				~cmdID = ~cmdID.asArray;
-				~iterator.activeCmds.do { |cmd|
-					if(~cmdID.includes(cmd.id)) { ~doneSignal.add(cmd) };
-				};
-				if(~doneSignal.isEmpty) {
-					~doneSignal = nil
-				} {
-					~resp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
-						var	inSeg = m[3];
-						case { inSeg == ~segID } {
-							r.remove;
-							~stop.();
-						}
-						{ inSeg > ~segID } {
-							"NEED TO SKIP SEGMENT HERE -- JUST ADVANCING NOW!".debug;
-							r.remove;
-							~stop.();
-						}
-						{ "Trigger segment % ignored; waiting for segment %\n"
-							.postf(inSeg, ~segID)
-						};
-					}).add;
-					defer(e {
-						~window = Window("move on",
-							Rect(~sbounds.right - 120, ~sbounds.height - 300, 120, 60));
-						Button(~window, ~window.view.bounds.insetBy(2, 2))
-							.states_([["to seg %".format(~segID)]])
-							.action_(e { ~stop.() });
-						~window.front.userCanClose_(false);
-					});
-				}
-			},
-			clearDoneSignal: {
-				~doneSignal.do(_.stop);  // this is the previous loopcmd!
-				~resp.remove;
-				~window !? { defer(e { ~window.close }) };
-			};
-		)
-	} => Func(\nextThingParms);
-*/
-
 	{	|item|
 		var	sbounds = Window.screenBounds;
 		~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
@@ -193,6 +145,9 @@ s.waitForBoot {
 	0.5.wait;
 	BP(#[segTrig, evTrig]).play(0);
 
+	Library.put(\diparms, (id: \lc_data, name: \di, quant: 0,
+		playWarning: false, shouldSync: false));
+
 	// if(t.isPlaying) { t.stop; "Wait for old sequencer to stop...".die };
 
 	~sections = [
@@ -221,11 +176,11 @@ s.waitForBoot {
 				\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
 					filename: "arms/NACL_Arms.wav"
 				));
-				BP(\di).update = { |obj, what|
+				BP(\di).put(\update, { |obj, what|
 					if(what == \stop and: { obj === topEnvironment[\seq] }) {
 						BP(~collIndex).stop;
 					};
-				};
+				});
 				\chuckIf.eval(PR(\armsSkidMel), BP, \am, nil, (
 					glrvbmc: topEnvironment[\glrvbmc],
 					lcrvbmc: topEnvironment[\lcrvbmc],
@@ -241,15 +196,7 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						{ "///// 10:05 -- axial".debug; 0 },
-						bpCmd: (id: \lc_data, name: \di, quant: 0, shouldSync: false //,
-							// yetToStopParent: true,
-							// clearDoneSignal: {
-							// 	if(~yetToStopParent) {
-							// 		~yetToStopParent = false;
-							// 		sect.stop;
-							// 	};
-							// }
-						),
+						bpCmd: (id: \lc_data, name: \di, quant: 0, shouldSync: false),
 						loopCmd: (
 							id: \am1,
 							autoSync: false,
@@ -281,13 +228,14 @@ s.waitForBoot {
 				BP(\acDisp) => VC(\ac);
 				0 => BP(\acDisp);
 				
-				BP(\di).playTestFile = true;
+				BP(\di).playTestFile = false;
 			},
 			// unloadProcesses: {},
 			seqPattern: {
 				// var	sect = currentEnvironment;
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \lc1,
 							autoSync: false,
@@ -320,6 +268,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						bpCmd: (name: \sr),
 						\cmdSync,
 						loopCmd: (
@@ -363,6 +312,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						bpCmd: (id: \stack, name: \st)
 					],
 					dur: \sync
@@ -387,6 +337,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						bpCmd: (id: \ai, name: \ai,
 							// TEST
 							prepareBP: { |bp|
@@ -434,6 +385,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \shiva,
 							autoSync: false,
@@ -462,6 +414,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						bpCmd: (name: \ai, quant: 0, prepareBP: { |bp|
 							bp.eventStream = nil;
 							bp.reset;
@@ -518,6 +471,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \threelev,
 							autoSync: false,
@@ -553,6 +507,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \s_i,
 							autoSync: false,
@@ -590,6 +545,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \lc2,
 							autoSync: false,
@@ -621,6 +577,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \lauraManip,
 							autoSync: false,
@@ -649,6 +606,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \lc2,
 							autoSync: false,
@@ -692,6 +650,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						loopCmd: (
 							id: \stsolo,
 							autoSync: false,
@@ -724,6 +683,7 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
+						bpCmd: Library.at(\diparms),
 						bpCmd: (id: \rc, name: \rc,
 							// TEST
 							prepareBP: { |bp|
