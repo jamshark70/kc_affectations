@@ -231,7 +231,7 @@ make: { |name|
 	// each chord will always start with startFreq == freq
 	BP(name).child.argPairs = [
 		mnote: Pkey(\note).asFloat,
-		startNote: Penvir((), 
+		startNote: Penvir((),
 			Pseq([
 				Pfin(1, Pkey(\mnote)).collect { |note| ~startNote = note },
 				Pfunc { |ev|
@@ -375,6 +375,16 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 	sig = Limiter.ar(IFFT([even, odd], 1) * amp * ampMap)
 		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan));
+}).add;
+
+SynthDef(\krwobble, { |outbus, sustain = 1|
+	var	envOne = Env.one.asArray,
+		speedEnv = NamedControl.kr(\speedEnv, (0 ! 32).overWrite(envOne)),
+		speed = EnvGen.kr(speedEnv, timeScale: sustain),
+		widthEnv = NamedControl.kr(\widthEnv, (0 ! 32).overWrite(envOne)),
+		width = EnvGen.kr(widthEnv, timeScale: sustain),
+		fmul = LFDNoise1.kr(speed).exprange(width.reciprocal, width);
+	Out.kr(outbus, fmul);
 }).add;
 
 
@@ -790,7 +800,7 @@ PR(\abstractProcess).clone {
 				\filtDecay, Env(#[0.01, 0.01, 2.0], [parms.preSyncop, parms.dur - parms.preSyncop], \exp),
 //				\filtAmp, parms[\numWalkers].reciprocal,
 				\ffreq, 3500
-			) 
+			)
 		},
 
 		syncopTemplate: { |i, parms, deltaPat, instrOverride|
@@ -862,7 +872,7 @@ PR(\abstractProcess).clone {
 			var prob;
 			~syncProbStream ?? { ~makeStreamForKey.(\syncProb) };
 			prob = ~syncProbStream.next(parms);
-			~gestures[\syncopTemplate].(i, parms, 
+			~gestures[\syncopTemplate].(i, parms,
 				Pseq([
 					Pn(1, parms[\preSyncop]),
 					Pwrand([1, Pseq(#[1.5, 1.5, 1], 1)], [1 - prob, prob], inf)
@@ -1100,7 +1110,7 @@ PR(\abstractProcess).clone {
 			});
 		};
 	};
-	
+
 	~stopfx = {
 		~fx !? { ~fx.release; ~fx = nil };
 	};
@@ -1501,7 +1511,7 @@ make: { |name|
 				* (numbufs - 1)).clip(0, numbufs - 1.001);
 		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap, env]);
 	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1], EnvSpec(Env.adsr)]);
-	
+
 	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, env, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
 		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate, nil, env.dereference.value]),
 			glatch = Latch.kr(gate, gate),
@@ -1587,6 +1597,7 @@ make: { |name|
 	out.mapGlobal(\clevel, nil, 1, \amp);
 	out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
 	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
+	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 	out
 },
 free: { ~levelSync.remove; [~target, ~combsMC, ~wt, ~bigdelay, ~littledelays].free },
@@ -1705,21 +1716,21 @@ make: { |name|
 		),
 		soundID: Pseries(0, 1, inf),
 		alwaysReset: true,
-	
+
 		bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
 		pvSource: \op,
-	
+
 		inChannels: 2,
 		master: ~master,
 		glrvbmc: ~glrvbmc,
 		lcrvbmc: ~lcrvbmc,
-	
+
 		autoRun: true,
-	
+
 		gest: Pfunc { ~gestures.keys.choose },
 		defaultParms: nil,
 		initAmp: 0.3,
-	
+
 		early: 0.1,
 		buf: 0,
 		ptIndex: Plazy { Pwhite(0, ~pt.size-2, inf) },
@@ -1739,11 +1750,11 @@ make: { |name|
 		gDelta: Pwhite(0.5, 2.5, inf),
 		distNear: 5,
 		distFar: 20,
-	
+
 		slowDelta: Pn(Plazy { |ev| Pn(rrand(0.3, 0.6), ev[\parms][\numEv] ? 1) }, inf),
 		slowRate: Pwhite(0.5, 0.8, inf),
 		slowShift: Pexprand(1, 15, inf) - 3,
-	
+
 		rewriteEmbedder: { |int, in, level|
 			if(int.every(_.inclusivelyBetween(-16, 16))) {
 				Ptuple([
@@ -1784,7 +1795,32 @@ make: { |name|
 		defaultKlankAmps: (1..5).reciprocal,
 		defaultKlankDecays: 1 ! 5,
 		defaultChorusAmps: (1..3).reciprocal * 0.3,
-	
+
+		// for three-inversions
+		runningNotes: (
+			lauraslide: Pseries(
+				{ rrand(-7, 0) },
+				Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+				Pkey(\numEv).asStream
+			),
+			inversion1: Pseries(
+				{ rrand(-3, 4) },
+				Pstutter(
+					Pseq([Pfuncn({ |ev| (ev[\numEv] * 0.6).round }), 100], 1),
+					Pseq([1, -1], 1)
+				) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+				Pkey(\numEv).asStream
+			),
+			inversion2: Pseries(
+				{ rrand(0, 8) },
+				Pstutter(
+					Pseries(1, 1, inf),
+					Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
+				) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+				Pkey(\numEv).asStream
+			)
+		),
+
 		postMCCreation: { |chan|
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
@@ -1802,7 +1838,7 @@ make: { |name|
 				ampMap: ~ampCtl.asMap
 			));
 			~readLabels.();
-	
+
 			if(BP.exists(~pvSource)) {
 				BP(~pvSource).registerInitFunc(e {
 					#[pvbuf, fftSize, hop, numPvFrames].do { |key|
@@ -1813,7 +1849,7 @@ make: { |name|
 				"BP(%) not found; can't use any pv gestures.".format(~pvSource.asCompileString).warn
 			};
 
-			~shapebuf = Buffer.sendCollection(s, 
+			~shapebuf = Buffer.sendCollection(s,
 				(Pseries.fromEndpoints(-1.0, 1.0, 512).asStream.all * 6.1887796806608).distort
 				.as(Signal).asWavetable, wait: 0.05
 			);
@@ -1827,7 +1863,7 @@ make: { |name|
 			~spawner = nil;
 			~ffreqCtl.stopAuto;
 		},
-	
+
 		// external hook to drop a gesture in!
 		runGesture: { |parms|
 			if(~isPlaying) {
@@ -1844,7 +1880,7 @@ make: { |name|
 				"BP(%) is not playing, can't run a gesture".format(~collIndex.asCompileString).warn;
 			};
 		},
-	
+
 		makeGesture: { |parms|
 			Pchain(
 				~gestures[parms[\gest]].value(parms),
@@ -1852,7 +1888,7 @@ make: { |name|
 				(parms: parms, soundID: ~soundIDStream.next)
 			)
 		},
-	
+
 		xyPat: { |parms|
 			Ptuple([
 				if(parms[\xEnds].notNil) {
@@ -1871,7 +1907,7 @@ make: { |name|
 				}
 			])
 		},
-	
+
 		gestures: (
 			clatter: { |parms|
 				Pbind(
@@ -2041,9 +2077,37 @@ make: { |name|
 					]
 				};
 				Pbind(*list)
+			},
+			lauraslide: { |parms|
+				Pbind(
+					\numEv, parms[\numEv],
+					\instrument, Pn(\bufGrainPanKlankDist, parms[\numEv]),
+					\delta, 0.4 * Pexprand(0.8, 1.25, inf)
+					* Pgeom.fromEndpoints(parms[\startDelta] ?? { rrand(0.35, 0.6) }, rrand(0.1, 0.2),
+						parms[\numEv]),
+					\amp, BPStream(\amp) * 0.04,  // filters are LOUD
+					\numNotes, parms[\numNotesPat] ?? { Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf) },
+					\filtDegree, (~runningNotes[parms[\notesKey] ? \lauraslide].value(parms)
+						+.x Pseries(0, Pwrand(#[-1, -2, -3], #[1, 2, 2].normalizeSum, Pkey(\numNotes).asStream), inf))
+					.clump(Pkey(\numNotes)),
+					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
+					\filtAttack, 0.01,
+					\filtDecay, Pseries.fromEndpoints(0.2, 2.75, parms[\numEv]),
+					\filtAmp, BPStream(\kamp),
+					\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
+					\chorusAmt, parms[\chorusAmt] ?? { 0.02 },
+					\chorusDelay, parms[\chorusDelay] ?? { 0.03 },
+					\chorusAmps, parms[\chorusAmps] ?? { [~defaultChorusAmps] },
+					\harm, parms[\harm] ?? { [~defaultKlankHarm] },
+					\amps, parms[\amps] ?? { [~defaultKlankAmps] },
+					\decays, parms[\decays] ?? { [~defaultKlankDecays] },
+					\pan, sin(Pseries(0, Pseries.fromEndpoints(0.08, 0.33, parms[\numEv]), inf) * 2pi)
+					* #[-1, 1].choose,
+					\distance, Pseries.fromEndpoints(parms[\startY] ? 20, 5, parms[\numEv])
+				)
 			}
 		),
-	
+
 		asPattern: {
 			~numEvStream ?? { ~makeStreamForKey.(\numEv) };
 			~gDeltaStream ?? { ~makeStreamForKey.(\gDelta) };
@@ -2084,7 +2148,7 @@ make: { |name|
 				+/+ ~bufPaths[0].basename[.. ~bufPaths[0].basename.indexOf($_)]
 				++ "labels3.txt"
 		},
-	
+
 		// oh earth mother, this is a damnably wretched hack but I had to do SOMETHING!!
 		ampCorrections: #[0.28807148337364, 0.17774771153927, 0.36427477002144, 0.12500120289816, 0.38182136416435, 0.18799524009228, 0.58741980791092, 0.052831564053287, 0.20307244360447, 0.24629978835583, 0.42413705587387, 0.16614802181721, 0.30681470036507, 0.090353488922119, 0.089508562163331, 0.12378922104836, 0.42652836441994, 0.83408385515213, 0.15755517780781, 0.15393386781216, 0.15342317521572, 0.43515829067847, 0.074556715786457, 0.24919280409813, 0.6793058514595, 0.092316187918186, 0.26444959640503, 0.052370578050613],
 		listGest: { ~gestures.keys.asArray.sort.do(_.postln); "" },
@@ -2249,3 +2313,108 @@ make: { |name|
 	PR(\feetChords) => BP(name);
 	1 => BP(name);
 }, type: \bp) => Fact(\feetChordBP);
+
+
+
+// leaning
+
+(play: {
+	BP(~stepKey).runGesture(currentEnvironment)
+}) => ProtoEvent(\runKlankMachine);
+ProtoEvent.composite(#[polySynthKrBusLock, runKlankMachine, dummy]) => ProtoEvent(\leaning);
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \leaning);
+	~stepKey = \st;
+
+	~selector = Pseq([Pn(0, { rrand(2, 4) * 2 }), 1], inf);
+	~clickProb = 0.75.asPattern.coin;
+	~numKlank = Pwxrand(#[1, 2, 3, 4], #[5, 3, 2, 1].normalizeSum, inf);
+
+	~gate = 0.1;
+	~deg = (Pwhite(35, 45, inf) +.x Pseries(0, Prand(#[-1, -2, -3], 2))).clump(2);
+	~freq = Pfunc { |ev| Mode(\g).cps(ev[\deg]) };
+	~delta = Pwhite(0.2, 0.4, inf) * Pseq(#[1, 2.1], inf);
+	~sustain = Pwhite(1.5, 4.5, inf);
+	~bufbase = Plazy({ Prand(VC(~vcKey).env.wt.flop[0], inf) });
+	~envAtk = 0.05;
+	~envDcy = 0.12;
+	~fenv_tscale = Pkey(\sustain);
+	~fenvProp = 0.07;
+	~lpcEv = Pbind(
+		\instrument, \krwobble,
+		\speedEnv, Pfunc({ Env(#[1.2, 5, 0.7], #[0.3, 0.7]) }),
+		\widthEnv, Pfunc({ Env(#[1, 1.05, 1], #[0.7, 0.3], \exp) })
+	) <> Pfunc { |inev| inev.copy[\chan] = nil };
+
+	~klankprob = 1;
+	~klanknewDelta = Pexprand(0.09, 0.14, inf);
+	~klankfreq = Pexprand(700, 1100, inf);
+	~klanktimeMul = 0.05;
+	~klankkAmp = Pexprand(0.6, 1.0, inf);
+	~klankharm = (1, 3 .. 9);
+	~klankyEnds = #[5, 20];
+	~klanknumEv = Pwhite(9, 17, inf);
+	~klankstart = Plazy({ Prand(BP(~stepKey).pt, inf) * 44100 });
+	~klankdelta = max(0.15, (Pkey(\newDelta) * Pkey(\numEv)) + Pwhite(-0.8, 0.8, inf));
+	~restdelta = Pwhite(2.0, 5.0, inf);
+
+	~asPattern = {
+		~numKlankStream ?? { ~makeStreamForKey.(\numKlank) };
+		Pswitch1([
+			Pbind(
+				\protoEvent, \polySynthKrBusLock,
+				\chan, ~event[\voicer].bus.asMixer,
+				\instrument, ~event[\voicer].nodes[0].defname.asSymbol,
+				\busRate, \control,
+				\numCh, 1,
+				\freqmul, { ~lock.bus.asMap },  // asControlInput .value's this
+				\gate, BPStream(\gate),
+				\deg, BPStream(\deg),
+				\freq, BPStream(\freq),
+				\delta, BPStream(\delta),
+				\sustain, BPStream(\sustain),
+				\bufbase, BPStream(\bufbase, resetSource: true),
+				\envAtk, BPStream(\envAtk),
+				\envDcy, BPStream(\envDcy),
+				\fenv_tscale, BPStream(\fenv_tscale),
+				\fenvProp, BPStream(\fenvProp),
+				\lpcEv, BPStream(\lpcEv)
+			),
+			Pif(BPStream(\clickProb),
+				Pbind(
+					\protoEvent, \runKlankMachine,
+					\stepKey, BPStream(\stepKey),
+					\gest, \klankMachine,
+					\prob, BPStream(\klankprob),
+					\newDelta, BPStream(\klanknewDelta),
+					\freq, BPStream(\klankfreq),
+					\timeMul, BPStream(\klanktimeMul),
+					\kAmp, BPStream(\klankkAmp),
+					\harm, BPStream(\klankharm),
+					\yEnds, BPStream(\klankyEnds),
+					\numEv, BPStream(\klanknumEv),
+					\start, BPStream(\klankstart, resetSource: true),
+					\delta, BPStream(\klankdelta)
+				),
+				Pbind(
+					\protoEvent, \dummy,
+					\delta, BPStream(\restdelta)
+				)
+			)
+		], BPStream(\selector))
+	};
+
+	~bindVoicer = { |voicer|
+		var	vc = VC.all.detect { |obj| obj.v === voicer };
+		if(vc.notNil) {
+			~vcKey = vc.collIndex;
+		} {
+			"% is not in the VC collection. BP(%) will not work."
+			.format(voicer, ~collIndex.asCompileString);
+			~vcKey = nil;
+		};
+	};
+} => PR(\leaning);
+
+

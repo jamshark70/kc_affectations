@@ -95,6 +95,34 @@
 *** Note data per instrument
 ** TODO [2/5] Data extraction notes
 *** DONE Feet
+    0:17 -- Stephen walking
+    0:49 -- Ilana joins
+    1:16 -- Laura joins
+    1:27 -- three poses
+    1:47 -- hop, pause
+    2:21 -- slinky
+    2:37 -- resume walking
+    3:04 -- staggered pauses, then staggered poses
+    3:24 -- multiple speeds
+    3:46 -- hop
+    4:25 -- axial work
+    4:56 -- on backs
+    5:31 -- walking, arms swinging
+    5:46 -- three inversion gestures!
+    6:16 -- hop, lean
+    6:30 -- conflict section (military turns)
+    7:16 -- Ilana falls
+    7:28 -- Stephen falls
+    7:44 -- trade falling down
+    8:06 -- military turns
+    8:20 -- kneeling in places
+    8:33 -- Stephen jump
+    8:40 -- multiple speeds -- Laura slow
+    8:57 -- others enter, faster
+    9:15 -- walk together, then partnering
+    9:50 -- very fast walk
+    10:04 -- all in place, starting arms section
+
     How many feet are moving?
     Together or separate?
     Pauses (and triggers for the three poses in Laura's theme).
@@ -455,4 +483,5 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
   Facebook
   Penka, Chris, Syd, Joanne, Mark, Scott L., Steve J., Eric P.
   Schelle, Contino
+  Sam
   

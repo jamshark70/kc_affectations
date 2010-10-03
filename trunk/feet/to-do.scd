@@ -140,7 +140,8 @@ p.runGesture((gest: \slowStepStretch, numEv: 8));
 
 p.stop;
 
-
+p.gDelta = Pwhite(0.5, 2.5, inf);
+p.numEv = ~saveNumEv;
 
 
 
@@ -158,7 +159,7 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).a
 Fact(\waterpad) => VC(\wp);
 // SynthDescLib.at(VC(\wp).nodes[0].defname.asSymbol).msgFunc.def.argNames;
 
-// mandatory!
+// mandatory! (now in factory)
 SynthDescLib.at(VC(\wp).nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 
 SynthDef(\krwobble, { |outbus, sustain = 1|
@@ -250,6 +251,12 @@ p.runGesture((gest: \klankMachine, prob: 1, newDelta: 0.09, freq: 900, timeMul: 
 
 
 /**** TODO Falling */
+
+// like leaning, but more klank events
+// pattern for frequency - usually dropping(?)
+
+
+
 /**** TODO Conflict */
 
 Fact(\opening) => BP(\op);
@@ -274,6 +281,8 @@ p.runGesture((gest: \klankMachine,
 ));
 
 // higher variation is almost snare-drummy
+// provide newDelta rhythms
+
 
 (
 if(r.isPlaying) { r.stop };
