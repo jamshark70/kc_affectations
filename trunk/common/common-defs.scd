@@ -46,6 +46,12 @@ s.waitForBoot {
 
 	Library.put(\affectations, \commonLoaded, true);
 
+	Library.put(\rvbs, (
+		glrvbmc: topEnvironment[\glrvbmc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		master: topEnvironment[\master]
+	));
+
 	topEnvironment[\rvbEvent] = ().proto_((
 		glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
 		lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
@@ -611,6 +617,189 @@ Proto {
 		Pbind(\delta, 1)
 	};
 } => PR(\busTrig);
+
+{ |source, class, key, adverb, parms|
+	if(class.exists(key).not) {
+		source.chuck(class.new(key), adverb, parms);
+	};
+} => Func(\chuckIf);
+
+// \chuckIf.eval(PR(\armsSkidMel), BP, \am, nil, (
+// 	glrvbmc: ~glrvbmc,
+// 	lcrvbmc: ~lcrvbmc,
+// 	master: ~master
+// ));
+
+~trigParms = (
+	sbounds: Window.screenBounds,
+	// play: \dummy,
+	setDoneSignal: {
+		~doneSignal = OSCresponderNode(s.addr, '/event', e { |t, r, m|
+			r.remove;
+			~stop.();
+		}).add;
+		defer(e {
+			~window = Window("GO", Rect(~sbounds.right - 120, ~sbounds.height - 150, 120, 60));
+			Button(~window, ~window.view.bounds.insetBy(2, 2))
+				.states_([["event"]])
+				.action_(e { ~stop.() });
+			~window.front.userCanClose_(false);
+		});
+	},
+	clearDoneSignal: {
+		defer(e { ~window.close })
+	},
+	func: \dummy
+);
+
+{	|item|
+	var	sbounds = Window.screenBounds;
+	~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
+		var	inSeg = m[3], i;
+		case { inSeg == item[\id] or: { inSeg == 99999 } } {
+			r.remove;
+			// stop section, section sequencer will advance
+			// false = not a manual stop, don't kill non-sync commands
+			~stop.(nil, false);
+		}
+		{ inSeg > item[\id] } {
+			if((i = topEnvironment[\seq].sections.detectIndex { |sect|
+				sect.segID == inSeg
+			}).notNil) {
+				"skipping to %\n".postf(inSeg);
+				r.remove;
+				topEnvironment[\seq].gotoSection(i);  // this stops cur sect
+			} {
+				"Segment % doesn't exist; still waiting for segment %\n"
+				.postf(inSeg, item[\id])
+			};
+		}
+		{ "Trigger segment % ignored; waiting for segment %\n"
+			.postf(inSeg, item[\id])
+		};
+	}).add;
+	defer(e {
+		~window = Window("move on",
+			Rect(sbounds.right - 120, sbounds.height - 300, 120, 60));
+		Button(~window, ~window.view.bounds.insetBy(2, 2))
+			.states_([["to seg %".format(item[\id])]])
+			.action_(e { ~stop.(nil, false) });
+		~window.front.userCanClose_(false)
+			.onClose_(e { ~window = nil });
+	});
+} => Func(\nextThingTrig);
+
+{	~trigResp.remove;
+	~window !? { defer(e { ~window.close }) };
+	~currentTriggerItem = nil;  // what a horrendous, god-awful hack
+	~cleanupTrigger.(nil, (manualStop: false));
+} => Func(\clearNextTrig);
+
+PR(\tlSection).clone {
+	~stop = { |notifyTime, manualStop = true|
+		var	stopParms;
+		if(~isRunning.()) {
+			~status = \idle;
+			stopParms = (manualStop: manualStop ? true);
+			~currentIterator.stop(stopParms);
+			if(manualStop) { ~savedCmds.do(_.stop(stopParms)) };
+			~done.(manualStop);
+			~clearDoneSignal.();
+			~clock.schedAbs((notifyTime ?? { ~clock.beats }), e {
+				currentEnvironment.changed(\done, ~savedCmds);
+			});
+			if(thisThread === ~seqPlayer) {
+				nil.yield
+			} {
+				~seqPlayer.stop;
+			};
+		};
+	};
+	~done = { |manualStop| ~cleanupTrigger.(nil, (manualStop: manualStop)) };
+	~cleanupTrigger = { |triggerID, parms|
+		if(~currentTriggerItem.notNil) {
+			~currentIterator.stop(parms);
+			~currentTriggerItem[\clear].(~currentTriggerItem, triggerID, parms);
+			~currentTriggerItem = nil;
+		};
+	};
+} => PR(\tlsAff);
+
+PR(\sectionSequencer).clone({
+	~gotoSection = { |section|
+		var	toStop = ~sections[~currentSection];
+		if(~isRunning.()) {
+			~loadResources.(section);
+			~nextSectionToPlay = section;
+			toStop.stop(nil, false);  // will advance by ~update
+		} {
+			~currentSection = section;
+		};
+		currentEnvironment.changed(\section, section);
+	};
+	~loadResources = { |section|
+		//section.debug(">> loadResources");
+		// must add 1 because do runs from 0 to n-1
+		(section+1).do({ |sect|
+			if((~sections[sect].tryPerform(\isLoaded) ? true).not
+				/*.debug("section % needs to load".format(sect))*/) {
+					~sections[sect].prInitProc;
+				};
+		});
+		//debug("<< loadResources");
+	};
+	~countOffAndGo = {
+		var	clock = ~clock.value;
+		thisThread.clock.sched(0, ~sectionRoutine = Routine({
+			~status = \playing;
+			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
+				// ~savedCmds.debug("playing section % with saved cmds".format(~sections[~currentSection].name));
+				~sections[~currentSection].play(~savedCmds);
+				//"section sequencer: set savedCmds to nil".debug;
+				~savedCmds = nil;
+				// ~update method below will catch notifications
+				~sections[~currentSection].addDependant(currentEnvironment);
+				~loadResources.(~currentSection + 1);
+				// note, this doesn't force-stop the routine
+				// just pauses it
+				nil.yield;
+			};
+			~stop.(true);	// stop last section
+		}));
+	};
+	~stop = { ~nextSectionToPlay = nil } <> ~stop;
+	~update = { |obj, what, args|
+		var	section;
+		// [obj, what, args].debug("section sequencer got update");
+		if(obj === ~sections[~currentSection]) {
+			switch(what)
+			{ \done } {
+				// args.debug("section sequencer update - savedCmds");
+				~savedCmds = args;
+				obj.removeDependant(currentEnvironment);
+				if(~isRunning.()) {
+					~currentSection = ~nextSectionToPlay ?? { ~currentSection + 1 };
+					~nextSectionToPlay = nil;
+					// ~currentSection.debug("section done, moving to");
+					currentEnvironment.changed(\section, ~currentSection);
+					~clock.value.sched(0, ~sectionRoutine);
+				};
+			}
+			{ \initNext } {
+				if(~sections[~currentSection + 1].notNil) {
+					~sections[~currentSection + 1].prInitProc;
+				}
+			}
+			{ \unload } {
+				args.tryPerform(\at, \name).asArray.do { |sectName|
+					if((section = ~sections.detect { |sct| sct.name == sectName }).notNil) {
+						section.prUnload;
+					}
+				};
+			}
+		};
+	};
+}) => PR(\affSectSeq);
 
 (thisProcess.nowExecutingPath.dirname +/+ "transports.scd").loadPath;
 

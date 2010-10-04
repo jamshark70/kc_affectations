@@ -5,7 +5,7 @@ s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
 
 BP.loadGui;
 
-MT(1).gui;
+// NOT THIS ONE!! MT(1).gui;
 
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
@@ -531,3 +531,29 @@ p.ffreqCtl.stopWatching.stopAuto;
 
 
 /**** TODO [#C] Distinguish locomotive themes */
+
+
+
+// klankMachine parms references
+
+#[pan, distance], ~xyPat.(parms),
+\instrument, Pif((parms[\prob] ? 1).asPattern.coin, instr, \rest),
+\delta, parms[\newDelta] ? 0.5,
+// exciter time only - note dur is from filtDecay
+\time, parms[\excTime] ?? { min(0.15, Pkey(\delta) * 0.7) },
+\rate, parms[\rate] ? 1,
+\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
+\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
+\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
+\harm, parms[\harm] ?? {
+	Pstutter(Pwhite(3, 6, inf), Pwrand([
+		(1..5),
+		(1, 3 .. 9),
+		Pfuncn({ (1..5) * ({ rrand(0.9, 1.111) } ! 5).put(0, 1) })
+	], #[0.4, 0.4, 0.2], inf).collect([_]))
+},
+\chorusDelay, parms[\chorusDelay] ? 0.03,
+\chorusAmt, parms[\chorusAmt] ? 0.02,
+\chorusAmps, [parms[\chorusAmps] ? #[1, 1, 1]],
+\glrvbamt, parms[\glrvbamt] ? 0.075,
+\lcrvbamt, parms[\lcrvbamt] ? 0.035

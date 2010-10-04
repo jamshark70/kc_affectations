@@ -488,6 +488,9 @@ make: { |name|
 		preparePlay: {
 			BP(~trajectoryKey).isUsedBy(~collIndex);
 		},
+		stopCleanup: {
+			BP(~trajectoryKey).notUsedBy(~collIndex);
+		},
 		recvEventNotify: { |node|
 			var	self, ufunc;
 			if(node.isKindOf(Synth)) {
@@ -1861,6 +1864,7 @@ make: { |name|
 		},
 		stopCleanup: {
 			~spawner = nil;
+			~autoRunner = nil;
 			~ffreqCtl.stopAuto;
 		},
 
@@ -2108,6 +2112,27 @@ make: { |name|
 			}
 		),
 
+		autoRunPat: Prout({
+			loop {
+				~runGesture.(~defaultParms.().copy);
+				~spawner.wait(~gDeltaStream.next());
+			}
+		}),
+		addAutoRun: {
+			// returns the stream, so I can kill it in the spawner by .suspend
+			if(~isPlaying and: { ~autoRunner.isNil }) {
+				~autoRunner = ~spawner.par(~autoRunPat);
+			} {
+				"BP(%): Couldn't do autoRun (not playing or already autorunning)"
+				.format(~collIndex.asCompileString).warn;
+			};
+		},
+		removeAutoRun: {
+			if(~isPlaying and: { ~autoRunner.notNil }) {
+				~spawner.suspend(~autoRunner);
+				~autoRunner = nil;
+			}
+		},
 		asPattern: {
 			~numEvStream ?? { ~makeStreamForKey.(\numEv) };
 			~gDeltaStream ?? { ~makeStreamForKey.(\gDelta) };
@@ -2117,14 +2142,10 @@ make: { |name|
 				~spawner = sp;
 				if(~autoRun) {
 					"BP(%): autoRun enabled\n".postf(~collIndex.asCompileString);
-					loop {
-						~runGesture.(~defaultParms.().copy);
-						sp.wait(~gDeltaStream.next());
-					}
-				} {
-					loop {
-						sp.wait(0.1);
-					}
+					~autoRunner = sp.par(~autoRunPat);
+				};
+				loop {
+					sp.wait(0.1);
 				}
 			}
 		},
@@ -2158,6 +2179,7 @@ make: { |name|
 			#[43, 52, 54, 59, 69, 78],
 			#[45, 55, 62, 73, 76, 83]
 		].mapMode(\d),
+		mSpeedDelta: Pwhite(1.4, 3.0, inf),
 		multiSpeedParms: Plazy({
 			Pbind(
 				\collIndex, ~collIndex,
@@ -2194,10 +2216,10 @@ make: { |name|
 					])).collect { |deg| Mode(\d).cps(deg) }
 				}),
 				\timeMul, 0.5, //1 / (Pkey(\range) + 1),
-				\delta, Pwhite(1.4, 3.0, inf)
+				\delta, BPStream(\mSpeedDelta)
 			)
 		}),
-		addMultiSpeed: {
+		addMultiSpeed: { |overrides|
 			var parms;
 			~multiSpeedParmsStream ?? { ~makeStreamForKey.(\multiSpeedParms) };
 			if(~ffreqCtl.autoSynth.isNil) {
@@ -2206,6 +2228,7 @@ make: { |name|
 			};
 			parms = ~multiSpeedParmsStream.next(());
 			if(parms.notNil) {
+				if(overrides.notNil) { parms.putAll(overrides) };
 				~runGesture.(parms);
 			};
 		},
@@ -2311,7 +2334,7 @@ PR(\abstractProcess).clone {
 make: { |name|
 	BP(name).free;
 	PR(\feetChords) => BP(name);
-	1 => BP(name);
+	0 => BP(name);
 }, type: \bp) => Fact(\feetChordBP);
 
 
@@ -2345,7 +2368,7 @@ PR(\abstractProcess).clone {
 		\instrument, \krwobble,
 		\speedEnv, Pfunc({ Env(#[1.2, 5, 0.7], #[0.3, 0.7]) }),
 		\widthEnv, Pfunc({ Env(#[1, 1.05, 1], #[0.7, 0.3], \exp) })
-	) <> Pfunc { |inev| inev.copy[\chan] = nil };
+	);
 
 	~klankprob = 1;
 	~klanknewDelta = Pexprand(0.09, 0.14, inf);
@@ -2379,13 +2402,14 @@ PR(\abstractProcess).clone {
 				\envDcy, BPStream(\envDcy),
 				\fenv_tscale, BPStream(\fenv_tscale),
 				\fenvProp, BPStream(\fenvProp),
-				\lpcEv, BPStream(\lpcEv)
+				\lpcEv, BPStream(\lpcEv) <> Pfunc { |inev| inev.copy[\chan] = nil }
 			),
 			Pif(BPStream(\clickProb),
 				Pbind(
 					\protoEvent, \runKlankMachine,
 					\stepKey, BPStream(\stepKey),
 					\gest, \klankMachine,
+					\numEv, BPStream(\klanknumEv),
 					\prob, BPStream(\klankprob),
 					\newDelta, BPStream(\klanknewDelta),
 					\freq, BPStream(\klankfreq),
@@ -2393,7 +2417,6 @@ PR(\abstractProcess).clone {
 					\kAmp, BPStream(\klankkAmp),
 					\harm, BPStream(\klankharm),
 					\yEnds, BPStream(\klankyEnds),
-					\numEv, BPStream(\klanknumEv),
 					\start, BPStream(\klankstart, resetSource: true),
 					\delta, BPStream(\klankdelta)
 				),
@@ -2407,8 +2430,8 @@ PR(\abstractProcess).clone {
 
 	~bindVoicer = { |voicer|
 		var	vc = VC.all.detect { |obj| obj.v === voicer };
-		if(vc.notNil) {
-			~vcKey = vc.collIndex;
+		if(vc.notNil and: { vc.exists }) {
+			~vcKey = vc.collIndex.debug("set vcKey");
 		} {
 			"% is not in the VC collection. BP(%) will not work."
 			.format(voicer, ~collIndex.asCompileString);
