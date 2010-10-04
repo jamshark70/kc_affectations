@@ -489,7 +489,10 @@ make: { |name|
 			BP(~trajectoryKey).isUsedBy(~collIndex);
 		},
 		stopCleanup: {
-			BP(~trajectoryKey).notUsedBy(~collIndex);
+			// must check: trajectories could have been .free'd
+			if(BP.exists(~trajectoryKey)) {
+				BP(~trajectoryKey).notUsedBy(~collIndex);
+			};
 		},
 		recvEventNotify: { |node|
 			var	self, ufunc;
@@ -1930,7 +1933,7 @@ make: { |name|
 					#[filtDegree, level], BPStream(\kfreq),
 					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
 					\filtAttack, 0.01,
-					\filtDecay, BPStream(\kdecay),
+					\filtDecay, parms[\kdecay] ?? { BPStream(\kdecay) },
 					\filtAmp, BPStream(\kamp),
 					\chorusFreq, parms[\chorusFreq] ?? { Pstutter(inf, Pwhite(0.05, 0.11, inf)) },
 					\chorusAmt, parms[\chorusAmt] ?? { 0.02 },

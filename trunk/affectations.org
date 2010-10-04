@@ -376,10 +376,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** Data to send to Lorne
 
 
-** Sequencing to-dos [1/3]
+** Sequencing to-dos [2/4]
 *** DONE Regression test BP(\st) autoRun -- seems OK
-*** TODO Test slinky - degrees --> freq
-*** TODO Why does it stop bpCmd for \st but the BP doesn't stop?
+*** TODO Test slinky - degrees --> freq now OK - too prominent?
+*** DONE Why does it stop bpCmd for \st but the BP doesn't stop? fixed!
+*** TODO Inversions too quiet?
 
 
 * Sample attributions

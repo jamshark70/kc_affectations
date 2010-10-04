@@ -98,11 +98,12 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						{ BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3)); 0 },
 						loopCmd: (repeats: 3,
 							cmds: [
 								funcCmd: topEnvironment[\trigParms],
 								\cmdSync,
-								{	BP(\st).runGesture((gest: \oneKlankSteps/*Callback*/, numEv: rrand(10, 20)));
+								{	BP(\st).runGesture((gest: \oneKlankSteps, numEv: rrand(10, 20)));
 									0
 								},
 							]
@@ -130,19 +131,24 @@ s.waitForBoot {
 						{ BP(\st).removeAutoRun; 0 },
 						loopCmd: (
 							cmds: [
-								{	var	numEv = rrand(7, 14),
-										numInChord = rrand(2, 4);
+								{
+									var	numEv = rrand(7, 18),
+									numInChord = rrand(2, 4),
+									startDelta = rrand(0.35, 0.6);
 									BP(\st).runGesture((
 										gest: \klankMachine,
 										numEv: numEv,
-										newDelta: Pgeom.fromEndpoints(rrand(0.2, 0.32), rrand(0.08, 0.12), numEv),
-										freq: Pseries(
+										newDelta: Pgeom.fromEndpoints(startDelta, rrand(0.05, 0.09), numEv),
+										timeMul: startDelta / Pkey(\delta),
+										freq: (Pseries(
 											rrand(28, 33),
 											Pwrand(#[1, 2], #[0.7, 0.3], inf),
 											inf
 										) -.x Pclump(numInChord, Pseries(
 											0, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, numInChord), inf
-										))
+										))).collect { |deg| Mode(\g).cps(deg) },
+										xEnds: { rrand(-1.0, 1.0) } ! 2,
+										yEnds: [rrand(15.0, 20.0), rrand(5.0, 8.0)]
 									));
 									0
 								},
@@ -200,7 +206,7 @@ s.waitForBoot {
 									}
 								},
 								\cmdSync,
-								{	BP(\st).runGesture((gest: \oneKlankStepsCallback, numEv: rrand(10, 20)));
+								{	BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
 									0
 								},
 							]
@@ -326,7 +332,7 @@ s.waitForBoot {
 								{	if(~repeats < 3) {
 										PR(\funcCmd).copy.putAll(topEnvironment[\trigParms])
 									} {
-										PR(\funcCmd).copy.putAll(dur: 0.01)
+										PR(\funcCmd).copy.putAll((dur: 0.01))
 									}
 								},
 								\cmdSync,
