@@ -502,12 +502,21 @@ Proto({
 			.action_(e { |view|
 				~model.gotoSection(view.value);
 			});
+		~nextCueText = StaticText(parent, ~bigButtonSize@~menuHeight)
+			.font_(GUI.font.new(*~menuFontSpec))
+			.background_(Color.yellow(1.8))
+			.align_(\center);
 	};
 	
 	~refreshSections = {
 		if(~model.notNil) {
 			{	~sectionMenu.items_(~model.sections.collect(_.name))
 					.value_(~model.currentSection);
+				if(~model.isRunning) {
+					~nextCueText.string_(~sectionMenu.items[~model.currentSection+1] ? "END");
+				} {
+					~nextCueText.string_("");
+				}
 			}.defer;
 		};
 	};
@@ -528,12 +537,21 @@ Proto({
 		switch(what)
 			{ \play } {
 				~showPlaying.(true);
+				~nextCueText.string_(~sectionMenu.items[~model.currentSection+1] ? "END");
 			}
 			{ \stop } {
 				~showPlaying.(false);
+				~nextCueText.string_("");
 			}
 			{ \section } {
-				defer(e { ~sectionMenu.value = modifier });
+				defer(e {
+					~sectionMenu.value = modifier;
+					if(~model.isRunning) {
+						~nextCueText.string_(~sectionMenu.items[modifier+1] ? "END");
+					} {
+						~nextCueText.string_("");
+					};
+				});
 			}
 			{ \autoReset } {
 				defer(e { ~autoResetToggle.currentState = modifier });

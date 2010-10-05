@@ -1828,6 +1828,18 @@ make: { |name|
 			)
 		),
 
+		snareRhythms: (
+			one: Pn(1, 1),
+			dot: Pseq(#[0.75, 0.25], 1),
+			revdot: Pseq(#[0.25, 0.75], 1),
+			rattata: Pseq(#[0.5, 0.25, 0.25], 1),
+			ratatat: Pseq(#[0.25, 0.25, 0.5], 1),
+			syncop: Pseq(#[0.25, 0.5, 0.25], 1),
+			tripletHead: Pseq([Pn(1/6, 3), 0.5], 1),
+			tripletTail: Pseq([0.5, Pn(1/6, 3)], 1),
+			triplets: Pn(1/6, 6)				
+		),
+
 		postMCCreation: { |chan|
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
@@ -1869,6 +1881,8 @@ make: { |name|
 		stopCleanup: {
 			~spawner = nil;
 			~autoRunner = nil;
+			~mSpeedPlayer.stop;
+			~mSpeedPlayer = nil;
 			~ffreqCtl.stopAuto;
 		},
 
@@ -2236,8 +2250,8 @@ make: { |name|
 				~runGesture.(parms);
 			};
 		},
-		autoRunMultiSpeed: {
-			if(~mSpeedPlayer.isNil) {
+		autoRunMultiSpeed: { |play(true)|
+			if(play and: { ~mSpeedPlayer.isNil }) {
 				~mSpeedPlayer = ~multiSpeedParms.play;
 			} {
 				~mSpeedPlayer.stop;

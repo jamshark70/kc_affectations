@@ -713,7 +713,7 @@ PR(\tlSection).clone {
 			} {
 				~seqPlayer.stop;
 			};
-		} { manualStop.debug("stop called but section not running - manualStop is") };
+		}; // { manualStop.debug("stop called but section not running - manualStop is") };
 	};
 	~done = { |manualStop| ~cleanupTrigger.(nil, (manualStop: manualStop)) };
 	~cleanupTrigger = { |triggerID, parms|

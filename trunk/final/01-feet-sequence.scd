@@ -21,6 +21,8 @@ t.changed(\done)
 ~seq.sections.last.listVars;
 
 (
+if(BP.exists(\transports)) { BP(\transports).free };
+
 s.waitForBoot {
 	var	cond = Condition.new;
 	(Document.current.path.dirname.dirname +/+ "/common/common-defs.scd").debug.loadPath;
@@ -93,7 +95,7 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "F10-3 poses",
+			name: "F10-3 poses + hop",
 			segID: 10,
 			// initProcesses: {},
 			// unloadProcesses: {},
@@ -134,13 +136,18 @@ s.waitForBoot {
 							]
 						),
 						\cmdSync,
-						5,
-						funcCmd: (func: {
-							if(~sequencer.hasChangedSteps.not) {
-								~sequencer.changeSteps;
-								~sequencer.hasChangedSteps = true;
-							};
-						}),
+						[	5,
+							funcCmd: (func: {
+								if(~sequencer.hasChangedSteps.not) {
+									~sequencer.changeSteps;
+									~sequencer.hasChangedSteps = true;
+								};
+							})
+						],
+						funcCmd: topEnvironment[\trigParms],
+						{	BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
+							0
+						}
 					],
 					onStop: {
 						if(~hasChangedSteps.not) {
@@ -271,11 +278,40 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
-						{	BP(\st).removeAutoRun;
+						0.05,
+						{	BP(\st).removeAutoRun;  // really?
 							BP(\st).autoRunMultiSpeed;
 							0
 						}
 						// { if(BP(\st)[\autoRunner].isNil) { BP(\st).addAutoRun }; 0 },
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 55,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F55-hop!",
+			segID: 55,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.05,
+						{
+							BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
+							BP(\st).addAutoRun;
+							BP(\st).autoRunMultiSpeed(false);
+							// should be lots of activity!
+							BP(\st).gDelta = Pwhite(0.35, 0.8, inf);
+							0
+						}
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
@@ -294,10 +330,11 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
-						{	BP(\st).removeAutoRun;
-							if(BP(\st)[\mSpeedPlayer].notNil) {
-								BP(\st).autoRunMultiSpeed;  // toggle-should stop
-							};
+						{	BP(\st).stop(0);
+							// BP(\st).removeAutoRun;
+							// if(BP(\st)[\mSpeedPlayer].notNil) {
+							// 	BP(\st).autoRunMultiSpeed;  // toggle-should stop
+							// };
 							0
 						}
 					],
@@ -343,7 +380,9 @@ s.waitForBoot {
 			seqPattern: {
 				Pn((
 					sequence: [
-						bpCmd: (name: \st, shouldSync: false),
+						bpCmd: (name: \st, shouldSync: false, prepareBP: { |bp|
+							bp.gDelta = Pwhite(1.5, 3.0, inf)
+						}),
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
@@ -384,7 +423,10 @@ s.waitForBoot {
 									0
 								},
 							]
-						)
+						),
+						\cmdSync,
+						1.2,
+						{ BP(\st).addAutoRun; 0 }
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
@@ -395,22 +437,57 @@ s.waitForBoot {
 			}
 		)),
 
-		// PR(\tlsAff).copy.putAll((
-		// 	name: "",
-		//	segID: 1,
-		// 	initProcesses: {},
-		// 	unloadProcesses: {},
-		// 	seqPattern: {
-		// 		Pn((
-		// 			sequence: [],
-		// 			onStop: {},
-		// 			dur: \trigger,  // or \sync
-		// 			id: 0,  // trig id
-		//			init: Func(\nextThingTrig).v,
-		//			clear: Func(\clearNextTrig).v
-		// 		), 1)
-		// 	}
-		// )),
+		PR(\tlsAff).copy.putAll((
+			name: "F100-hop/lean",
+			segID: 1,
+			initProcesses: {
+				\chuckIf.eval(PR(\leaning), BP, \ln);
+				VC(\wp) => BP(\ln);
+				0 => BP(\ln);
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.05,
+						{
+							BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
+							0
+						},
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{ BP(\st).stop(0); 0 },
+						bpCmd: (name: \ln, dur: 15),
+						\cmdSync
+					],
+					// onStop: {},
+					dur: \sync, // \trigger,  // or \sync
+					id: 110,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "Conflict",
+			segID: 110,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 120,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
 
 	];
 

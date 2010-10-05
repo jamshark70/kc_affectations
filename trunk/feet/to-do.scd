@@ -1,4 +1,4 @@
-MIDIPort.init([2]);
+MIDIPort.init([3]);
 MIDIPort.autoFreeSockets = false;
 
 s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
@@ -296,9 +296,9 @@ r = fork {
 				excTime: 0.08,
 				newDelta: rrand(0.22, 0.4),
 				// ominous
-				// freq: \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps,
+				freq: \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps,
 				// freq: \patRejectLastN.eval(Pwhite(76.0, 94.0, inf), 3).clump(3).midicps,
-				freq: { rrand(76.0, 94.0).midicps } ! 3,
+				// freq: { rrand(76.0, 94.0).midicps } ! 3,
 				timeMul: 0.03,
 				kAmp: 1,
 				harm: (1, 3 .. 9),
@@ -331,6 +331,126 @@ b = Buffer.sendCollection(s, x.as(Signal).asWavetable, wait: 0.05);
 b.sendCollection(x.as(Signal).asWavetable, wait: 0.05);
 
 q = BP(\st).chan.playfx(Instr("busfx.dist"), [0, 2]); q.gui;
+
+
+u.remove;
+u = Updater(BP(\st), { |obj, what, more|
+	if(more == \stopped) { r.stop };
+});
+
+(
+if(r.isPlaying) { r.stop };
+r = fork {
+	var g, c = Condition.new;
+	thisThread.clock.timeToNextBeat.debug.wait;
+	loop {
+		g = p.makeGesture((
+			gest: \klankMachine,
+			prob: 1,
+			excTime: 0.08,
+			newDelta: //Plazy({ |ev|
+				Pfin({ |ev| ev[\parms][\numEv] }, Pnsym(
+					Pfsm([
+						(0..7),
+						one: (1..8).dup(2).flat ++ #[0],
+						dot: #[1, 3, 4, 5],
+						revdot: #[0, 2, 4, 5, 6],
+						rattata: #[0, 1, 3, 5, 7],
+						ratatat: #[0, 1, 2, 3, 5, 6, 8],
+						syncop: #[0, 1, 3],
+						tripletHead: #[6, 8, 0],
+						tripletTail: #[7, 8, 0],
+						triplets: #[0]
+					]),
+					(	one: Pn(1, 1),
+						dot: Pseq(#[0.75, 0.25], 1),
+						revdot: Pseq(#[0.25, 0.75], 1),
+						rattata: Pseq(#[0.5, 0.25, 0.25], 1),
+						ratatat: Pseq(#[0.25, 0.25, 0.5], 1),
+						syncop: Pseq(#[0.25, 0.5, 0.25], 1),
+						tripletHead: Pseq([Pn(1/6, 3), 0.5], 1),
+						tripletTail: Pseq([0.5, Pn(1/6, 3)], 1),
+						triplets: Pn(1/6, 6)				
+					)
+				) * (60/104))
+//			})
+			,
+			// ominous
+			freq: \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps,
+			// freq: \patRejectLastN.eval(Pwhite(76.0, 94.0, inf), 3).clump(3).midicps,
+			// freq: { rrand(76.0, 94.0).midicps } ! 3,
+			timeMul: 0.03,
+			kAmp: 1,
+			harm: (1, 3 .. 9),
+			yEnds: #[18, 5],
+			numEv: 25,
+			start: p.pt.choose * 44100,
+			rate: 1.2, //Pexprand(0.6, 0.8, inf),
+			shapebuf: p.shapebuf,
+			// chorusDelay: Pwhite(0.05, 0.09, inf),
+			// chorusAmt: Pwhite(0.5, 0.9, inf) * Pkey(\chorusDelay),
+			chorusAmps: #[0.4, 0.4, 0.4],
+			glrvbamt: 0.25,
+			lcrvbamt: 0.14
+		));
+		p.use { ~spawner.par(CleanupStream(g.asStream, { c.unhang })) };
+		c.hang;
+		thisThread.clock.timeToNextBeat.wait;
+		// 1.wait;
+	}
+};
+)
+
+p.snareParms = { |parms(Event.new)|
+	(	gest: \klankMachine,
+		prob: 1,
+		excTime: 0.08,
+		newDelta: Pfin({ |ev| ev[\parms][\numEv] }, Pnsym(
+			parms[\rhythms] ?? { Pfsm([
+				(0..7),
+				one: (1..8).dup(2).flat ++ #[0],
+				dot: #[1, 3, 4, 5],
+				revdot: #[0, 2, 4, 5, 6],
+				rattata: #[0, 1, 3, 5, 7],
+				ratatat: #[0, 1, 2, 3, 5, 6, 8],
+				syncop: #[0, 1, 3],
+				tripletHead: #[6, 8, 0],
+				tripletTail: #[7, 8, 0],
+				triplets: #[0]
+			]) }, ~snareRhythms
+		) * (parms[\tempo] ?? { (60/104) })),
+		// ominous
+		freq: parms[\freq] ?? { \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps },
+		timeMul: 0.03,
+		kAmp: parms[\kAmp] ?? {
+			if(parms[\numEv] > 1) {
+				Pseries.fromEndpoints(parms[\startAmp] ? 0.07, 1.0, parms[\numEv] ? 25)
+			} { 1 }
+		},
+		harm: (1, 3 .. 9),
+		yEnds: #[18, 5],
+		numEv: parms[\numEv] ? 25,
+		start: ~pt.choose * 44100,
+		rate: 1.2, //Pexprand(0.6, 0.8, inf),
+		shapebuf: ~shapebuf,
+		chorusAmps: #[0.4, 0.4, 0.4],
+		glrvbamt: 0.25,
+		lcrvbamt: 0.14
+	)
+};
+
+p.runGesture(p.snareParms((numEv: 2, rhythms: Pn(\one, 1), kAmp: 1)));
+
+p.runGesture(p.snareParms((numEv: 3, rhythms: \ratatat, kAmp: 1)));
+
+p.snareRhythms[\ratatat].estimateLength
+
+f = { |gest(\one)|
+	p.runGesture(p.snareParms((numEv: max(2, p.snareRhythms[gest].estimateLength), rhythms: Pn(gest, 1), kAmp: 1)));
+};
+
+f.(p.snareRhythms.keys.choose)
+
 
 
 o.remove;
