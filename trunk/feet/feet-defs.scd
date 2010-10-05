@@ -2257,6 +2257,44 @@ make: { |name|
 				~mSpeedPlayer.stop;
 				~mSpeedPlayer = nil;
 			}
+		},
+		snareParms: { |parms(Event.new)|
+			parms[\numEv] ?? { parms[\numEv] = 25 };
+			(	gest: \klankMachine,
+				prob: 1,
+				excTime: 0.08,
+				newDelta: Pfin({ |ev| ev[\parms][\numEv] }, Pnsym(
+					parms[\rhythms] ?? { Pfsm([
+						(0..7),
+						one: (1..8).dup(2).flat ++ #[0],
+						dot: #[1, 3, 4, 5],
+						revdot: #[0, 2, 4, 5, 6],
+						rattata: #[0, 1, 3, 5, 7],
+						ratatat: #[0, 1, 2, 3, 5, 6, 8],
+						syncop: #[0, 1, 3],
+						tripletHead: #[6, 8, 0],
+						tripletTail: #[7, 8, 0],
+						triplets: #[0]
+					]) }, ~snareRhythms
+				) * (parms[\tempo] ?? { (60/104) })),
+				// ominous
+				freq: parms[\freq] ?? { \patRejectLastN.eval(Pwhite(34, 52, inf), 3).clump(3).midicps },
+				timeMul: 0.03,
+				kAmp: parms[\kAmp] ?? {
+					if(parms[\numEv] > 1) {
+						Pseries.fromEndpoints(parms[\startAmp] ? 0.07, 1.0, parms[\numEv] ? 25)
+					} { 1 }
+				},
+				harm: (1, 3 .. 9),
+				yEnds: #[18, 5],
+				numEv: parms[\numEv] ? 25,
+				start: ~pt.choose * 44100,
+				rate: 1.2, //Pexprand(0.6, 0.8, inf),
+				shapebuf: ~shapebuf,
+				chorusAmps: #[0.4, 0.4, 0.4],
+				glrvbamt: 0.25,
+				lcrvbamt: 0.14
+			)
 		}
 	));
 	0 => BP(name);

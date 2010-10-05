@@ -1,25 +1,12 @@
 // Affectations: Feet controller sequence
 
-ChuckableBrowser.newWindow;
+// ChuckableBrowser.newWindow;
 
+// if you need to clear everything, do this:
 BP.all.free; VC.all.free;
-BP.all.stop;
 
-~seq.sections[~seq.currentSection].currentIterator.activeCmds;
-~seq.sections[~seq.currentSection].currentIterator.activeCmds.do(_.listVars); ""
 
-"\n\n".postln;
-
-~seq.sections[~seq.currentSection].savedCmds
-~seq.sections[~seq.currentSection].savedCmds.do(_.listVars); ""
-
-t = ~seq.sections[~seq.currentSection].currentIterator;
-t.dependants
-t.changed(\done)
-
-~seq.listVars
-~seq.sections.last.listVars;
-
+// this block loads everything: cursor on open-paren, then ctrl-alt-x
 (
 if(BP.exists(\transports)) { BP(\transports).free };
 
@@ -128,7 +115,12 @@ s.waitForBoot {
 						{ BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3)); 0 },
 						loopCmd: (repeats: 3,
 							cmds: [
-								funcCmd: topEnvironment[\trigParms],
+								{	if(~repeats < 3) {
+										PR(\funcCmd).copy.putAll(topEnvironment[\trigParms])
+									} {
+										PR(\funcCmd).copy.putAll((dur: 0.01))
+									}
+								},
 								\cmdSync,
 								{	BP(\st).runGesture((gest: \oneKlankSteps, numEv: rrand(10, 20)));
 									0
@@ -457,7 +449,14 @@ s.waitForBoot {
 						},
 						funcCmd: topEnvironment[\trigParms],
 						\cmdSync,
+						// .stop clears all footstep sounds
 						{ BP(\st).stop(0); 0 },
+						// replaying does NOT resume them if autoRun == false
+						[	0.2,
+							bpCmd: (name: \st, shouldSync: false, prepareBP: { |bp|
+								bp.autoRun = false;
+							})
+						],
 						bpCmd: (name: \ln, dur: 15),
 						\cmdSync
 					],
@@ -471,14 +470,71 @@ s.waitForBoot {
 		)),
 
 		PR(\tlsAff).copy.putAll((
-			name: "Conflict",
+			name: "F110-Conflict",
 			segID: 110,
-			// initProcesses: {},
+			initProcesses: {
+				// what an obscene hack, but my framework is too complicated
+				var numEvStream = Pwhile1({ |ev, next| next < 25 },
+					Pseries(2, Pwrand(#[0, 1, 2], #[0.2, 0.4, 0.4], inf), inf)
+				).asStream;
+				// usually this is used for resource loading
+				// but it serves nicely for lazy init too
+				~snareKeys = BP(\st).snareRhythms.keys;
+				// ~snrGest = Pseq([\one, Pxrand(~snareKeys, inf)], 1).asStream;
+				~multiSnareParms = ~oneSnareParms.copy.put(\setDoneSignal, {
+					var	numEv = numEvStream.next;
+					~doneSignal = ~pat = BP(\st).makeGesture(
+						BP(\st).snareParms((
+							numEv: numEv,
+							kAmp: Pseries.fromEndpoints(0.024, 0.35, numEv ? 25)
+						))
+					)
+				});
+			},
 			// unloadProcesses: {},
+			oneSnare: { |gest(\one)|
+				BP(\st).snareParms((
+					numEv: max(2, BP(\st).snareRhythms[gest].estimateLength),
+					rhythms: Pn(gest, 1), kAmp: 0.35
+				));
+			},
+			oneSnareParms: (
+				setDoneSignal: {
+					~doneSignal = ~pat = BP(\st).makeGesture(~sequencer.oneSnare)
+				},
+				func: {
+					// environment confusion: I need to create the func
+					// in the funcCmd environment, not BP(\st)'s!
+					// (so it's attached to the cmd envir)
+					var	cleanup = e { ~stop.() }, pat = ~pat;
+					BP(\st).use {
+						~spawner.par(CleanupStream(pat.asStream, cleanup));
+					};
+				}
+			),
 			seqPattern: {
 				Pn((
 					sequence: [
-						
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.05,
+						funcCmd: ~oneSnareParms,
+						\cmdSync,
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						funcCmd: ~oneSnareParms,
+						\cmdSync,
+						2.0,
+						{ "starting loop".debug; 0 },
+						loopCmd: (
+							cmds: [
+								{	PR(\funcCmd).copy.putAll(~sequencer[\multiSnareParms])
+									// // currentEnvironment is the loopCmd holding this
+									// .put(\loopcmdParent, currentEnvironment)
+								},
+								\cmdSync,
+								{ rrand(1, 3) * 0.5 },
+							]
+						)
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
@@ -489,6 +545,24 @@ s.waitForBoot {
 			}
 		)),
 
+		// PR(\tlsAff).copy.putAll((
+		// 	name: "",
+		// 	segID: 0,
+		// 	initProcesses: {},
+		// 	unloadProcesses: {},
+		// 	seqPattern: {
+		// 		Pn((
+		// 			sequence: [
+		// 			],
+		// 			// onStop: {},
+		// 			dur: \trigger,  // or \sync
+		// 			id: 0,  // trig id
+		// 			init: Func(\nextThingTrig).v,
+		// 			clear: Func(\clearNextTrig).v
+		// 		), 1)
+		// 	}
+		// )),
+
 	];
 
 	~seq = PR(\affSectSeq).copy.sections_(~sections);
@@ -497,3 +571,26 @@ s.waitForBoot {
 	PR(\transports).chuck(BP(\transports), nil, (model: ~seq));
 };
 )
+
+
+
+BP.all.stop;
+
+BP(\st).free;
+
+~seq.sections[~seq.currentSection].currentIterator.activeCmds;
+~seq.sections[~seq.currentSection].currentIterator.activeCmds.do(_.listVars); ""
+
+"\n\n".postln;
+
+~seq.sections[~seq.currentSection].savedCmds
+~seq.sections[~seq.currentSection].savedCmds.do(_.listVars); ""
+
+t = ~seq.sections[~seq.currentSection].currentIterator;
+t.dependants
+t.changed(\done)
+
+~seq.listVars
+~seq.sections.last.listVars;
+
+BP(\st) => MT(1);
