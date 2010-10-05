@@ -8,7 +8,7 @@ BP.all.stop;
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds;
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds.do(_.listVars); ""
 
-"\n\n\n".postln;
+"\n\n".postln;
 
 ~seq.sections[~seq.currentSection].savedCmds
 ~seq.sections[~seq.currentSection].savedCmds.do(_.listVars); ""
@@ -16,6 +16,9 @@ BP.all.stop;
 t = ~seq.sections[~seq.currentSection].currentIterator;
 t.dependants
 t.changed(\done)
+
+~seq.listVars
+~seq.sections.last.listVars;
 
 (
 s.waitForBoot {
@@ -94,9 +97,31 @@ s.waitForBoot {
 			segID: 10,
 			// initProcesses: {},
 			// unloadProcesses: {},
+			hasChangedSteps: false,
+			changeSteps: {
+				var	bp = BP(\st);
+				bp.chordN = 0;
+				bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[86], 7));
+				bp.gest = Pswitch1([
+					Pseq([
+						Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
+							#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
+						\slowStepStretch
+					], inf),
+					Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf)
+				], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 0.8], #[120])).collect(_.binaryValue));
+				bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
+				bp.numEv = Pwhite(6, 14, inf);
+			},
 			seqPattern: {
 				Pn((
 					sequence: [
+						// I have a sneaky feeling I oughtn't do it this way...
+						funcCmd: (func: {
+							// ~sequencer is the tlsAff Proto
+							// reinit in case it's replaying
+							~sequencer.hasChangedSteps = false;
+						}),
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
 						{ BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3)); 0 },
 						loopCmd: (repeats: 3,
@@ -108,9 +133,21 @@ s.waitForBoot {
 								},
 							]
 						),
-						\cmdSync
+						\cmdSync,
+						5,
+						funcCmd: (func: {
+							if(~sequencer.hasChangedSteps.not) {
+								~sequencer.changeSteps;
+								~sequencer.hasChangedSteps = true;
+							};
+						}),
 					],
-					// onStop: {},
+					onStop: {
+						if(~hasChangedSteps.not) {
+							~changeSteps.();
+							~hasChangedSteps = true;
+						};
+					},
 					dur: \trigger,  // or \sync
 					id: 20,  // trig id
 					init: Func(\nextThingTrig).v,
@@ -128,12 +165,12 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
-						{ BP(\st).removeAutoRun; 0 },
+						// { BP(\st).removeAutoRun; 0 },
 						loopCmd: (
 							cmds: [
 								{
-									var	numEv = rrand(7, 18),
-									numInChord = rrand(2, 4),
+									var	numEv = rrand(9, 17),
+									numInChord = rrand(2, 3),
 									startDelta = rrand(0.35, 0.6);
 									BP(\st).runGesture((
 										gest: \klankMachine,
@@ -141,12 +178,14 @@ s.waitForBoot {
 										newDelta: Pgeom.fromEndpoints(startDelta, rrand(0.05, 0.09), numEv),
 										timeMul: startDelta / Pkey(\delta),
 										freq: (Pseries(
-											rrand(28, 33),
+											rrand(28, 33) - 7,
 											Pwrand(#[1, 2], #[0.7, 0.3], inf),
 											inf
 										) -.x Pclump(numInChord, Pseries(
 											0, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, numInChord), inf
 										))).collect { |deg| Mode(\g).cps(deg) },
+										kAmp: 0.22,
+										harm: Pstutter(Pwhite(3, 7, inf), Pfunc({ [(1..5) * ({ exprand(0.8, 1.25) } ! 5).put(0, 1)] })),
 										xEnds: { rrand(-1.0, 1.0) } ! 2,
 										yEnds: [rrand(15.0, 20.0), rrand(5.0, 8.0)]
 									));
@@ -176,7 +215,7 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
-						{ BP(\st).addAutoRun; 0 }
+						// { BP(\st).addAutoRun; 0 }
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
@@ -339,6 +378,7 @@ s.waitForBoot {
 								{	BP(\st).runGesture((
 										gest: \lauraslide,
 										notesKey: ~notesKeys.next,
+										ampAdjust: 0.11,
 										numEv: rrand(11, 19)
 									));
 									0

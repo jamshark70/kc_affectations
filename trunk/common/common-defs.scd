@@ -432,7 +432,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			} {
 				~clients.add(name);
 				~makeSynths.();
-			}
+			};
 		};
 	
 		~notUsedBy = { |name|
@@ -660,7 +660,7 @@ Proto {
 			r.remove;
 			// stop section, section sequencer will advance
 			// false = not a manual stop, don't kill non-sync commands
-			~stop.(nil, false);
+			~stop.(nil, ~isLastSection ? false);
 		}
 		{ inSeg > item[\id] } {
 			if((i = topEnvironment[\seq].sections.detectIndex { |sect|
@@ -683,7 +683,7 @@ Proto {
 			Rect(sbounds.right - 120, sbounds.height - 300, 120, 60));
 		Button(~window, ~window.view.bounds.insetBy(2, 2))
 			.states_([["to seg %".format(item[\id])]])
-			.action_(e { ~stop.(nil, false) });
+			.action_(e { ~stop.(nil, ~isLastSection ? false) });
 		~window.front.userCanClose_(false)
 			.onClose_(e { ~window = nil });
 	});
@@ -692,7 +692,7 @@ Proto {
 {	~trigResp.remove;
 	~window !? { defer(e { ~window.close }) };
 	~currentTriggerItem = nil;  // what a horrendous, god-awful hack
-	~cleanupTrigger.(nil, (manualStop: false));
+	~cleanupTrigger.(nil, (manualStop: ~isLastSection ? false));
 } => Func(\clearNextTrig);
 
 PR(\tlSection).clone {
@@ -700,7 +700,7 @@ PR(\tlSection).clone {
 		var	stopParms;
 		if(~isRunning.()) {
 			~status = \idle;
-			stopParms = (manualStop: manualStop ? true);
+			stopParms = (manualStop: manualStop ? true); //.debug("stop parms");
 			~currentIterator.stop(stopParms);
 			if(manualStop) { ~savedCmds.do(_.stop(stopParms)) };
 			~done.(manualStop);
@@ -713,7 +713,7 @@ PR(\tlSection).clone {
 			} {
 				~seqPlayer.stop;
 			};
-		};
+		} { manualStop.debug("stop called but section not running - manualStop is") };
 	};
 	~done = { |manualStop| ~cleanupTrigger.(nil, (manualStop: manualStop)) };
 	~cleanupTrigger = { |triggerID, parms|
@@ -722,6 +722,27 @@ PR(\tlSection).clone {
 			~currentTriggerItem[\clear].(~currentTriggerItem, triggerID, parms);
 			~currentTriggerItem = nil;
 		};
+	};
+	~makeSeqPlayer = {
+//		~seqStream ?? { ~seqStream = ~seqPattern.().asStream };
+			// should always reset: start from beginning of section every time you play
+		~seqStream = ~seqPattern.().asStream;
+			// ~condition is used elsewhere, not here, but needs to exist
+		~condition ?? { ~condition = Condition.new };
+		Routine({ |inval|
+			var	item, delta;
+			loop {
+				item = ~seqStream.next(~seqEventProto);
+				if(item.notNil) {
+					delta = ~playItem.(item);
+					delta.yield;	// playItem returns time to wait
+				} {
+					// always stop last section as if manually stopped
+					// (forcing all children to stop)
+					~stop.(nil, ~isLastSection ? false)
+				};
+			}
+		})
 	};
 } => PR(\tlsAff);
 
@@ -750,6 +771,7 @@ PR(\sectionSequencer).clone({
 	};
 	~countOffAndGo = {
 		var	clock = ~clock.value;
+		~sections.last.isLastSection = true;
 		thisThread.clock.sched(0, ~sectionRoutine = Routine({
 			~status = \playing;
 			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
@@ -767,7 +789,11 @@ PR(\sectionSequencer).clone({
 			~stop.(true);	// stop last section
 		}));
 	};
-	~stop = { ~nextSectionToPlay = nil } <> ~stop;
+	~superStop = ~stop;
+	~stop = { |lastSection(false)|
+		~superStop.(lastSection);
+		~nextSectionToPlay = nil;
+	};
 	~update = { |obj, what, args|
 		var	section;
 		// [obj, what, args].debug("section sequencer got update");

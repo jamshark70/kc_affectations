@@ -485,9 +485,6 @@ make: { |name|
 			~xys.do(_.releaseBus(~collIndex));
 			[~pvbuf, ~ampCtl].free;
 		},
-		preparePlay: {
-			BP(~trajectoryKey).isUsedBy(~collIndex);
-		},
 		stopCleanup: {
 			// must check: trajectories could have been .free'd
 			if(BP.exists(~trajectoryKey)) {
@@ -566,6 +563,10 @@ make: { |name|
 		},
 		asPattern: {
 			Pseq([
+				Pfuncn({
+					BP(~trajectoryKey).isUsedBy(~collIndex);
+					Event.silent(0)
+				}),
 				~splashPattern.(),
 				Event.silent(rrand(0.15, 0.45)),
 				~superPattern.()
@@ -1860,7 +1861,7 @@ make: { |name|
 				.as(Signal).asWavetable, wait: 0.05
 			);
 		},
-		useGui: { |vpi| ~ampCtl => VP(vpi) },
+		useGui: { |vpi| [~ampCtl, ~kAmpCtl, ~ffreqCtl].do { |gc| gc => VP(vpi) } },
 		free: {
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
 			[~ampCtl, ~kAmpCtl, ~ffreqCtl, ~shapebuf].free;
@@ -2092,7 +2093,7 @@ make: { |name|
 					\delta, 0.4 * Pexprand(0.8, 1.25, inf)
 					* Pgeom.fromEndpoints(parms[\startDelta] ?? { rrand(0.35, 0.6) }, rrand(0.1, 0.2),
 						parms[\numEv]),
-					\amp, BPStream(\amp) * 0.04,  // filters are LOUD
+					\amp, BPStream(\amp) * (parms[\ampAdjust] ? 0.04),  // filters are LOUD
 					\numNotes, parms[\numNotesPat] ?? { Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf) },
 					\filtDegree, (~runningNotes[parms[\notesKey] ? \lauraslide].value(parms)
 						+.x Pseries(0, Pwrand(#[-1, -2, -3], #[1, 2, 2].normalizeSum, Pkey(\numNotes).asStream), inf))
