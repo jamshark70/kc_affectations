@@ -385,6 +385,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** TODO Really stop normal activity during multispeed?
 
 
+* Post-premiere
+** Coding fixes
+*** Refactor snare drum stuff in feet sequence
+
+
 * Sample attributions
     September 3, 2010
         By WIM (http://www.freesound.org/usersViewSingle.php?id=22241)
@@ -444,8 +449,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
      mkdir ~/share
      cd ~/share
      svn co -r10246 https://supercollider.svn.sourceforge.net/svnroot/supercollider/trunk sc-svn
-     cd common
+     cd sc-svn/common
      scons
+     cd ~/share/sc-svn/common/build/SCClassLibrary/Common/GUI
+     svn update -r 10373 Model.sc
+     cd ~/share/sc-svn/common
      sudo scons install
   4. Check out and build sc3-plugins (r444).
      cd ~/share/sc-svn
