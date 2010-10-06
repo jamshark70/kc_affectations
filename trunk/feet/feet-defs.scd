@@ -1887,13 +1887,21 @@ make: { |name|
 		},
 
 		// external hook to drop a gesture in!
-		runGesture: { |parms|
+		runGesture: { |parms, holdForStop = false|
+			var	stream;
 			if(~isPlaying) {
 				parms ?? { parms = () };
 				parms[\gest] ?? { parms[\gest] = ~gestStream.next };
 				if(parms[\gest].notNil) {
 					parms[\numEv] ?? { parms[\numEv] = ~numEvStream.next };
-					~spawner.par(~makeGesture.(parms))
+					stream = ~makeGesture.(parms);
+					if(holdForStop) {
+						stream = CleanupStream(stream.asStream, e {
+							~streamsToStop.remove(stream);
+						});
+						~streamsToStop.add(stream);
+					};
+					~spawner.par(stream);
 				} {
 					"BP(%): runGesture failed; gesture is empty and ~gest pattern ended.\n"
 					.postf(~collIndex.asCompileString);
@@ -1901,6 +1909,13 @@ make: { |name|
 			} {
 				"BP(%) is not playing, can't run a gesture".format(~collIndex.asCompileString).warn;
 			};
+		},
+		streamsToStop: IdentitySet.new,
+		stopSavedStreams: {
+			if(~spawner.notNil) {
+				~streamsToStop.copy.do { |stream| ~spawner.suspend(stream) };
+			};
+			~streamsToStop = IdentitySet.new;
 		},
 
 		makeGesture: { |parms|
@@ -1944,7 +1959,7 @@ make: { |name|
 					\vizKeys, Library.at(\defaultVizKeys).copy.put(3, \filtFreq),
 					\instrument, Pn(\bufGrainPanKlankDist, 1),
 					\delta, 0.5,
-					\amp, BPStream(\amp),
+					\amp, (parms[\mainAmp] ? 1) * BPStream(\amp),
 					#[filtDegree, level], BPStream(\kfreq),
 					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
 					\filtAttack, 0.01,
@@ -2074,7 +2089,7 @@ make: { |name|
 						\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
 						\ffreq, ~ffreqCtl.asMap,
 						\lprq, 0.32, //~rqCtl.asMap,
-						\amp, 0.5,
+						\amp, parms[\mainAmp] ? 0.5,
 						\harm, parms[\harm] ?? {
 							Pstutter(Pwhite(3, 6, inf), Pwrand([
 								(1..5),
@@ -2202,7 +2217,7 @@ make: { |name|
 			Pbind(
 				\collIndex, ~collIndex,
 				\play, {
-					BP(~collIndex).runGesture(currentEnvironment)
+					BP(~collIndex).runGesture(currentEnvironment, true)
 				},
 				\gest, \klankMachine,
 				\yEnds, #[5, 20],
@@ -2247,7 +2262,7 @@ make: { |name|
 			parms = ~multiSpeedParmsStream.next(());
 			if(parms.notNil) {
 				if(overrides.notNil) { parms.putAll(overrides) };
-				~runGesture.(parms);
+				~runGesture.(parms, true);
 			};
 		},
 		autoRunMultiSpeed: { |play(true)|
@@ -2286,6 +2301,7 @@ make: { |name|
 					} { 1 }
 				},
 				harm: (1, 3 .. 9),
+				mainAmp: parms[\mainAmp] ? 0.15,
 				yEnds: #[18, 5],
 				numEv: parms[\numEv] ? 25,
 				start: ~pt.choose * 44100,
@@ -2497,3 +2513,53 @@ PR(\abstractProcess).clone {
 } => PR(\leaning);
 
 
+
+SynthDef(\krfall, { |outbus, low = 0.5, sustain = 1, proportion = 0.5, halfWidth = 0.1|
+	var	remaining = 1 - proportion;
+	halfWidth = min(halfWidth, min(proportion, remaining));
+	Out.kr(outbus, EnvGen.kr(
+		Env(
+			[1, 1, low, low, (low-1) * Rand(0.6, 0.8) + 1],
+			[proportion - halfWidth, halfWidth * 2, remaining - halfWidth, 0.5],
+			\sin
+		),
+		timeScale: sustain
+	));
+}).add;
+
+(make: { |name|
+	BP(name).free;
+	PR(\leaning).chuck(BP(name), nil, (
+		// use .override to trigger falling klanks
+		selector: 0,
+		// use .override, or replace, for falling chords
+		fallLow: 1,
+		clickProb: true,
+		klanknumEv: Pwhite(18, 40, inf),
+		klanknewDelta: Pfunc({ |ev|
+			Pgeom.fromEndpoints(rrand(0.06, 0.08), rrand(0.22, 0.32), ev[\numEv])
+			* Pexprand(0.75, 1.33, inf)
+		}),
+		klankfreq: Pfunc({ |ev|
+			var	top = exprand(900, 1400),
+			curve = [top, top * rrand(0.2, 0.4), rrand(3.0, 5.5)].asSpec;
+			Pseries.fromEndpoints(0, 1, ev[\numEv]).collect(curve.map(_))
+		}),
+		klankkAmp: Pfunc({ |ev|
+			Pseries.fromEndpoints(exprand(0.6, 1.0), rrand(0.02, 0.04), ev[\numEv])
+		}),
+		klankdelta: Pwhite(5.0, 8.0, inf),
+		lpcEv: Plazy({ Pbind(
+			\instrument, \krfall,
+			// \low, Pexprand(0.8, 1.25, inf) * 0.5,
+			\low, BPStream(\fallLow),
+			\proportion, Pwhite(0.5, 0.8, inf),
+			\halfWidth, Pwhite(0.2, 0.48, inf)
+		) }),
+		delta: Pseq([
+			Pwhite(0.2, 0.4, inf) * Pseq(#[1, 2.1], { rrand(1, 4) }),
+			Pwhite(0.8, 2.5, { rrand(1, 3)  })
+		], inf)
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\fallingBP);

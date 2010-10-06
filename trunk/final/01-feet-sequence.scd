@@ -5,6 +5,9 @@
 // if you need to clear everything, do this:
 BP.all.free; VC.all.free;
 
+BP(\st).streamsToStop
+BP(\st).free;
+BP(\st).removeAutoRun;
 
 // this block loads everything: cursor on open-paren, then ctrl-alt-x
 (
@@ -122,7 +125,7 @@ s.waitForBoot {
 									}
 								},
 								\cmdSync,
-								{	BP(\st).runGesture((gest: \oneKlankSteps, numEv: rrand(10, 20)));
+								{	BP(\st).runGesture((gest: \oneKlank, numEv: rrand(10, 20)));
 									0
 								},
 							]
@@ -137,7 +140,8 @@ s.waitForBoot {
 							})
 						],
 						funcCmd: topEnvironment[\trigParms],
-						{	BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
+						\cmdSync,
+						{	BP(\st).runGesture((gest: \klankHrmSteps.debug("running khsteps"), kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
 							0
 						}
 					],
@@ -295,7 +299,9 @@ s.waitForBoot {
 				Pn((
 					sequence: [
 						bpCmd: (name: \st, shouldSync: false, playWarning: false),
-						0.05,
+						{	BP(\st).stopSavedStreams;
+							0.05
+						},
 						{
 							BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
 							BP(\st).addAutoRun;
@@ -457,11 +463,16 @@ s.waitForBoot {
 								bp.autoRun = false;
 							})
 						],
-						bpCmd: (name: \ln, dur: 15),
-						\cmdSync
+						bpCmd: (name: \ln, dur: 15, prepareBP: { |bp|
+							bp.selector = Pseq([Pn(0, 6), Pn(1, inf)], 1);
+							bp.delta = Pgeom.fromEndpoints(0.18, 0.8, 6);
+							bp.klankkAmp = Pexprand(0.4, 0.64, inf);
+							bp.klankdelta = Pwhite(1.2, 2.6, inf);
+						}) //,
+						// \cmdSync
 					],
 					// onStop: {},
-					dur: \sync, // \trigger,  // or \sync
+					dur: \trigger,  // or \sync
 					id: 110,  // trig id
 					init: Func(\nextThingTrig).v,
 					clear: Func(\clearNextTrig).v
@@ -486,7 +497,8 @@ s.waitForBoot {
 					~doneSignal = ~pat = BP(\st).makeGesture(
 						BP(\st).snareParms((
 							numEv: numEv,
-							kAmp: Pseries.fromEndpoints(0.024, 0.35, numEv ? 25)
+							kAmp: Pseries.fromEndpoints(0.024, 0.35, numEv ? 25),
+							mainAmp: rrand(0.2, 0.32)
 						))
 					)
 				});
@@ -495,7 +507,7 @@ s.waitForBoot {
 			oneSnare: { |gest(\one)|
 				BP(\st).snareParms((
 					numEv: max(2, BP(\st).snareRhythms[gest].estimateLength),
-					rhythms: Pn(gest, 1), kAmp: 0.35
+					rhythms: Pn(gest, 1), kAmp: 0.35, mainAmp: 0.37
 				));
 			},
 			oneSnareParms: (
@@ -524,7 +536,6 @@ s.waitForBoot {
 						funcCmd: ~oneSnareParms,
 						\cmdSync,
 						2.0,
-						{ "starting loop".debug; 0 },
 						loopCmd: (
 							cmds: [
 								{	PR(\funcCmd).copy.putAll(~sequencer[\multiSnareParms])
@@ -538,7 +549,369 @@ s.waitForBoot {
 					],
 					// onStop: {},
 					dur: \trigger,  // or \sync
+					id: 115,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F115-small leans",
+			segID: 115,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.05,
+						bpCmd: (name: \ln, prepareBP: { |bp|
+							bp.selector = Pseq([Pn(0, { rrand(2, 7) }), 1], inf);
+							bp.delta = Pwhite(0.2, 0.4, inf) * Pseq(#[1, 2.1], inf);
+						}),
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
 					id: 120,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F116-military turns",
+			segID: 116,
+			initProcesses: {
+				// another hack: refactor after premiere to move these into BP(\st)
+				var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 110 };
+				if(conflict.notNil and: { conflict[\multiSnareParms].notNil }) {
+					// this should reuse function scope from the other section
+					// (I said this is a hack...)
+					~multiSnareParms = conflict.multiSnareParms;
+				} {
+					"Couldn't find multiSnareParms in conflict section.".warn;
+				};
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.05,
+						loopCmd: (
+							cmds: [
+								{	PR(\funcCmd).copy.putAll(~sequencer[\multiSnareParms])
+									// // currentEnvironment is the loopCmd holding this
+									// .put(\loopcmdParent, currentEnvironment)
+								},
+								\cmdSync,
+								{ rrand(1, 3) * 0.3 },
+							]
+						)
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 116,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F120-falling",
+			segID: 120,
+			fallRatios: #[0.4, 0.7, 0.86], // reverse order
+			initProcesses: {
+				Fact(\fallingBP) => BP(\fall);
+				VC(\wp) => BP(\fall);
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						{	var	numChords = rrand(2, 4);
+							BP(\st).removeAutoRun;  // maybe already gone
+							PR(\bpCmd).copy.putAll((name: \fall, prepareBP: { |bp|
+								bp.fallLow = ~sequencer[\fallRatios][2];
+								bp.selector = Pseq([Pn(0, numChords), Pn(1, inf)], 1);
+								bp.makeStreamForKey(\delta);
+							}))
+						},
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						loopCmd: (
+							repeats: 18,
+							setDoneSignal: {
+								~mainAmp = Pseries(1, 0.2, 18).reciprocal.asStream;
+								~waitStream = Pgeom.fromEndpoints(0.12, 0.75, 18).asStream;
+							},
+							cmds: [
+								{	BP(\st).runGesture((
+										gest: \oneKlank,
+										kdecay: rrand(0.14, 0.22),
+										mainAmp: ~mainAmp.next
+									));
+									~waitStream.next
+								}
+							]
+						),
+						// \cmdSync,
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{ BP(\fall).stop(0); 0.1 },
+						{	var	numChords = rrand(6, 9);
+							PR(\bpCmd).copy.putAll((name: \fall, prepareBP: { |bp|
+								bp.fallLow = ~sequencer[\fallRatios][1];
+								bp.selector = Pseq([Pn(0, numChords), Pn(1, inf)], 1);
+								bp.makeStreamForKey(\delta);
+							}))
+						},
+						{ BP(\st).addAutoRun; 0 },
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{ BP(\fall).stop(0); BP(\st).removeAutoRun; 0.1 },
+						bpCmd: (name: \fall, prepareBP: { |bp|
+							bp.fallLow = ~sequencer[\fallRatios][0] * Pwhite(0.9, 1.3, inf);
+							bp.selector = Psmartstutter(
+								Pfunc({ |n| rrand(1, 4) * (2-n) }),
+								Pseq(#[0, 1], inf)
+							);
+							bp.makeStreamForKey(\delta);
+						}),
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{	BP(\fall).stop(0);
+							BP(\st).runGesture((
+								gest: \lauraslide,
+								notesKey: \lauraslide,
+								ampAdjust: 0.12,
+								numEv: rrand(16, 23)
+							));
+							0.1
+						}
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 130,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F130-military turns",
+			segID: 130,
+			tempo: 60/104,
+			initProcesses: {
+				var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 110 };
+				if(conflict.notNil and: { conflict[\multiSnareParms].notNil }) {
+					~multiSnareParms = conflict.multiSnareParms;
+				} {
+					"Couldn't find multiSnareParms in conflict section.".warn;
+				};
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.1,
+						{	var	snarePlayerStream, seq = currentEnvironment; // ~sequencer;
+							BP(\st).removeAutoRun;
+							BP(\st).use {
+								snarePlayerStream = ~spawner.par(Prout({
+									loop {
+										~runGesture.(~snareParms.((
+											numEv: rrand(12, 25),
+											mainAmp: 0.2
+										)));
+										~spawner.wait(rrand(2, 4) * seq[\tempo]);
+									}
+								}))
+							};
+							~snarePlayerStream = snarePlayerStream;
+							1
+						}
+					],
+					onStop: {
+						if(BP(\st).isPlaying) {
+							BP(\st).spawner.suspend(~snarePlayerStream)
+						};
+					},
+					dur: \trigger,  // or \sync
+					id: 140,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F140-normal+inversions",
+			segID: 140,
+			// initProcesses: {},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						bpCmd: (name: \st, shouldSync: false, playWarning: false),
+						0.1,
+						{ BP(\st).addAutoRun; 0 },
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{	BP(\st).runGesture((
+								gest: \lauraslide,
+								notesKey: \lauraslide,
+								ampAdjust: 0.15,
+								numEv: rrand(16, 23)
+							));
+							0
+						},
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{	
+							fork {
+								Pshuf(BP(\st).runningNotes.keys.asArray, 1)
+								.asStream.do { |key|
+									BP(\st).runGesture((
+										gest: \lauraslide,
+										notesKey: key,
+										ampAdjust: 0.15,
+										numEv: rrand(7, 12)
+									));
+									exprand(0.7, 1.25).wait  // waiting would be good here, (ahem)
+								};
+							};
+							0
+						}
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 150,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F150-multispeed",
+			segID: 150,
+			initProcesses: {
+				~baseMSpeedParms = BP(\st).use {
+					// "I AM MAKING MSPARMS NOW!".debug;
+					~multiSpeedParmsStream ?? { ~makeStreamForKey.(\multiSpeedParms) };
+					BP(\st).multiSpeedParmsStream.next(()) //.debug("Here they are")
+				};
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				var	self = currentEnvironment;
+				// "OK I'm in the environment that should have ~baseMSpeedParms - where is it?".debug;
+				// self.listVars;
+				Pn((
+					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					sequence: [
+						loopCmd: (
+							repeats: 3,
+							cmds: [
+								{	var	parms,
+										range = 3 - ~repeats,
+										delta = range.linexp(0, 5, 1.2, 0.09) * rrand(1.0, 1.2);
+									parms = self[\baseMSpeedParms].copy.putAll((
+										range: range,
+										prob: 1,
+										newDelta: delta,
+										numEv: (40 - (10*range)) / delta,
+										// if I had designed this right in the first place,
+										// I wouldn't have to do something stupid like this now
+										freq: Plazy({ |ev|
+											var i = ev[\parms][\range],
+											n = ev[\parms][\numEv],
+											n1 = (n * rrand(0.4, 0.65)).roundUp,
+											n2 = ((n - n1) * 0.5).trunc,
+											adder = Pwrand(#[0, 1, 2, 3], #[1.5, 2, 2, 1].normalizeSum, n2);
+											if(i >= 4) {
+												adder = Pfin(n2, Ppatlace([adder, 0, 0], inf))
+											};
+											Pseries(ev[\parms][\notes][i], Pseq([
+												Pn(0, n1),
+												adder,
+												adder.neg
+											])).collect { |deg| Mode(\d).cps(deg) }
+										})
+									));
+									BP(\st).removeAutoRun;
+									BP(\st).runGesture(parms, true);
+									rrand(2.5, 3.5) * ~repeats
+								}
+							]
+						),
+						funcCmd: topEnvironment[\trigParms],
+						\cmdSync,
+						{ BP(\st).autoRunMultiSpeed(true); 0 }
+					],
+					onStop: { BP(\st).stopSavedStreams; BP(\st).autoRunMultiSpeed(false); },
+					dur: \trigger,  // or \sync
+					id: 160,  // trig id
+					init: Func(\nextThingTrig).v,
+					clear: Func(\clearNextTrig).v
+				), 1)
+			}
+		)),
+
+		PR(\tlsAff).copy.putAll((
+			name: "F160-Partnering",
+			segID: 160,
+			initProcesses: {
+				~cmdPool = [
+					{ BP(\st).runGesture((
+							gest: \lauraslide,
+							notesKey: BP(\st).runningNotes.keys.choose,
+							ampAdjust: 0.15,
+							numEv: rrand(10, 21)
+						));
+						0
+					},
+					{
+						BP(\st).use {
+							var	mspeeds = { ~multiSpeedParmsStream.next(()) } ! 4,
+								mstream;
+							mstream = CleanupStream(
+								Ppar(mspeeds.collect { |parms| ~makeGesture.(parms) }, 1).asStream,
+								e { ~streamsToStop.remove(mstream) }
+							);
+							~spawner.par(mstream);
+							~streamsToStop.add(mstream);
+						};
+						0
+					},
+					{ PR(\bpCmd).copy.putAll((name: \ln, dur: rrand(3.0, 7.0))) },
+					{ PR(\bpCmd).copy.putAll((name: \fc, dur: rrand(3.0, 7.0))) },
+					{ BP(\st).runGesture((name: \klankHrmSteps, numEv: rrand(4, 7),
+						kdecay: rrand(0.4, 0.9))); 0 }
+				];
+			},
+			// unloadProcesses: {},
+			seqPattern: {
+				Pn((
+					sequence: [
+						loopCmd: (
+							dStream: Pexprand(1.4, 4.5, inf).asStream,
+							cmds: [
+								{ ~sequencer[\cmdPool].choose.value },
+								{ ~dStream.next }
+							]
+						)
+					],
+					// onStop: {},
+					dur: \trigger,  // or \sync
+					id: 170,  // trig id
 					init: Func(\nextThingTrig).v,
 					clear: Func(\clearNextTrig).v
 				), 1)
