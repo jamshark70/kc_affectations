@@ -244,6 +244,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** TODO drum8 stopped in a test? why?
 
 
+* Post-premiere
+** Coding fixes
+*** Refactor snare drum stuff in feet sequence
+
+
 * TODO For premiere
   DEADLINE: <2010-10-21 Thu>
 ** Feet
@@ -396,9 +401,51 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** TODO Make little leans (115) much softer, further back
 
 
-* Post-premiere
-** Coding fixes
-*** Refactor snare drum stuff in feet sequence
+** Cue list
+   Segments are in 4th-level headings (****)
+   Event cues in a segment are numbered
+*** Feet
+**** F1-Bang!
+**** F10-3 poses + hop
+     1. Second of 3 poses
+     2. Third of 3
+     3. Hop
+**** F20-slinky (backstage, moving closer and further apart)
+     1. Three or four event cues as desired
+**** F30-normal walking
+**** F40-3 poses
+     1. Second of 3 poses
+     2. Third of 3
+**** F50-changing speeds
+**** F55-hop!
+**** F60-stop(short) when they come to a line and all stop moving
+**** F70-axial -- head bowing or just before is a good spot
+**** F80-walking(swinging)
+**** F90-3 inversions -- first is Laura's slide between Stephen and Ilana
+     1. Second of 3 moves
+     2. Third of 3
+**** F100-hop/lean -- segment cue on the hop
+     1. (Quickly!) Event cue when they stop and lean
+**** F110-Conflict -- segment cue on the first military turn
+     Note, this advanced automatically in the first version but is now
+     cued
+     1. Event cue on second turn
+**** F115-small leans back and forth (see 7:26 in residency video)
+**** F116-military turns
+**** F120-falling - start with Ilana's fall
+     This is a more complicated cue.
+     1. (Quickly!) Once during the 3 poses after Ilana falls
+     2. When Stephen falls
+     3. When they start trading places falling down
+     4. When Stephen goes into a handstand with just the feet illuminated
+**** F130-military turns
+**** F140-normal+inversions - when they start walking normally
+     1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
+     2. When they scatter to the three corners - next segment cue
+        comes quickly!
+**** F150-multispeed - when Laura starts walking VERY slowly
+     1. Event cue when Stephen and Ilana come in
+**** F160-Partnering - runs by itself
 
 
 * Sample attributions
