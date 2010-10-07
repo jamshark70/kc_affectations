@@ -381,7 +381,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** Data to send to Lorne
 
 
-** Sequencing to-dos [0/1]
+** Sequencing to-dos [0/2]
 *** TODO Feet [15/16]
 **** DONE Regression test BP(\st) autoRun -- seems OK
 **** DONE Test slinky - degrees --> freq now OK - too prominent?
@@ -399,6 +399,9 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** DONE Drop drums, regular walking @ 8:53
 **** DONE Inversions right before multispeed
 **** TODO Make little leans (115) much softer, further back
+*** TODO Arms [0/2]
+**** TODO Make sure test pattern is removed for stacking root (around line 149)
+**** TODO Add unloadResources funcs
 
 
 ** Cue list

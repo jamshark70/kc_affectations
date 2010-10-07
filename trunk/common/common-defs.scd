@@ -28,10 +28,12 @@ s.waitForBoot {
 		};
 	
 		~lcrvbmc.doWhenReady {
-			if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
+			if(~lcrvb.isNil.debug("no lcrvb patch") or: { ~lcrvb.isPlaying.not.debug("lcrvb not playing") }) {
 				~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
 			};
-			NotificationCenter.notify(\lcrvb, \lcrvbexists);
+			~lcrvb.doWhenPlaying {
+				NotificationCenter.notify(\lcrvb, \lcrvbexists);
+			};
 		};
 	};
 	
@@ -747,21 +749,31 @@ PR(\tlSection).clone {
 } => PR(\tlsAff);
 
 PR(\sectionSequencer).clone({
+	~startLoadingAt = 0;
 	~gotoSection = { |section|
 		var	toStop = ~sections[~currentSection];
 		if(~isRunning.()) {
-			~loadResources.(section);
+			~loadResources.(section, ~currentSection);
 			~nextSectionToPlay = section;
 			toStop.stop(nil, false);  // will advance by ~update
 		} {
 			~currentSection = section;
+			~loadResources.(section, ~currentSection);			
 		};
 		currentEnvironment.changed(\section, section);
 	};
-	~loadResources = { |section|
+	~loadResources = { |section, startAt|
+		if(startAt.isNil or: { startAt < ~currentSection }) {
+			if((startAt = ~startLoadingAt.detectIndex { |item| item > ~currentSection }).notNil) {
+				startAt = ~startLoadingAt[max(0, startAt - 1)];
+			} {
+				startAt = ~startLoadingAt.last;
+			};
+			startAt.debug("loadResources auto-chose startAt");
+		};
+				
 		//section.debug(">> loadResources");
-		// must add 1 because do runs from 0 to n-1
-		(section+1).do({ |sect|
+		(startAt .. section).do({ |sect|
 			if((~sections[sect].tryPerform(\isLoaded) ? true).not
 				/*.debug("section % needs to load".format(sect))*/) {
 					~sections[sect].prInitProc;
