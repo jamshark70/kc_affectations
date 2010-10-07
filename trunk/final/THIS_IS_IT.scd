@@ -35,8 +35,8 @@ s.waitForBoot {
 	~sections = Array.new;
 
 	// to my surprise, this actually does match only filenames starting with numbers!
-	// (mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
-	(mypath.dirname +/+ "03*.scd").pathMatch.sort
+	(mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
+	// (mypath.dirname +/+ "03*.scd").pathMatch.sort
 	.do { |path|
 		indices = indices.add(~sections.size.debug(path));
 		~sections = ~sections ++ path.debug("seq file").loadPath;
