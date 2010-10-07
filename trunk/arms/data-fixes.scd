@@ -1,26 +1,9 @@
 ChuckableBrowser.newWindow;
 
+// Run this first and choose the text file
 Dialog.getPaths { |paths| p = paths[0].postcs };
-"/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/arms/hands-1_data.txt"
-"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/NACL_Arms.log"
 
-"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/locomotor_arms_solo_Laura_9-8-10.txt"
-
-d = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples/arms";
-p = d +/+ "NACL_Arms.log";
-p = d +/+ "hands-1_data2.txt";
-p = d +/+ "locomotor_arms_solo_Laura_9-8-10.txt";
-
-~sampleDir = d.dirname;
-
-File.exists(p);
-
-// read in pairs, choose whichever has non-zero for third value
-
-f.close;
-
-FloatArray[0, 1, 2].extend(2)
-
+// then cursor on open-paren and ctrl-alt-x
 (
 var f, sf;
 var	width = 5;
@@ -58,6 +41,29 @@ protect {
 	} { "Couldn't open input file".warn };
 } { f.close; sf.close; "files closed".postln; };
 )
+
+
+
+"/Users/dewdrop/SCServer/trax/kc.git/trunk/samples/arms/hands-1_data.txt"
+"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/NACL_Arms.log"
+
+"/home/dlm/share/SuperCollider/scd/kc.git/trunk/samples/arms/locomotor_arms_solo_Laura_9-8-10.txt"
+
+d = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples/arms";
+p = d +/+ "NACL_Arms.log";
+p = d +/+ "hands-1_data2.txt";
+p = d +/+ "locomotor_arms_solo_Laura_9-8-10.txt";
+
+~sampleDir = d.dirname;
+
+File.exists(p);
+
+// read in pairs, choose whichever has non-zero for third value
+
+f.close;
+
+FloatArray[0, 1, 2].extend(2)
+
 
 
 // test: visualize
