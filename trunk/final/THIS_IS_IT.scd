@@ -35,7 +35,9 @@ s.waitForBoot {
 	~sections = Array.new;
 
 	// to my surprise, this actually does match only filenames starting with numbers!
-	(mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort.do { |path|
+	// (mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
+	(mypath.dirname +/+ "03*.scd").pathMatch.sort
+	.do { |path|
 		indices = indices.add(~sections.size.debug(path));
 		~sections = ~sections ++ path.debug("seq file").loadPath;
 	};
@@ -51,10 +53,11 @@ s.waitForBoot {
 
 // DEBUG SNIPS
 
-// ChuckableBrowser.newWindow;
+ChuckableBrowser.newWindow;
 
 // if you need to clear everything, do this:
-BP.all.free; VC.all.free;
+BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } }; VC.all.free;
+if(BP.exists(\mstClock)) { BP(\mstClock).free };
 
 BP(\st).streamsToStop
 BP(\st).free;

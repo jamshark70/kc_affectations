@@ -569,6 +569,7 @@ s.waitForBoot {
 						~subIter.stop;
 					},
 					clearDoneSignal: {
+						~doneSignal.remove;
 						~doneSignal = nil;
 					}
 				),

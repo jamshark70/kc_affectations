@@ -1,4 +1,3 @@
-
 var	temp, temp2;
 
 // just in case... (won't load twice if already loaded)
@@ -437,7 +436,7 @@ PR(\hs1).clone {
 	};
 	~stopCleanup = {
 		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
-		BP(~trajectoryKey).notUsedBy(~collIndex);
+		if(BP.exists(~trajectoryKey)) { BP(~trajectoryKey).notUsedBy(~collIndex) };
 	};
 
 	// inherit asPattern from hs1:
@@ -1298,7 +1297,7 @@ make: { |name|
 
 		def: \bufGrainPanFmletDist
 	));
-	~clock108 => BP(name);
+	topEnvironment[\clock108] => BP(name);
 }, type: \bp) => Fact(\drum1);
 
 (
@@ -1342,7 +1341,7 @@ makeBP: { |name|
 	));
 // 	BP(name).dump;
 // 	BP(name).v.tryPerform(\listVars);
-	~clock108 => BP(name);
+	topEnvironment[\clock108] => BP(name);
 }, type: \bp) => Fact(\drum2);
 
 (
@@ -1382,7 +1381,7 @@ makeBP: { |name|
 	#[postMCCreation, calcBar].do { |key| parms.put(key, BP(~source)[key]) };
 
 	PR(\bufPerc).chuck(BP(name), nil, parms);
-	~clock108 => BP(name);
+	topEnvironment[\clock108] => BP(name);
 }, type: \bp) => Fact(\drum3);
 
 
@@ -1446,7 +1445,7 @@ makeBP: { |name|
 			}
 		}
 	));
-	~clock108 => BP(name);
+	topEnvironment[\clock108] => BP(name);
 }, type: \bp) => Fact(\drum4);
 
 
@@ -1464,7 +1463,7 @@ makeBP: { |name|
 		ctlSource: ~ctlSource	// use same controls as ctlSource
 	));
 	~quant => BP(name);
-	~clock108 => BP(name);
+	topEnvironment[\clock108] => BP(name);
 })) => Fact(\drum7);
 
 // Fact(\drum7) => BP(\drum7);
@@ -1932,7 +1931,8 @@ make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
 		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
-		dir: topEnvironment[\dir] ?? { Document.current.path.dirname.dirname +/+ "samples/feet" },
+		dir: (topEnvironment[\sampleDir] ?? { Document.current.path.dirname.dirname +/+ "samples" })
+			+/+ "feet",
 		lpcPath: "words-ana3.lpc.aif",
 		labelPath: "words-labels.txt",
 		audioPath: "words-mono.aiff",
