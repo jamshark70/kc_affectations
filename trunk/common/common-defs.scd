@@ -769,7 +769,7 @@ PR(\sectionSequencer).clone({
 			} {
 				startAt = ~startLoadingAt.last;
 			};
-			startAt.debug("loadResources auto-chose startAt");
+			// startAt.debug("loadResources auto-chose startAt");
 		};
 				
 		//section.debug(">> loadResources");

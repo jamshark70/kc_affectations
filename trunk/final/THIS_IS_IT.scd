@@ -59,14 +59,19 @@ ChuckableBrowser.newWindow;
 BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } }; VC.all.free;
 if(BP.exists(\mstClock)) { BP(\mstClock).free };
 
+~seq.sections.do(_.prUnload);
+
 BP(\st).streamsToStop
 BP(\st).free;
 BP(\st).removeAutoRun;
 
-
 BP.all.stop;
 
+s.nextNodeID
+
 BP(\st).free;
+
+PeakMonitor(~master);
 
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds;
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds.do(_.listVars); ""

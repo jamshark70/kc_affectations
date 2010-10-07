@@ -25,7 +25,7 @@
 			BP(\am).prepareForPlay;
 			BP(\am).v.reset;  // drives me NUTS this function isn't called by BP().reset
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\am).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -72,7 +72,7 @@
 
 			BP(\di).playTestFile = false;
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\acDisp).free; VC(\ac).free },
 		seqPattern: {
 			// var	sect = currentEnvironment;
 			Pn((
@@ -113,7 +113,7 @@
 				if(sect.segID < 500) { sect.prUnload };
 			};
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\sr).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -157,7 +157,7 @@
 			VC(\ac) => BP(\stack);
 			0 => BP(\stack);
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\stack).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -182,7 +182,7 @@
 			VC(\sp) => BP(\ai);
 			0 => BP(\ai);
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\ai).free; VC(\sp).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -230,7 +230,9 @@
 				bp.v.reset
 			});
 		},
-		// unloadProcesses: {},
+		unloadProcesses: {
+			BP(#[am0, am1, am2, tc, shivaTrig]).free; VC(#[am, btp]).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -316,7 +318,7 @@
 				i: 3
 			));
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(#[sm0, sm1, sm2, l3Trig]).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -352,7 +354,7 @@
 				Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 			);
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\sid).free; },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -422,7 +424,7 @@
 			BP(\lm).amp = 0.45;
 			BP(\lm).v.reset;
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\lm).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -495,7 +497,7 @@
 				amp: 0.45
 			));
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\ssol).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -528,7 +530,7 @@
 			VC(\sp) => BP(\rc);
 			BP(\rc).finalAmp = 0.025;
 		},
-		// unloadProcesses: {},
+		unloadProcesses: { BP(\rc).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -605,7 +607,7 @@
 				p.bpsKeys = p.bpsKeys ++ #[chordTime];
 			};
 		},
-		// unloadProcesses: {},
+		unloadProcesses: {},
 		seqPattern: {
 			var	playfunc = Pwrand([
 				{ BP(\acDisp).spawnChild(0) },

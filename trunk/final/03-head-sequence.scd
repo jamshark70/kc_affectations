@@ -22,7 +22,7 @@ PR(\bpCmd).clone {
 PR(\funcCmd).copy.putAll((
 	setDoneSignal: {
 		~doneSignal = Updater(~subIter, e { |obj, what, cmds|
-			if([what, cmds].debug("t2 notification") == \done) {
+			if(what == \done) {
 				~doneSignal.remove;
 				~stop.()
 			};
@@ -61,15 +61,15 @@ t2 = [
 		// waitForNotesCmd, \cmdSync,
 		Quant(3, -0.5),
 		
-		gcAutoSynthCmd: (gc: { BP(\drum1).distCtl }, shouldSync: false, name: \ctlEnv, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum1).distCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus, 
 			connect: 0, time: 36, env: Env(#[20, 5], #[1], 1)),
-		bpCmd: (name: \drum1, quant: `nil, shouldSync: false, prepareBP: { |bp|
+		bpCmd: (name: \drum1, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Pseq(#[3, 0], inf);
 		}),
 		12,
-		gcAutoSynthCmd: (gc: { BP(\drum1).wetCtl }, name: \ctlPoint, shouldSync: false, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum1).wetCtl }, name: \ctlPoint, /*shouldSync: false,*/ outName: \outbus, 
 			value: 0.078, time: 30, curve: 0),
-		bpCmd: (name: \drum2, quant: `nil, shouldSync: false, prepareBP: { |bp|
+		bpCmd: (name: \drum2, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Pseq(#[0, 2], inf);
 		}),
 		12,
@@ -85,18 +85,19 @@ t2 = [
 			{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
 				12
 			}
-		]).shouldSync_(false)
+		]) //.shouldSync_(false)
 	]).shouldSync_(false),
 	TLSequenceIterator([
-		gcAutoSynthCmd: (gc: { BP(\drum1).ffRangeCtl }, shouldSync: false, name: \ctlEnv, outName: \outbus, 
+		Quant(3, -0.5),
+		gcAutoSynthCmd: (gc: { BP(\drum1).ffRangeCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus, 
 			env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
-		bpCmd: (name: \drum3, quant: `nil, shouldSync: false, prepareBP: { |bp|
+		bpCmd: (name: \drum3, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Prand(#[8, 2], inf);
 			bp.ffreqCtl.value = 360;
 		}),
-		mixerAutoSynthCmd: (mixer: { BP(\drum3).chan }, shouldSync: false, name: \ctlEnv, outName: \outbus,
+		mixerAutoSynthCmd: (mixer: { BP(\drum3).chan }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus,
 			connect: 0, env: Env([-16.dbamp, drumLevel], #[18], 2.4)),
-		gcAutoSynthCmd: (gc: { BP(\drum3).ffreqCtl }, shouldSync: false, name: \ctlPoint, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum3).ffreqCtl }, /*shouldSync: false,*/ name: \ctlPoint, outName: \outbus, 
 			value: 18000, time: 30, curve: 5),
 		
 		24,
@@ -120,9 +121,9 @@ t2 = [
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
+		Quant(3, -0.5),
 		{ BP(#[drum1, drum2, drum3]).stop; 0 },
-		
-		bpCmd: (name: #[drum4, drum5], quant: `nil, shouldSync: false, prepareBP: { |bp|
+		bpCmd: (name: #[drum4, drum5], quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			var	panEnd = -1;
 			bp.reset;
 			if(bp.collIndex == \drum5) {
@@ -132,10 +133,14 @@ t2 = [
 			};
 			bp.pan = Env([0, panEnd], #[30]);
 			bp.wetCtl.value = 0.078;
+			bp[\chan].level = drumLevel;
 		}),
 		
 		18,
-		swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
+		swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp|
+			bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
+			bp[\chan].level = drumLevel;
+		}),
 		gcAutoSynthCmd: (gc: { BP(\drum4).ffRangeCtl }, name: \ctlPoint, outName: \outbus, 
 			value: 18, time: 36),
 		
@@ -147,6 +152,7 @@ t2 = [
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
+		Quant(3, -0.5),
 		{	BP(#[drum4, drum5, drum6]).stop;
 			BP(\drum7).pan = -1;
 			BP(\drum8).pan = 1;
@@ -155,10 +161,11 @@ t2 = [
 			0
 		},
 		
-		bpCmd: (name: #[drum7, drum8], quant: -1, shouldSync: false, prepareBP: { |bp|
+		bpCmd: (name: #[drum7, drum8], quant: -1, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.ostFiltCtl.value = 1;
 			bp.fmltDcyCtl.value = 0.25;
 			bp.fmltWetCtl.value = 0.1;
+			bp[\chan].level = drumLevel;
 		}),
 		funcCmd: (doneSignal: true,
 			num3: rrand(2, 7),
@@ -326,7 +333,7 @@ t2 = [
 			\chuckIf.eval(Fact(\hstrig), BP, \hstrig, nil, Library.at(\rvbs));
 		},
 		unloadProcesses: {
-			BP(#[hstrig, hs1, mstClock]).free;
+			BP(#[hstrig, hs]).free;
 		},
 		seqPattern: {
 			Pn((
@@ -434,7 +441,13 @@ t2 = [
 			\chuckIf.eval(Fact(\formantfx1), BP, \fmt, nil, Library.at(\rvbs));
 			\chuckIf.eval(PR(\hsDrone), BP, \hsd, nil, (maxTop: 40).putAll(Library.at(\rvbs)));
 		},
-		unloadProcesses: { BP(#[traj, fmt, hsd]).free },
+		unloadProcesses: {
+			fork {
+				BP(#[traj, fmt, hsd]).free;
+				5.0.wait;
+				BP(\mstClock).free;  // making durned sure this is the last one to go
+			}
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -481,6 +494,10 @@ t2 = [
 		name: "F1530-sung 1",
 		segID: 1530,
 		initProcesses: {
+			topEnvironment[\seq].sections.do { |sect|
+				if(sect.segID < 1000) { sect.prUnload };
+			};
+
 			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil, Library.at(\rvbs));
 			0 => BP(\cpt);
 			
@@ -489,7 +506,7 @@ t2 = [
 
 			(1..3).do { |i|
 				\chuckIf.eval(Fact(("drum" ++ i).asSymbol), BP, ("drum" ++ i).asSymbol, nil,
-					(source: \drum1))
+					(source: \drum1).putAll(Library.at(\rvbs)))
 			};
 		},
 		unloadProcesses: {
@@ -690,10 +707,12 @@ t2 = [
 		name: "F1600-sung 8",
 		segID: 1600,
 		initProcesses: {
-			\chuckIf.eval(Fact(\drum4), BP, \drum4, nil, (pan: -1));
+			\chuckIf.eval(Fact(\drum4), BP, \drum4, nil, (pan: -1).putAll(Library.at(\rvbs)));
 			// 5 and 6 are basically copies - switch between them to change phase vs. drum4
-			\chuckIf.eval(Fact(\drum4), BP, \drum5, nil, (pan: 1, chan: BP(\drum4).chan));
-			\chuckIf.eval(Fact(\drum4), BP, \drum6, nil, (pan: 1, chan: BP(\drum4).chan));
+			\chuckIf.eval(Fact(\drum4), BP, \drum5, nil,
+				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
+			\chuckIf.eval(Fact(\drum4), BP, \drum6, nil,
+				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
 		},
 		unloadProcesses: {
 			(4..6).do { |i| BP(("drum" ++ i).asSymbol).free }
@@ -870,8 +889,9 @@ t2 = [
 		name: "F1650-sung 13",
 		segID: 1650,
 		initProcesses: {
-			\chuckIf.eval(Fact(\drum7), BP, \drum7);
-			\chuckIf.eval(Fact(\drum7), BP, \drum8, nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
+			\chuckIf.eval(Fact(\drum7), BP, \drum7, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\drum7), BP, \drum8, nil,
+				(ctlSource: \drum7, quant: #[-1, 1.25]).putAll(Library.at(\rvbs)));
 		},
 		unloadProcesses: {
 			BP(#[drum7, drum8]).free;
