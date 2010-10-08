@@ -298,10 +298,123 @@ t2 = [
 ];
 
 
+~faceFuncs = (
+	bloop: { BP(\bl).triggerOneEvent(0) },
+	squeak: {
+		// note, this should only be run in an environment that has a crKeyStream
+		var	key = ~crKeyStream.next;
+		BP(key).gest = \squeak;
+		BP(key).play;
+	},
+	squeaks: {
+		var	key = ~crKeyStream.next;
+		BP(key).gest = \squeaks;
+		BP(key).play;
+	},
+	smoothsqueaks: {
+		var	key = ~crKeyStream.next;
+		BP(key).gest = \smoothsqueaks;
+		BP(key).play;
+	},
+	squeakfall: {
+		var	key = ~crKeyStream.next;
+		BP(key).gest = \squeakfall;
+		BP(key).play;
+	}
+);
+
+
 [
 	// face dance coming
 
-	// drones
+	// PR(\tlsAff).copy.putAll((
+	// 	name: "H1000-face dance 1",
+	// 	segID: 1000,
+	// 	initProcesses: {
+	// 		\chuckIf.eval(Fact(\bloops), BP, \bl, nil, Library.at(\rvbs));
+	// 	},
+	// 	unloadProcesses: { BP(\bl).free },
+	// 	seqPattern: {
+	// 		Pn((
+	// 			sequence: [
+	// 				// using loopCmd b/c I want to trade gestures between procs
+	// 				loopCmd: (
+	// 					// crKeyStream: Pseq(#[cr, cr1, cr2, cr3], inf).asStream,
+	// 					cmds: [
+	// 						{
+	// 							topEnvironment[\faceFuncs][\bloop].value;
+	// 							if(0.8.coin) { rrand(3.0, 5.5) } { rrand(1.0, 1.8) }
+	// 						}
+	// 					]
+	// 				)
+	// 			],
+	// 			// onStop: {},
+	// 			dur: \trigger,  // or \sync
+	// 			id: 1010,  // trig id
+	// 			init: Func(\nextThingTrig).v,
+	// 			clear: Func(\clearNextTrig).v
+	// 		), 1)
+	// 	}
+	// )),
+
+	PR(\tlsAff).copy.putAll((
+		name: "H1010-eye rolls",
+		segID: 1010,
+		initProcesses: {
+	 		\chuckIf.eval(Fact(\bloops), BP, \bl, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\creaks), BP, \cr, nil, Library.at(\rvbs));
+			(1..3).do { |i|
+				var	bp;
+				bp = \chuckIf.eval(PR(\creaks), BP, ("cr" ++ i).asSymbol, nil, (
+					chan: BP(\cr).chan,
+					buf: BP(\cr).buf
+				).putAll(Library.at(\rvbs))) ?? { BP(("cr" ++ i).asSymbol) };
+				0 => bp;
+				bp.printStopMsg = false;
+			};
+		},
+		unloadProcesses: { BP(#[bl, cr, cr1, cr2, cr3]).free },
+		crKeyStream: Pseq(#[cr, cr1, cr2, cr3], inf).asStream,
+		seqPattern: {
+			Pn((
+				sequence: [
+					loopCmd: (
+						id: \blooploop,
+						setDoneSignal: {
+							// ~doneSignal = nil;
+							~gest = Pif(
+								Pwhite(0.0, 1.0, inf) < Env(#[0, 0.65], #[40], 2.5),
+								Prand(#[squeak, smoothsqueaks], inf),
+								\bloop
+							).asStream
+						},
+						dur: 40,
+						crKeyStream: ~crKeyStream,
+						cmds: [
+							{
+								topEnvironment[\faceFuncs][~gest.next].value;
+								if(0.8.coin) { rrand(3.0, 5.5) } { rrand(1.0, 1.8) }
+							}
+						]
+					),
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (
+						crKeyStream: ~crKeyStream,
+						func: {
+							~iterator.findActive(\blooploop).stop;
+							topEnvironment[\faceFuncs][\squeakfall].value
+						}
+					)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 1020,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
 
 	// PR(\tlsAff).copy.putAll((
 	// 	name: "",
@@ -320,6 +433,8 @@ t2 = [
 	// 		), 1)
 	// 	}
 	// )),
+
+	// drones
 
 	PR(\tlsAff).copy.putAll((
 		name: "H1500-low + harmonics",
@@ -437,9 +552,12 @@ t2 = [
 		name: "F1520-drone+formants",
 		segID: 1520,
 		initProcesses: {
-			\chuckIf.eval(PR(\trajectories), BP, \traj);
+			\chuckIf.eval(PR(\trajectories), BP, \trajHead);
 			\chuckIf.eval(Fact(\formantfx1), BP, \fmt, nil, Library.at(\rvbs));
-			\chuckIf.eval(PR(\hsDrone), BP, \hsd, nil, (maxTop: 40).putAll(Library.at(\rvbs)));
+			\chuckIf.eval(PR(\hsDrone), BP, \hsd, nil, (
+				maxTop: 40,
+				trajectoryKey: \trajHead
+			).putAll(Library.at(\rvbs)));
 		},
 		unloadProcesses: {
 			fork {

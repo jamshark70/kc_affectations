@@ -1540,3 +1540,5 @@ p.pitchedmode = Pseq([
 
 p.noisydelta = Pwhite(0.1, 0.4, inf);
 p.noisytime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+
+p.synth.postcs

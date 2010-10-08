@@ -2371,7 +2371,7 @@ PR(\abstractProcess).clone {
 (keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
-	PR(\creaks) => BP(name);
+	PR(\creaks).chuck(BP(name), nil, (master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc));
 	0 => BP(name);
 	BP(name).printStopMsg = false;
 }, type: \bp) => Fact(\creaks);
