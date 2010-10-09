@@ -452,6 +452,17 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
      1. Event cue when Stephen and Ilana come in
 **** F160-Partnering - runs by itself
 
+*** Arms
+*** Head
+**** H1000-Start of face dance
+     1. 1 event trigger for creaking --> door sound
+**** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
+**** H1020-Mouth opens, tongue starts peeking out a bit
+**** H1030-Ilana starts smiling and showing other emotions
+     1. Event trigger to raise the chaos level
+     2. Event trigger for silence
+**** H1500-Drones start (currently plays automatically)
+
 
 * Sample attributions
     September 3, 2010

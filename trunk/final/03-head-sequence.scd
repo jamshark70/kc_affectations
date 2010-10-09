@@ -320,6 +320,13 @@ t2 = [
 		var	key = ~crKeyStream.next;
 		BP(key).gest = \squeakfall;
 		BP(key).play;
+	},
+	wet: { |view|
+		BP(\wet).fastProbCtl.value = 0.6;
+		BP(\wet).play(0);
+		BP(\wet).clock.sched(rrand(2.0, 5.0), {
+			BP(\wet).stop(0); nil
+		});
 	}
 );
 
@@ -358,8 +365,8 @@ t2 = [
 	// )),
 
 	PR(\tlsAff).copy.putAll((
-		name: "H1010-eye rolls",
-		segID: 1010,
+		name: "H1000-eye rolls",
+		segID: 1000,
 		initProcesses: {
 	 		\chuckIf.eval(Fact(\bloops), BP, \bl, nil, Library.at(\rvbs));
 			\chuckIf.eval(Fact(\creaks), BP, \cr, nil, Library.at(\rvbs));
@@ -378,6 +385,7 @@ t2 = [
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\bl).synth = Prand(#[sinb, oscb], inf); 0 },
 					loopCmd: (
 						id: \blooploop,
 						setDoneSignal: {
@@ -409,7 +417,183 @@ t2 = [
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
+				id: 1010,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "H1010-tongue rolls",
+		segID: 1010,
+		initProcesses: {
+			\chuckIf.eval(Fact(\slurps), BP, \wet, nil, Library.at(\rvbs));
+		},
+		unloadProcesses: { BP(\wet).free },
+		preparePlay: {
+			// kind of hacky, but necessary because...
+			// keeping a reference to the section sequencer in a section
+			// would create an infinitely recursive data structure... that's worse than this hack
+			~crKeyStream = topEnvironment[\seq].sections.detect { |sect| sect.segID == 1000 }
+				.tryPerform(\crKeyStream) ?? {
+					"Could not find ~crKeyStream in segment 1000".warn;
+				};
+		},
+		seqPattern: {
+			Pn((
+				sequence: [
+					// all 3 now
+					{ BP(\bl).synth = Prand(#[sinb, oscb, buzz], inf); 0 },
+					loopCmd: (
+						id: \blooploop,
+						setDoneSignal: {
+							// ~doneSignal = nil;
+							~gest = Pswitch1([
+								Prand(#[squeak, smoothsqueaks], inf),
+								\bloop, \wet
+							], Pwrand(#[0, 1, 2], #[0.5, 0.4, 0.1], inf)).asStream
+						},
+						// dur: 40,
+						crKeyStream: ~crKeyStream,
+						cmds: [
+							{	var	gest = ~gest.next;
+								// if \wet is busy, get another gesture
+								if(gest == \wet and: { BP(\wet).isPlaying }) {
+									while { (gest = ~gest.next) == \wet };
+								};
+								topEnvironment[\faceFuncs][gest].value;
+								rrand(1.0, 1.8)
+							}
+						]
+					)					
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
 				id: 1020,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "H1020-mouth opens",
+		segID: 1020,
+		initProcesses: {
+			\chuckIf.eval(Fact(\words), BP,\sw, nil, Library.at(\rvbs));
+		},
+		unloadProcesses: { BP(\sw).free },
+		preparePlay: {
+			~crKeyStream = topEnvironment[\seq].sections.detect { |sect| sect.segID == 1000 }
+				.tryPerform(\crKeyStream) ?? {
+					"Could not find ~crKeyStream in segment 1000".warn;
+				};
+		},
+		seqPattern: {
+			Pn((
+				sequence: [
+					bpCmd: (name: \sw, shouldSync: false, prepareBP: { |bp|
+						// bp.synth = \noisy;
+						bp.pitchProb.value = 0;
+						bp.noisydelta = Pwhite(3.0, 6.0, inf);
+						bp.noisytime = Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0);
+						bp.word = Plazy({
+							var	items = ~pts.select { |pt|
+								~questionKeys.includesEqual(pt[\id])
+							};
+							Prand(items, inf)
+						});
+						// reset others?
+					}),
+					// run in parallel to words
+					{ rrand(7.0, 10.0) },
+					loopCmd: (
+						id: \blooploop,
+						shouldSync: false,
+						setDoneSignal: {
+							// ~doneSignal = nil;
+							~gest = Pswitch1([
+								Prand(#[squeak, smoothsqueaks], inf),
+								\bloop, \wet
+							], Pwrand(#[0, 1, 2], #[0.5, 0.4, 0.1], inf)).asStream;
+							~deltas = Pseq([
+								Pwhite(0.4, 1.1, { rrand(2, 9) }),
+								Pwhite(2.2, 4.1, { rrand(1, 3) })
+							], inf).asStream;
+						},
+						// dur: 40,
+						crKeyStream: ~crKeyStream,
+						cmds: [
+							{	var	gest = ~gest.next;
+								// if \wet is busy, get another gesture
+								if(gest == \wet and: { BP(\wet).isPlaying }) {
+									while { (gest = ~gest.next) == \wet };
+								};
+								topEnvironment[\faceFuncs][gest].value;
+								~deltas.next
+							}
+						]
+					)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 1030,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "H1030-emotions",
+		segID: 1030,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+					bpCmd: (name: \sw, shouldSync: false, playWarning: false),
+					gcAutoSynthCmd: (gc: { BP(\sw).pitchProb }, name: \ctlEnv, outName: \outbus,
+						env: Env(#[0.1, 0.95], #[1]), time: 55,
+						connect: 0, shouldSync: false),
+					{	var	e = Env(#[1, 0.1], #[80]).asStream;
+						BP(\sw).noisydelta = Pwhite(3.0, 6.0, inf) * e;
+						BP(\sw).noisytime = (Pkey(\delta) / e).linlin(3.0, 6.0, 4.0, 9.0) * e;
+						BP(\sw).pitcheddelta = Pwhite(1.5, 4.0, inf) * e;
+						// BP(\sw).pitchedtime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+						BP(\sw).word = Plazy({
+							Pn(Pser(~pts, { rrand(3, 7) }, { ~pts.size.rand }), inf)
+						});
+						0
+					},
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: {
+						var	bp = BP(\sw), cmd;
+						bp.word = Plazy({ Prand(~pts, inf) });
+						bp.pitcheddelta = Pwhite(0.1, 0.4, inf);
+						bp.pitchedtime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
+						if((cmd = ~iterator.findActive(\blooploop)).notNil) {
+							cmd.gest = Pswitch1([
+								Prand(#[squeak, smoothsqueaks], inf),
+								\bloop
+							], Pwrand(#[0, 1], #[0.3, 0.7], inf)).asStream;
+							cmd.deltas = Pwhite(0.2, 0.6, inf).asStream;
+						} { "whoops! couldn't find blooploop" };
+					}),
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: {
+						var	manualStop = (manualStop: true);
+						~iterator.activeCmds.copy.do { |cmd|
+							if(cmd !== currentEnvironment) { cmd.stop(manualStop) }
+						};
+					})
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 1500,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
