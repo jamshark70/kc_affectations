@@ -1069,5 +1069,272 @@ VC(\wp).env.target.postSettings
 
 
 
-// test defs
+/**** TODO Steady pitches with modulation based on movement ****/
+();
 
+Instr(\innermod, { |freq = 261, amp = 0.1, ffreq = 4000, centerMul = 3, rq = 0.8,
+	ringfreq = 440|
+	var	sig = LPF.ar(Saw.ar(freq * #[1, 1.004]).sum, ffreq, amp),
+		modsig = BPF.ar(sig, freq * centerMul, rq),
+		remainder = sig - modsig;
+	modsig = modsig * SinOsc.ar(ringfreq);
+	/*remainder +*/ modsig
+}, [\freq, \amp, \freq, #[1, 10, \exp], #[2.0, 0.5, \exp], \freq]);
+
+Instr(\innermod, { |freq = 261, amp = 0.1, ffreq = 4000, centerMul = 3, rq = 0.8,
+	fshift = 0, remainderMix = 0.5|
+	var	sig = LPF.ar(Saw.ar(freq * #[1, 1.004]).sum, ffreq, amp),
+		modsig = BPF.ar(sig, freq * centerMul, rq),
+		remainder = sig - modsig;
+	modsig = FreqShift.ar(modsig, fshift);
+	(remainder * remainderMix) + modsig
+}, [\freq, \amp, \freq, #[1, 10, \exp], #[2.0, 0.5, \exp], #[-150, 150]]);
+
+// maybe ok with a non-saw wave
+Instr(\innermod, { |freq = 261, amp = 0.1, ffreq = 4000, centerMul = 3, rq = 0.8,
+	dly = 0.005, dlyFreq = 10, decay = 0, remainderMix = 0.5|
+	var	sig = LPF.ar(Saw.ar(freq * #[1, 1.004]).sum, ffreq, amp),
+		modsig = BPF.ar(sig, freq * centerMul, rq),
+		remainder = sig - modsig;
+	dly = dly * 0.5;
+	modsig = modsig + AllpassC.ar(modsig, 0.2, SinOsc.ar(dlyFreq, 0, dly, dly), decay);
+	(remainder * remainderMix) + modsig
+}, [\freq, \amp, \freq, #[1, 10, \exp], #[2.0, 0.5, \exp], #[0.00001, 0.1, \exp], #[0.1, 100, \exp], #[0.0001, 3, \exp], nil]);
+
+
+a = m.play(Instr(\innermod)); a.gui;
+
+a.synth.trace
+
+s.bufferAllocator.debug
+(0..9).do { |i| s.sendMsg(\b_free, i) };
+s.bufferAllocator.free(0)
+
+// screw it, I'm not finding the right transfer funcs
+b.free;
+b = Buffer.allocConsecutive(10, s, 1024, 1, { |buf, i|
+	var	partials = (2, 4 .. 14+(i*2)), //.scramble[ .. rrand(8, 14)],
+		amps = (0 ! 33).putEach(partials, { rrand(0.5, 1.0) } ! partials.size);
+	buf.chebyMsg(amps);
+});
+
+
+b.free;
+b = Buffer.allocConsecutive(10, s, 1024, 1, { |buf|
+	var	partials = (2, 4 .. 32).scramble[ .. rrand(8, 14)],
+		amps = (0 ! 33).putEach(partials, { rrand(0.5, 1.0) } ! partials.size),
+		transfer = Signal.sineFill(512, amps),
+		line = Signal.chebyFill(512, #[1]);
+	transfer = transfer * (1 - line.abs) + line;
+	// buf.sine1Msg(amps);
+	buf.setnMsg(0, transfer.asWavetable)
+});
+
+
+b.choose.plotWavetable;
+
+
+Instr(\innermod, { |freq = 261, amp = 0.1, ffreq = 4000, centerMul = 3, rq = 0.8,
+	baseBuf = 0, shaperIndex = 0, shapeMix = 0.5, remainderMix = 0.5|
+	var	sig = LPF.ar(Saw.ar(freq * #[1, 1.004]).sum, ffreq, amp),
+		modsig = BPF.ar(sig, freq * centerMul, rq),
+		remainder = sig - modsig,
+		isOdd = shaperIndex.wrap(0, 2).trunc,
+		shaperIndexInt = shaperIndex.trunc,
+		frac = (shaperIndex - shaperIndex.trunc(2)).fold(0, 1),
+		// indexby2 = shaperIndex.fold(0, 2),
+		// by2by2 = indexby2.trunc(2),
+		// frac = (indexby2 - by2by2).fold(0, 1),
+		shapers = Shaper.ar(baseBuf + shaperIndexInt + [isOdd, 1-isOdd], modsig),
+		modded = XFade2.ar(shapers[0], shapers[1], frac.madd(2, -1));
+	modsig = XFade2.ar(modsig, modded, shapeMix.madd(2, -1));
+	(remainder * remainderMix) + modsig
+}, [\freq, \amp, \freq, #[1, 10, \exp], #[2.0, 0.5, \exp], \mybuf, \mybuf, nil, nil]);
+
+a = m.play(Instr(\innermod), (nil ! 5) ++ [b.first.bufnum, KrNumberEditor(0, [0, b.size - 1.001])]); a.gui;
+
+a.synth.trace
+
+// more promising
+// make speeds modulatable
+Instr(\innermod, { |freq = 261, amp = 0.1, ffreq = 4000,
+	numbands = 10, centerMul = 25, rq = 0.04, speedMul = 1,
+	fshift = 0, modMix = 1, remainderMix = 0.5|
+	var	sig = LPF.ar(Saw.ar(freq * #[1, 1.004]).sum, ffreq, amp),
+		lfnoises = LFDNoise3.kr(({ Rand(0.2, 12) } ! numbands) * speedMul),
+		bpfreqs = lfnoises.exprange(freq, freq*centerMul.clip(20, 20000)),
+		modsig = BPF.ar(sig, bpfreqs, rq),
+		modsigsum = modsig.sum,
+		remainder = sig - modsigsum,
+		fshifts = lfnoises.scramble * fshift,
+		modded = FreqShift.ar(modsig, fshifts).sum;
+		modsig = XFade2.ar(modsigsum, modded, modMix.madd(2, -1));
+	(remainder * remainderMix) + modsig
+}, [\freq, \amp, \freq, StaticSpec(1, 20, \lin, 1), #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], #[-150, 150], nil, nil]);
+
+a = m.play(Instr(\innermod)); a.gui;
+
+a.synth.trace
+
+PeakMonitor(m);
+
+Instr("busfx.innermod1", { | /*bus,*/ inbus, numChan = 1,
+	numbands = 10, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1,
+	fshift = 0, modMix = 1, remainderMix = 0.5|
+	var	sig = In.ar(inbus, numChan).asArray,
+		lfnoises = LFDNoise3.kr(({ Rand(0.2, 12) } ! numbands) * speedMul),
+		bpfreqs = lfnoises.exprange(freq, freq*centerMul.clip(20, 20000)),
+		modsig = sig.collect { |chan| BPF.ar(chan, bpfreqs, rq) },
+		modsigsum = modsig.flop.sum,
+		remainder = sig - modsigsum,
+		fshifts = lfnoises.scramble * fshift,
+		modded = modsig.collect { |chan| FreqShift.ar(chan, fshifts).sum };
+		modsig = XFade2.ar(modsigsum, modded, modMix.madd(2, -1));
+	(remainder * remainderMix) + modsig
+}, [/*\audiobus,*/ \audiobus, StaticSpec(1, 8, \lin, 1), StaticSpec(1, 20, \lin, 1), \freq, #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], #[-150, 150], nil, nil]);
+
+
+Instr("busfx.innermod1pan", { | /*bus,*/ inbus, numChan = 1,
+	numbands = 10, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1,
+	fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0|
+	var	sig = In.ar(inbus, numChan).asArray,
+		lfnoises = LFDNoise3.kr(({ Rand(0.2, 12) } ! numbands) * speedMul),
+		bpfreqs = lfnoises.exprange(freq, freq*centerMul.clip(20, 20000)),
+		modsig = sig.collect { |chan| BPF.ar(chan, bpfreqs, rq) },
+		modsigsum = modsig.flop.sum,
+		remainder = sig - modsigsum,
+		fshifts = lfnoises.scramble * fshift,
+		modded = modsig.collect { |chan| FreqShift.ar(chan, fshifts).sum };
+		modsig = XFade2.ar(modsigsum, modded, modMix.madd(2, -1));
+	sig = (remainder * remainderMix) + modsig;
+	if(sig.size == 1) { sig = sig[0] };
+	Pan2.ar(sig, pan);
+}, [/*\audiobus,*/ \audiobus, StaticSpec(1, 8, \lin, 1), StaticSpec(1, 20, \lin, 1), \freq, #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], #[-150, 150], nil, nil, \bipolar]);
+
+Pan2.ar(SinOsc.ar, 0).debug("OK");
+Pan2.ar([SinOsc.ar], 0).debug("equivalent graph but different result");
+
+Out.ar(0, Pan2.ar([SinOsc.ar], 0))
+
+Instr("busfx.innermod1").listArgs;
+
+// maybe... wtpad is not compatible here
+\addRvbOut.eval(\innermod1, { |outbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0|
+	var	sig = Instr("busfx.innermod1").valueArray([outbus, 1, 6, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
+	Pan2.ar(sig, pan)
+}).add;
+
+d = Patch("busfx.innermod1", [/*nil,*/ nil, 2, 4]/*, outClass: ReplaceOut*/).asSynthDef;
+d.add;
+
+Error.debug = true;
+Error.debug = false;
+
+
+d.inspect
+
+Fact(\wtpadnofx) => VC(\wtp);
+VC(\wtp) => VP(0);
+
+SynthDescLib.at(VC(\wtp).v.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+
+VC(\wtp).env.target.postSettings
+
+e = (
+	instrument: VC(\wtp).v.nodes[0].defname,
+	chan: VC(\wtp).v.bus.asMixer,
+	bufbase: VC(\wtp).env.wt.first.first.bufnum,
+	ffreq: 4000,
+	freq: 440,
+	gate: 1,
+	sustain: 3,
+	lpcEv: (
+		instrument: d.name,
+		remainderMix: 0.25,
+		fshift: 140,
+		// pan: -0.5,
+		killNode: true
+	)
+).parent_(ProtoEvent(\polySynthBusLock).v.parent).play;
+
+e.lpcEv.node.trace
+
+s.sendMsg(\n_trace, 1011);
+s.sendMsg(\n_free, 1013, 1014);
+s.sendMsg(\n_free, 1018, 1016);
+
+s.audioBusAllocator.debug;
+MixerChannel.servers[s].keys
+
+s.audioBusAllocator.free(26);
+
+
+p = Pwhile1({ |ev, next| next.delta > 0.05 }, PR(\psetp2).copy.prep(
+	Pbind(
+		\top, Pvbrown(40, 52, Pwhite(1, 3, inf), inf),
+		\lock, Pfunc { PR(\busLock).copy.prep((numCh: 2, rate: \audio)) },
+		\chan, VC(\wtp).v.bus.asMixer,
+		\bufbase, VC(\wtp).env.wt.first.first.bufnum,
+		\autoFreeIfNoNode, false,
+		\addAction, \addToHead,
+		\lpcEv, (
+			instrument: d.name,
+			remainderMix: 0.25,
+			fshift: 140,
+			// pan: -0.5,
+			killNode: true
+		)
+	),
+	Pseq([
+		Pbind(
+			\instrument, VC(\wtp).v.nodes[0].defname,
+			\ffreq, 4000,
+			\freq, (Pkey(\top) - Pseries(0, Pwhite(1, 3, { rrand(4, 7) })))
+				.collect { |deg| Mode(\d).cps(deg) },
+			\gate, 0.6,
+			\delta, Pwhite(0.5, 1.5, inf),
+			\sustain, 4.5,
+			\lpcProto, Pif(Pseries(0, 1, inf) > 0, \dummy, \singleSynthPlayer)
+		),
+		Pbind(
+			\instrument, \rest,
+			\delta, Pwhite(5.0, 8.0, 1)
+		)
+	], 1)
+).outerOverridesInner_(false));
+
+// p.outerOverridesInner = false;
+
+q = p.asStream;
+e = q.next(());
+
+e.parent_(ProtoEvent(\polySynthBusLock).v.parent).play;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+q = p.asPattern.play(protoEvent: ProtoEvent(\polySynthBusLock).copy);
+
+s.audioBusAllocator.debug;
+
+(26..36).do({ |i| s.audioBusAllocator.free(i) });
+
+q = p.asPattern.asEventStreamPlayer(ProtoEvent(\polySynthBusLock).copy);
+u.remove;
+u = Updater(q, { |... args| args.debug("update") });
+
+q.play; q.dump;
+q.stop;
+
+(1005..1015).do(s.sendMsg(\n_free, _));
+
+q.inspect
+
+/**** TODO Stephen's solo [0/2] ****/
+/***** TODO Hopping movement *****/
+/***** TODO Arm raising *****/
+/**** TODO Energy exchanges ****/
+/**** TODO Rework past inversion material ****/
+/**** TODO Poses/changing places ****/
+/**** TODO Ilana's solo - probably mostly inner-modulation sounds ****/
+/**** TODO S&L duet - maybe tinkly things growing into inner-mods ****/

@@ -1206,6 +1206,7 @@ PR(\abstractProcess).clone {
 
 Proto {
 	~canEmbed = true;
+	~outerOverridesInner = true;
 	~prep = { |outerPat, innerPat|
 		~outerPat = outerPat;
 		~innerPat = innerPat;
@@ -1218,14 +1219,14 @@ Proto {
 		while { (outerEvent = outerStream.next(inval)).notNil } {
 			innerStream = ~innerPat.asStream;
 			while { (innerEvent = innerStream.next(inval.copy.putAll(outerEvent))).notNil } {
-				innerEvent.putAll(outerEvent);
+				if(~outerOverridesInner == true) { innerEvent.putAll(outerEvent) };
 				inval = innerEvent.yield;
 			};
 		};
 		inval
 	};
 	~asStream = { Routine { |inval| ~embedInStream.(inval) } };
-	~asPattern = { Prout { |inval| ~embedInStream.(inval) } };
+	~asPattern = { Prout(e { |inval| ~embedInStream.(inval) }) };
 	~play = { |clock, protoEvent, quant|
 		~asPattern.().play(clock, protoEvent, quant)
 	};

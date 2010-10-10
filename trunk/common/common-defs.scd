@@ -258,9 +258,9 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		play: {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
-			~lock = PR(~lockKey).copy.prep((
+			~lock ?? { "lock event is making new lock".debug; ~lock = PR(~lockKey).copy.prep((
 				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \audio
-			));
+			)) };
 			~bus = ~lock.bus;
 			~target = ~chan.synthgroup;
 			~chan = nil;
@@ -270,7 +270,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				~playExtraProcess.(chan);
 				~node.do { |node| ~lock.addNode(node) };
 			} {
-				~lock.freeStuff;
+				if(~autoFreeIfNoNode != false) { ~lock.freeStuff };
 			};
 			if(~tempo.isNumber) { thisThread.clock.tempo = ~tempo }
 		},
@@ -279,17 +279,26 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				~lpcEv.putAll((
 					bus: chan.inbus,
 					target: chan.effectgroup,
-					chan: nil,
+					// chan: nil,
 					inbus: ~lock.bus,
 					collIndex: ~collIndex,
 						// effectgroup might have post-lpc effect nodes (chorus etc.)
 						// so put lpc's up front
 					addAction: ~lpcEv[\addAction] ?? { \addToHead }
 				))
+				.put(\chan, nil)  // can't set to nil in putAll
 				// cuz parent: don't work in putAll #@$*$&*$&@#312
 				.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
-				.play;
-				~lpcEv[\node].do { |node| ~lock.addNode(node) };
+ 				.play;
+				if(~lpcEv[\killNode] == true) {
+					~lpcEv[\node].do { |node|
+						if((~lock.killNodes.tryPerform(\includes, node) ? false).not) {
+							~lock.killNodes = ~lock.killNodes.add(node)
+						};
+					};
+				} {
+					~lpcEv[\node].do { |node| ~lock.addNode(node) };
+				}
 			} {
 				~sendNode = Synth("mixers/Send" ++ ~numCh,
 					[busin: ~lock.bus, busout: chan.inbus, level: 1],
@@ -307,9 +316,9 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		play: {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
-			~lock = PR(~lockKey).copy.prep((
+			~lock ?? { ~lock = PR(~lockKey).copy.prep((
 				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \control
-			));
+			)) };
 			// ~bus = ~lock.bus;
 			// ~target = ~chan.synthgroup;
 			// ~chan = nil;
