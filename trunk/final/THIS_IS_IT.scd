@@ -89,3 +89,22 @@ t.changed(\done)
 ~seq.sections.last.listVars;
 
 BP(\st) => MT(1);
+
+
+~seq[\stop].postcs
+~seq.startingSection = 0;
+
+~seq.sections[0].listVars
+~seq.sections.collectIndices(_.isLoaded);
+
+~seq.use {
+	var startAt;
+		if(startAt.isNil or: { startAt < ~currentSection }) {
+			if((startAt = ~startLoadingAt.detectIndex { |item| item > ~currentSection }).notNil) {
+				startAt = ~startLoadingAt[max(0, startAt - 1)];
+			} {
+				startAt = ~startLoadingAt.last;
+			};
+			startAt.debug("loadResources auto-chose startAt");
+		};
+};

@@ -506,6 +506,22 @@ Proto({
 			.font_(GUI.font.new(*~menuFontSpec))
 			.background_(Color.yellow(1.8))
 			.align_(\center);
+		~clearAllButton = Button(parent, ~bigButtonSize@~menuHeight)
+			.font_(GUI.font.new(*~menuFontSpec))
+			.states_([["Unload all segments", Color.black, ~playButton.background]])
+			.action_(e {
+				if(~model.isRunning) {
+					"Do not unload while playing!!".postln;
+				} {
+					fork {
+						"Unloading...".postln;
+						~model.sections.do { |sect| sect.prUnload };
+						1.0.wait;
+						"Loading current segment resources...".postln;
+						~model.loadResources(~model.currentSection + 1);
+					};
+				};
+			});
 	};
 	
 	~refreshSections = {
@@ -530,6 +546,7 @@ Proto({
 	~showPlaying = { |bool|
 		defer(e {
 			~playButton.currentState = bool.binaryValue;
+			~clearAllButton.enabled = bool.not;
 		});
 	};
 	

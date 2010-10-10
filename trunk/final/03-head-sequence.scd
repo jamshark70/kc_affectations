@@ -481,6 +481,10 @@ t2 = [
 		name: "H1020-mouth opens",
 		segID: 1020,
 		initProcesses: {
+			topEnvironment[\seq].sections.do { |sect|
+				if(sect.segID < 1000) { sect.prUnload };
+			};
+
 			\chuckIf.eval(Fact(\words), BP,\sw, nil, Library.at(\rvbs));
 		},
 		unloadProcesses: { BP(\sw).free },
@@ -796,10 +800,6 @@ t2 = [
 		name: "F1530-sung 1",
 		segID: 1530,
 		initProcesses: {
-			topEnvironment[\seq].sections.do { |sect|
-				if(sect.segID < 1000) { sect.prUnload };
-			};
-
 			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil, Library.at(\rvbs));
 			0 => BP(\cpt);
 			

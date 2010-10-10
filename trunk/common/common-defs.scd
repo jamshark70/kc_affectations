@@ -752,15 +752,19 @@ PR(\sectionSequencer).clone({
 	~startLoadingAt = 0;
 	~gotoSection = { |section|
 		var	toStop = ~sections[~currentSection];
+// [~currentSection, section].debug(">> gotoSection (current, next)");
 		if(~isRunning.()) {
+			// "loading resources (playing)".debug;
 			~loadResources.(section, ~currentSection);
 			~nextSectionToPlay = section;
 			toStop.stop(nil, false);  // will advance by ~update
 		} {
+			// "loading resources (not playing)".debug;
 			~currentSection = section;
-			~loadResources.(section, ~currentSection);			
+			~loadResources.(section/*, ~currentSection*/);
 		};
 		currentEnvironment.changed(\section, section);
+// [~currentSection, section].debug("<< gotoSection (current, next)");
 	};
 	~loadResources = { |section, startAt|
 		if(startAt.isNil or: { startAt < ~currentSection }) {
@@ -772,14 +776,14 @@ PR(\sectionSequencer).clone({
 			// startAt.debug("loadResources auto-chose startAt");
 		};
 				
-		//section.debug(">> loadResources");
+		// section.debug(">> loadResources");
 		(startAt .. section).do({ |sect|
 			if((~sections[sect].tryPerform(\isLoaded) ? true).not
 				/*.debug("section % needs to load".format(sect))*/) {
 					~sections[sect].prInitProc;
 				};
 		});
-		//debug("<< loadResources");
+		// debug("<< loadResources");
 	};
 	~countOffAndGo = {
 		var	clock = ~clock.value;
@@ -801,10 +805,44 @@ PR(\sectionSequencer).clone({
 			~stop.(true);	// stop last section
 		}));
 	};
-	~superStop = ~stop;
-	~stop = { |lastSection(false)|
-		~superStop.(lastSection);
-		~nextSectionToPlay = nil;
+	// ~superStop = ~stop;
+	// ~stop = { |lastSection(false)|
+	// 	lastSection.debug(">> ~seq stop (last sect)");
+	// 	~superStop.(lastSection);
+	// 	~nextSectionToPlay = nil;
+	// 	(~currentSection+1).debug("stop is calling loadResources for");
+	// 	~loadResources.(~currentSection+1);
+	// 	lastSection.debug("<< ~seq stop (last sect)");
+	// };
+
+	// yes, I am copying ANOTHER method wholesale...
+	// ~sectionRoutine.stop at the end prevents clearing ~nextSection...
+	// and loading resources. I wish I had expletives enough for this.
+	~stop = { |lastSection = false|
+// lastSection.debug(">> sectionSequencer:stop");
+		if(~status == \countingOff) {
+			~status = \idle;
+			~countOffRoutine.stop;
+			currentEnvironment.changed(\stop);
+			currentEnvironment.changed(\countoff, nil);
+		} {
+			~sections[~currentSection].stop/*(nil, manualStop)*/;
+			~sections[~currentSection].removeDependant(currentEnvironment);
+				// must force manual stop for last section at end of piece
+				// but this didn't work
+			if(lastSection ? false) { ~sections.last.stop(nil, true) };
+			~status = \idle;
+			~currentSection = ~startingSection;
+			currentEnvironment.changed(\stop);
+			currentEnvironment.changed(\section, ~currentSection);
+			~savedCmds = nil;
+			~nextSectionToPlay = nil;
+			// (~currentSection+1).debug("stop is calling loadResources for");
+			~loadResources.(~currentSection+1);
+			~sectionRoutine.stop;
+			~sectionRoutine = nil;
+		};
+// "<< sectionSequencer:stop".debug;
 	};
 	~update = { |obj, what, args|
 		var	section;
