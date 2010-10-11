@@ -515,8 +515,14 @@ numCols: 8,
 env: Env.adsr(1, 0.4, 0.8, 1.2, curve: -2),
 fenv: Env.one,
 graphInsert: nil,
+makeTempAmps: {
+	{ |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
+},
+randomizeAmps: { |amps|
+	amps + ({ 0.12.rand2 } ! amps.size)
+},
 make: { |name|
-	var	tempAmps = { |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows,
+	var	tempAmps = ~makeTempAmps.(),
 		out;
 
 	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
@@ -538,7 +544,7 @@ make: { |name|
 		~bufs.do({ |buf, i|
 			var	amps = tempAmps[i div: ~numCols];
 0.06.wait;
-			buf.sine1(amps + ({ 0.12.rand2 } ! amps.size))
+			buf.sine1(~randomizeAmps.(amps, i))
 		});
 "done generating buffers".debug;
 	};

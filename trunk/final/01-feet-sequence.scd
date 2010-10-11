@@ -208,6 +208,7 @@
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					0.05,
 					{ BP(\st).removeAutoRun; 0 },
 					loopCmd: (repeats: 3,
 						cmds: [
@@ -372,6 +373,7 @@
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					0.05,
 					{ BP(\st).removeAutoRun; 0 },
 					loopCmd: (
 						repeats: 3,
@@ -605,6 +607,7 @@
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					0.05,
 					{	var	numChords = rrand(2, 4);
 						BP(\st).removeAutoRun;  // maybe already gone
 						PR(\bpCmd).copy.putAll((name: \fall, prepareBP: { |bp|
@@ -692,7 +695,7 @@
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					0.1,
+					0.05,
 					{	var	snarePlayerStream, seq = currentEnvironment; // ~sequencer;
 						BP(\st).removeAutoRun;
 						BP(\st).use {
@@ -732,7 +735,7 @@
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					0.1,
+					0.05,
 					{ BP(\st).addAutoRun; 0 },
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,

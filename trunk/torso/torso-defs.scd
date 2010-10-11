@@ -591,3 +591,107 @@ make: { |name|
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\bellfx);
+
+
+
+// shimmerpad, but not spatialized - leave that to innermod fx
+
+(keys: #[master, glrvbmc, lcrvbmc],
+numRows: 8,
+numCols: 8,
+env: Env.adsr(1, 0.4, 0.8, 1.2, curve: -2),
+fenv: Env.one,
+graphInsert: nil,
+makeTempAmps: {
+	{ |i| Array.squareAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
+},
+randomizeAmps: { |amps|
+	var	indices = (0 .. amps.size-1).scramble.keep(max(1, amps.size div: 3));
+	amps = amps.copy;
+	indices.do { |i| amps[i] = amps[i] + 0.12.rand2 };
+	amps
+},
+bufModFunc: { Lag.kr(NamedControl.kr(\bufmod, 0), 0.08) },
+make: { |name|
+	var	tempAmps = ~makeTempAmps.(),
+		out;
+
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master/*, completionFunc: { |chan|
+		var	patch = chan.playfx(Instr("busfx.chorus2"), [0, 1, 2, 3, 0.006957213735427, 0.1708276390401, 0.0034747717625074, 1.1689647098094, 0.3]);
+		patch.doWhenPlaying({
+			patch.synth.moveToTail(chan.effectgroup);
+		});
+		// EQ?
+	}*/);
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\receivesSignalFrom, ~target);
+	};
+
+		// generate a matrix of buffers
+		// if numCols is 8, 0-7 have the most partials, 8-15 have fewer, etc.
+		// each column is randomized differently for more animation in higher partials
+	~bufs = Buffer.allocConsecutive(~numRows * ~numCols, s, 2048, 1);
+	fork {
+		~bufs.do({ |buf, i|
+			var	amps = tempAmps[i div: ~numCols];
+0.06.wait;
+			buf.sine1(~randomizeAmps.(amps, i))
+		});
+"done generating buffers".debug;
+	};
+
+	WrapInstr([\osc2, \vosc3matrix], { arg freq, gate, bufbase, bufmod, env, vsens, detune,
+		ffreq, rq, fenv, fenvsens = 1,
+		numrows, numcols, basefreq, topfreq,
+		attackTimeScale, decayTimeScale;
+		var	sig1, sig2, amp, buf;
+		var	baselog = log2(basefreq),
+			freqmap = ((log2(freq) - baselog) * (numrows / (log2(topfreq) - baselog)))
+				.clip(0, numrows - 2.001),
+			fmapfloor = freqmap.floor,
+			fmapfrac = freqmap - fmapfloor,
+			detunedown = freq/detune,
+			detuneup = freq*detune,
+			// env timescale handling: [0] is filter eg, [1] is amp
+			envs = LocalIn.kr(2),
+			eg_test = envs.collect { |eg| Select.kr(Impulse.kr(0), [eg, 0]) },
+			// once envelope starts going down, attack phase is over
+			hit1 = PulseCount.kr(HPZ1.kr(eg_test) < 0) > 0,
+			timeScales = Select.kr(hit1, [attackTimeScale, decayTimeScale]);
+		amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate);
+		buf = bufbase + (fmapfloor * numcols) + bufmod;
+		#sig1, sig2 = VOsc3.ar([buf, buf+numcols], detunedown, freq, detuneup);
+		eg_test = [fenv, env].collect { |e, i|
+			EnvGen.kr(e, gate, timeScale: timeScales[i], doneAction: 2 * i);
+		};
+		LocalOut.kr(eg_test);
+		ffreq = (ffreq * Sensitivity.kr(1, eg_test[0], fenvsens)).clip(20, 20000);
+		RLPF.ar(XFade2.ar(sig1, sig2, fmapfrac.madd(2, -1), amp),
+			ffreq, rq, mul: eg_test[1]);
+	}, [\freq, \amp, #[0, 1000, \linear, 1, 0], #[0, 20], EnvSpec(Env.adsr), #[0, 1], #[0.9, 1.1, \linear, 0, 1], \freq, #[1, 0.001], EnvSpec(Env.one), nil, #[0, 20, \lin, 1, 0], #[0, 20, \lin, 1, 0], \freq, \freq, #[0.01, 10, \exp, 0, 1], #[0.01, 10, \exp, 0, 1]]);
+
+	~defname = (name ++ "def").asSymbol;
+	SynthDef(~defname, { |pan, finalAmp = 1, freq = 440, freqlag = 0, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1, out|
+		var	sig = WrapInstr("osc2.vosc3matrix").valueArray([
+			Lag.kr(freq, freqlag), gate,
+			~bufs[0].bufnum,  // bufbase
+			~bufModFunc,
+			~env,
+			vsens, /*detune:*/ 1.003,
+			ffreq, rq, ~fenv, fenvsens,
+			~numRows, ~numCols,
+			/*basefreq:*/ 48.midicps, /*topfreq:*/ (11*12).midicps,
+			attackTimeScale, decayTimeScale
+		]);
+		~graphInsert !? { sig = ~graphInsert.(sig) };
+		Out.ar(out, Pan2.ar(sig, pan, finalAmp))
+	}).add;
+
+	out = Voicer(25, ~defname, target: ~target);
+	
+	out.mapGlobal(\ffreq, nil, 14000, \freq);
+	out.mapGlobal(\rq, nil, 1.0, \myrq);
+	// out.mapGlobal(\fenvsens, nil, 1.0, #[0.1, 15, \exp]);
+	
+	out
+}, free: { [~target, ~bufs].free }, type: \voicer) => Fact(\modpad);

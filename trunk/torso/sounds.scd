@@ -248,7 +248,7 @@ make: { |name|
 				* (numbufs - 1)).clip(0, numbufs - 1.001);
 		WrapInstr.wrap([\osc2, \vosc3], [newfreq, gate, bufbase, freqmap]);
 	}, [\freq, [0, 1000, \linear, 1, 0], [0, 20, \lin, 1, 0], \freq, \freq, NoLagControlSpec(0, 1), #[0.5, 2, \exp, 0, 1]]);
-	
+
 	WrapInstr("osc2.vosc3mapfiltenv", { |gate = 1, ffreq, rq, fenv, fenv_sens, fenv_vsens, fenv_tscale = 1, pan = 0|
 		var	sig = WrapInstr.wrap("osc2.vosc3map2", (nil ! 5) ++ [gate]),
 			glatch = Latch.kr(gate, gate),
@@ -527,7 +527,7 @@ WrapInstr("osc2.fm2carporta", { arg freq, freqlag, gate, car_env, mod_env, mod_l
 	var sig, mod, car_amp, mod_amp;
 	freq = Lag.kr(freq, freqlag);
 
-	// stolen from arms: 
+	// stolen from arms:
 	car_eg = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]);
 		// once envelope starts going down, attack phase is over
 	hit1 = PulseCount.kr(HPZ1.kr(car_eg) < 0) > 0;
@@ -571,7 +571,7 @@ Fact(\armsChordVC).chuck(VC(\tmel), nil, (
 	defaultDetune: 2.234,
 	car_amps: Array.squareAmps(5),
 	mod_amps: Array.sawtoothAmps(5), //#[1],
-	car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),            
+	car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),
 	mod_env: Env.adsr(0.01, 2.5, 0.75, 1, curve: -2.5),
 	keyScale: 0.3669,
 	defaultCarVs: 0.145,
@@ -649,7 +649,7 @@ PR(\abstractProcess).clone {
 	~continuous_ = { |bool = false|
 		~continuous = ~alwaysReset = bool;
 		currentEnvironment
-	};		
+	};
 
 	~prep = {
 		~event.proto_(topEnvironment[\rvbEvent].proto.copy.putAll((distNear: 5, distFar: 50)));
@@ -804,7 +804,7 @@ PR(\abstractProcess).clone {
 		~makeStreams.(true);
 		~makeRewriters.();
 	};
-		
+
 } => PR(\torsoMel);
 )
 
@@ -1193,6 +1193,21 @@ Instr("busfx.innermod1", { | /*bus,*/ inbus, numChan = 1,
 	(remainder * remainderMix) + modsig
 }, [/*\audiobus,*/ \audiobus, StaticSpec(1, 8, \lin, 1), StaticSpec(1, 20, \lin, 1), \freq, #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], #[-150, 150], nil, nil]);
 
+Instr("busfx.innermodring", { | /*bus,*/ inbus, numChan = 1,
+	numbands = 10, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1,
+	lowRing = 50, highRing = 500, modMix = 1, remainderMix = 0.5|
+	var	sig = In.ar(inbus, numChan).asArray,
+		lfnoises = LFDNoise3.kr(({ Rand(0.2, 12) } ! numbands) * speedMul),
+		bpfreqs = lfnoises.exprange(freq, freq*centerMul.clip(20, 20000)),
+		modsig = sig.collect { |chan| BPF.ar(chan, bpfreqs, rq) },
+		modsigsum = modsig.flop.sum,
+		remainder = sig - modsigsum,
+		fshifts = lfnoises.scramble.linexp(-1, 1, lowRing, highRing),
+		modded = modsig.collect { |chan| (chan * SinOsc.ar(fshifts)).sum };
+		modsig = XFade2.ar(modsigsum, modded, modMix.madd(2, -1));
+	(remainder * remainderMix) + modsig
+}, [/*\audiobus,*/ \audiobus, StaticSpec(1, 8, \lin, 1), StaticSpec(1, 20, \lin, 1), \freq, #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], \freq, \freq, nil, nil]);
+
 
 Instr("busfx.innermod1pan", { | /*bus,*/ inbus, numChan = 1,
 	numbands = 10, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1,
@@ -1226,6 +1241,9 @@ Instr("busfx.innermod1").listArgs;
 
 d = Patch("busfx.innermod1", [/*nil,*/ nil, 2, 4]/*, outClass: ReplaceOut*/).asSynthDef;
 d.add;
+
+e = Patch("busfx.innermodring", [/*nil,*/ nil, 2, 4]/*, outClass: ReplaceOut*/).asSynthDef;
+e.add;
 
 Error.debug = true;
 Error.debug = false;
@@ -1269,6 +1287,21 @@ MixerChannel.servers[s].keys
 s.audioBusAllocator.free(26);
 
 
+#[rq, speedMul, fshift].collectIndicesFromArray(Instr("busfx.innermod1").argNames).do { |i|
+	var	spec = Instr("busfx.innermod1").specs[i];
+	GenericGlobalControl(Instr("busfx.innermod1").argNames[i], nil,
+		spec.default, spec) => VP(0);
+};
+
+VP(1).v.controlProxies.do({ |gcp| gcp.gc.free });
+
+#[rq, speedMul, highRing, modMix].collectIndicesFromArray(Instr("busfx.innermodring").argNames).do { |i|
+	var	spec = Instr("busfx.innermodring").specs[i];
+	GenericGlobalControl(Instr("busfx.innermodring").argNames[i], nil,
+		spec.default, spec) => VP(1);
+};
+
+
 p = Pwhile1({ |ev, next| next.delta > 0.05 }, PR(\psetp2).copy.prep(
 	Pbind(
 		\top, Pvbrown(40, 52, Pwhite(1, 3, inf), inf),
@@ -1277,12 +1310,16 @@ p = Pwhile1({ |ev, next| next.delta > 0.05 }, PR(\psetp2).copy.prep(
 		\bufbase, VC(\wtp).env.wt.first.first.bufnum,
 		\autoFreeIfNoNode, false,
 		\addAction, \addToHead,
-		\lpcEv, (
-			instrument: d.name,
-			remainderMix: 0.25,
-			fshift: 140,
-			// pan: -0.5,
-			killNode: true
+		\lpcEv, Pbind(
+			\instrument, e.name, //d.name,
+			\remainderMix, 0.25,
+			// fshift, Pwhite(0.0, 80.0, inf),
+			// rq, Pexprand(0.02, 0.12, inf),
+			// #[rq, speedMul, fshift], VP(0).v.controlProxies.select({ |gc| gc.gc.notNil })
+			// 	.collect({ |gcp| gcp.gc.asMap }),
+			#[rq, speedMul, highRing, modMix], VP(1).v.controlProxies.select({ |gc| gc.gc.notNil })
+				.collect({ |gcp| gcp.gc.asMap }),
+			\killNode, true
 		)
 	),
 	Pseq([
@@ -1330,10 +1367,345 @@ q.stop;
 
 q.inspect
 
+
+
+Fact(\shimmerpad).chuck(VC(\shp), nil, (
+	makeTempAmps: {
+		{ |i| Array.squareAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
+	},
+	// randomizeAmps: { |amps, i|
+	// 	var	col = (i % ~numCols).linlin(0, ~numCols-1, 0.25, 0.75),  // variation #
+	// 		env = Env(#[0, 0, 0.2, 0, 0], [col - 0.2, 0.2, 0.2, 0.8 - col], \sin);
+	// 	amps + env.discretize(amps.size)
+	// },
+	randomizeAmps: { |amps|
+		var	indices = (0 .. amps.size-1).scramble.keep(max(1, amps.size div: 3));
+		amps = amps.copy;
+		indices.do { |i| amps[i] = amps[i] + 0.12.rand2 };
+		amps
+	},
+	bufModFunc: { Lag.kr(NamedControl.kr(\bufmod, 0), 0.08) }
+));
+
+VC(\shp).v.mapGlobal(\bufmod, nil, 0, #[0, 6.999]);
+VC(\shp).v.mapGlobal(\finalAmp, nil, 0.4, \amp);
+
+VC(\shp).v.globalControls[\bufmod].watch.automate({ LFDNoise1.kr(3.5).range(0, 6.999) });
+
+VC(\shp).unmapGlobal(\bufmod);
+
+k = VoicerMIDISocket(0, VP(0).v);
+
+Instr("busfx.chorus").func.postcs
+
+Fact(\modpad).chuck(VC(\shp), nil, (
+	graphInsert: { |sig|
+		var	ph_diff = NamedControl.ir(\ph_diff, 0.9),
+			depth = NamedControl.ir(\chorDepth, 0.003),
+			predelay = NamedControl.ir(\chorPredelay, 0.004),
+			speed = NamedControl.kr(\chorSpeed, 0.1),
+			wet = NamedControl.kr(\chorMix, 0.5),
+			dly;
+		dly = sig.asArray.collect { |ch, i|
+			DelayC.ar(ch, depth + predelay, SinOsc.kr(speed, ph_diff * i, depth, predelay));
+		};
+		sig = XFade2.ar(sig, dly, wet.madd(2, -1));
+		if(sig.size == 1) { sig[0] } { sig }
+	}
+));
+SynthDescLib.at(VC(\shp).v.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+
+
+VC(\shp).v.mapGlobal(\bufmod, nil, 0, #[0, 6.999]);
+VC(\shp).v.mapGlobal(\finalAmp, nil, 0.2, \amp);
+
+VC(\shp).v.globalControls[\bufmod].watch.automate({ LFDNoise1.kr(3.5).range(0, 6.999) });
+VC(\shp).v.globalControls[\bufmod].stopWatching.stopAuto;
+
+VC(\shp).trace;
+
+
+\addRvbOut.eval(\innermod1, { |inbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0|
+	var	sig = Instr("busfx.innermod1").valueArray([inbus, 2, 4, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
+	Balance2.ar(sig[0], sig[1], pan) // Pan2.ar(sig, pan)
+}).add;
+
+#[rq, speedMul, fshift].collectIndicesFromArray(Instr("busfx.innermod1").argNames).do { |i|
+	var	spec = Instr("busfx.innermod1").specs[i];
+	GenericGlobalControl(Instr("busfx.innermod1").argNames[i], nil,
+		spec.default, spec) => VP(2);
+};
+GenericGlobalControl(\distance, nil, 5, #[5, 20]) => VP(2);
+
+a = Bus.audio(s, 2);
+VC(\shp).v.nodes[0].bus
+VC(\shp).v.nodes.do { |n| n.bus = a };
+
+z = VC(\shp).env.target.playfx(\innermod1, [
+	distance: VP(2).v.controlProxies[3].gc.asMap,
+	distFar: 20,
+	glrvbout: ~cRvbMc.inbus.index,
+	lcrvbout: ~lcrvbmc.inbus.index,
+	glrvbamt: 0.1,
+	lcrvbamt: 0.1,
+	inbus: a,
+	rq: VP(2).controlProxies[0].gc.asMap,
+	speedMul: VP(2).controlProxies[1].gc.asMap,
+	fshift: VP(2).controlProxies[2].gc.asMap,
+	distance: VP(2).controlProxies[3].gc.asMap
+]);
+
+z.trace;
+z.free;
+
+k.noteOnArgsPat = Pbind(
+	\attackTimeScale, Pkey(\velocity).linlin(0, 127, 5, 0.5),
+	\decayTimeScale, Pkey(\attackTimeScale)
+);
+
+
+(
+// IMPORTANT: pass in [~glrvbmc, ~lcrvbmc] as chuck parms
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayNotify);
+	~alwaysReset = true;  // for fx
+
+	~gate = Pexprand(0.08, 0.2, inf);
+	~attackTimeScale = Pkey(\gate).linlin(0.01, 1.0, 5, 0.5);
+	~decayTimeScale = Pkey(\attackTimeScale);
+	~mode = Pstutter(
+		Pwhite(5, 12, inf),
+		Ppatlace([\ab0, Pxrand(Mode.keys.asArray.select { |key| key.asString.last == $0 }, inf)],
+			inf)
+	);
+	~degree = Pvbrown(21, 33, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf)
+	/*+ #[0, 7]*/ + Prand(#[-7, 0], inf);
+	~chordDegree = Pvbrown(35, 49, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf, { rrand(42, 49) })
+	- Pxrand(#[
+		[0],
+		[0, -1],
+		[0, 1, 6],
+		[0, 2],
+		[0, 2, 3],
+		[0, 4, 5]
+	], inf);
+	~delta = Pwhite(15.0, 25.0, inf);
+	~sustain = Pkey(\delta) * Pwhite(0.6, 0.8, inf);
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master]);
+		[~glrvbmc, ~lcrvbmc].do { |mc|
+			mc.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~sideBus = Bus.audio(s, 2);
+		~event.put(\chan, nil).put(\target, ~chan.synthgroup).put(\bus, ~sideBus.index);
+		~rq = GenericGlobalControl(\rq, nil, 0.04, #[2, 0.01, \exp]);
+		~speedMul = GenericGlobalControl(\speedMul, nil, 0.1, #[0.01, 2, \exp]);
+		~fshift = GenericGlobalControl(\fshift, nil, 0, #[-120, 120]);
+		// guarantee consecutive buses for distance and pan
+		~gcbuspair = Bus.control(s, 2);
+		~distance = GenericGlobalControl(\distance, ~gcbuspair.index.asBus(\control, 1, s), 17, #[5, 20]);
+		~pan = GenericGlobalControl(\pan, (~gcbuspair.index + 1).asBus(\control, 1, s), 0, \bipolar);
+		~nodes = IdentitySet.new;
+	};
+
+	~useGui = { |vpi|
+		#[rq, speedMul, fshift, distance].do { |key|
+			key.envirGet => VP(vpi);
+		}
+	};
+
+	~freeCleanup = {
+		[~chan, ~sideBus, ~rq, ~speedMul, ~fshift, ~distance, ~pan].free;
+	};
+
+	~preparePlay = {
+		~fxSynth ?? {
+			~fxSynth = ~chan.playfx(\innermod1, [
+				distance: ~distance,
+				pan: ~pan,
+				distFar: 20,
+				glrvbout: ~glrvbmc.inbus.index,
+				lcrvbout: ~lcrvbmc.inbus.index,
+				glrvbamt: 0.1,
+				lcrvbamt: 0.1,
+				inbus: ~sideBus,
+				rq: ~rq,
+				speedMul: ~speedMul,
+				fshift: ~fshift
+			]);
+			~event[\voicer].globalControls[\bufmod]
+				.watch
+				.automate { LFDNoise1.kr(3.5).range(0, 6.999) };
+			~distance.automate {
+				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
+					angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
+				[(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
+					cos(angle) * radius]
+			};
+		}
+	};
+
+	~recvEventNotify = { |node|
+		var	self = currentEnvironment,
+			endFunc = { |obj, what|
+				if(what == \n_end) {
+					self.use {
+						obj.removeDependant(endFunc);
+						~nodes.remove(obj);
+						if(~nodes.isEmpty and: { ~isPlaying.not and: { ~fxSynth.notNil } }) {
+							~fxSynth.free;
+							~fxSynth = nil;
+							~event[\voicer].globalControls[\bufmod].stopWatching.stopAuto;
+							~distance.stopAuto;
+						};
+					};
+				};
+			};
+		node.do { |node|
+			~nodes.add(node);
+			node.addDependant(endFunc);
+			NodeWatcher.register(node);
+		};
+	};
+
+	~asPattern = {
+		Pbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\gate, BPStream(\gate),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree),
+			\freq, Pfunc { |ev| ev[\mode].asMode.cps(ev[\degree]) },
+			\ffreq, ~event[\voicer].globalControls[\ffreq].asMap,
+			\rq, ~event[\voicer].globalControls[\rq].asMap,
+			\finalAmp, ~event[\voicer].globalControls[\finalAmp].asMap,
+			\bufmod, ~event[\voicer].globalControls[\bufmod].asMap,
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain)
+		)
+	};
+
+	~bindVoicer = { |vc|
+		SynthDescLib.at(vc.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
+	};
+} => PR(\torsoTones);
+)
+
+BP(\tt).free;
+PR(\torsoTones).chuck(BP(\tt), nil, (
+	glrvbmc: ~cRvbMc,
+	lcrvbmc: ~lcrvbmc
+));
+VC(\shp) => BP(\tt);
+0 => BP(\tt);
+
+p = BP(\tt);
+p => MT(1); p => VP(1);
+
+p.chan.outbus = ~master;
+
+p.fxSynth.trace;
+
+p.degreeStream.next
+
+p.degree = Pvbrown(35, 49, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf, { rrand(42, 49) })
+	- Pxrand(#[
+		[0],
+		[0, -1],
+		[0, 1, 6],
+		[0, 2],
+		[0, 2, 3],
+		[0, 4, 5]
+	], inf);
+
+p.degree = Pvbrown(21, 33, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf)
+/*+ #[0, 7]*/ + Prand(#[-7, 0], inf);
+
+p.distance.autoSynth.trace
+
+PeakMonitor(~master);
+
+// speedMul = 0.07 with large fshift is nice
+
+p.sustain = 
+
+
 /**** TODO Stephen's solo [0/2] ****/
 /***** TODO Hopping movement *****/
 /***** TODO Arm raising *****/
 /**** TODO Energy exchanges ****/
+
+// didn't wanna do this but...
+	{ |name, ugenFunc, metadata, rates|
+		var	findCtl = { |cname|
+			block { |break|
+				UGen.buildSynthDef.children.do { |unit|
+					if(unit.isKindOf(Control)) {
+						unit.channels.do { |out|
+							if(out.name == cname) { break.(out) }
+						}
+					}
+				};
+				nil
+			}
+		};
+		SynthDef(name, { |distance1 = 5, distance2 = 5, distNear = 5, distFar = 14,
+			glrvbout, lcrvbout, glrvbamt = 0.075, lcrvbamt = 0.035,
+			attNearFreq = 9000, attFarFreq = 3000,
+			attNearDb = -5, attFarDb = -18,
+			attNearRs = 2, attFarRs = 2,
+			moveTime = 1|
+			var result = SynthDef.wrap(ugenFunc, rates, [moveTime]), out, pan, outctl, distance;
+			// don't add a new \pan control if the function already made one
+			if((pan = findCtl.(\pan)).isNil) {
+				pan = NamedControl(\pan, 0);
+			};
+			if((outctl = findCtl.(\outbus)).isNil and: { (outctl = findCtl.(\out)).isNil }) {
+	//			"make out namedcontrol".debug;
+				outctl = NamedControl(\out, 0);
+			};
+			if(result.rate != \audio) {
+				// not audio rate, look for Out unit
+				// (Out.ar returns 0.0, which is scalar)
+				out = UGen.buildSynthDef.children.detect(_.writesToBus);
+				if(out.notNil) {
+					result = out.inputs[out.inputs.size - out.numAudioChannels .. ];
+					UGen.buildSynthDef.children.remove(out);
+				} {
+					Error("Result of UGen func is not audio rate and has no Out unit").throw;
+				};
+			};
+	
+			distance = Line.kr(distance1, distance2, moveTime).clip(distNear, distFar);
+			result = result * distNear;
+			Out.ar(outctl, result / distance);
+	
+	//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
+			result = BHiShelf.ar(result,
+				distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
+				distance.linlin(distNear, distFar, attNearRs, attFarRs),
+				distance.linlin(distNear, distFar, attNearDb, attFarDb)
+			);
+			distance = distance.sqrt;
+			Out.ar(glrvbout, result * glrvbamt / distance);
+			Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
+		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
+	} => Func(\addMovingRvbOut);
+
+
+\addMovingRvbOut.eval(\innermod1Mv, { |moveTime = 1, inbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0, pan2 = 0|
+	var	sig = Instr("busfx.innermod1").valueArray([inbus, 2, 4, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
+	pan = Line.kr(pan, pan2, moveTime);
+	Balance2.ar(sig[0], sig[1], pan) // Pan2.ar(sig, pan)
+}).add;
+
+// need sound with "zoomier" envelope than VC(\shp)
+
+
+
 /**** TODO Rework past inversion material ****/
 /**** TODO Poses/changing places ****/
 /**** TODO Ilana's solo - probably mostly inner-modulation sounds ****/
