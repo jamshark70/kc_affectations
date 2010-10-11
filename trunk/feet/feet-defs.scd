@@ -141,7 +141,7 @@ PR(\abstractProcess).clone {
 			\upOrDownFix, BPStream(\upOrDownFix),
 			\freq, Pseq([
 				#[],	// rest
-				Pfin(2, Pkey(\target) + (Pkey(\interval) * Pkey(\upOrDownFix)))
+				Pfinval(2, Pkey(\target) + (Pkey(\interval) * Pkey(\upOrDownFix)))
 			], inf),
 			\durArray, Pif(
 				Pfunc { |ev| ~resetTime.isNil or: { (~resetTime - thisThread.beats) >= ~minBeforeReset } },
@@ -233,7 +233,7 @@ make: { |name|
 		mnote: Pkey(\note).asFloat,
 		startNote: Penvir((),
 			Pseq([
-				Pfin(1, Pkey(\mnote)).collect { |note| ~startNote = note },
+				Pfinval(1, Pkey(\mnote)).collect { |note| ~startNote = note },
 				Pfunc { |ev|
 					~startNote <!! (~startNote = ev[\note].asFloat)
 				}
@@ -950,7 +950,7 @@ PR(\abstractProcess).clone {
 			// we do 12-24 forward/backward movements (to repeat or bounce between notes)
 			// then a pair of forward moves to get new pitches
 			Pseq([
-				Pfin({ rrand(12, 24) },
+				Pfinval({ rrand(12, 24) },
 					Pswitch1([Pseq(#[1, -1], inf), 0], Pseq([0, Prand(#[0, 1], inf)], 1))),
 				1, 1, // choose two new pitches
 			], inf),
@@ -1752,7 +1752,7 @@ make: { |name|
 		amp: Pindex(Pfunc { |ev|
 			var	early = ev[\early] ?? { ev[\parms][\early] ?? { ~early } };
 			~peaks[(early <= 0).binaryValue]
-		}, Pfin(1, Pkey(\pt)), inf).reciprocal, //.trace(prefix: "amp: "),
+		}, Pfinval(1, Pkey(\pt)), inf).reciprocal, //.trace(prefix: "amp: "),
 		numEv: Pwhite(5, 12, inf),
 		gDelta: Pwhite(0.5, 2.5, inf),
 		distNear: 5,
@@ -2045,23 +2045,23 @@ make: { |name|
 					\start, ~start,
 					\startFrame, Pkey(\start) / ~buffers[0].numFrames * ~numPvFrames,
 					#[pan, distance], Pseq([
-						Pfin(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
+						Pfinval(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
 						[#[-1, 0, 1], ~distNear]
 					]),
 					\delta, (BPStream(\slowDelta) * Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7),
 						parms[\numEv])) ++ 0.4,
 					\rate, Pseq([
-						Pfin(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
+						Pfinval(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
 						Pwhite(0.04, 0.1, 1)
 					]),
 					\time, Pseq([
-						Pfin(parms[\numEv] /* - 1 */, Pkey(\delta)),
+						Pfinval(parms[\numEv] /* - 1 */, Pkey(\delta)),
 						Pkey(\delta) / Pkey(\rate)
 					]),
 					\amp, BPStream(\amp) * -4.dbamp,
 					\origShiftS, BPStream(\slowShift).clump(3),
 					\shiftS, Pkey(\origShiftS) + Pseq([
-						Pfin(parms[\numEv] /* - 1 */, 0),
+						Pfinval(parms[\numEv] /* - 1 */, 0),
 						Pwhite(3, 9, 1)
 					]),
 					\shiftE, Pkey(\origShiftS)
@@ -2240,7 +2240,7 @@ make: { |name|
 					n2 = ((n - n1) * 0.5).trunc,
 					adder = Pwrand(#[0, 1, 2, 3], #[1.5, 2, 2, 1].normalizeSum, n2);
 					if(i >= 4) {
-						adder = Pfin(n2, Ppatlace([adder, 0, 0], inf))
+						adder = Pfinval(n2, Ppatlace([adder, 0, 0], inf))
 					};
 					Pseries(ev[\notes][i], Pseq([
 						Pn(0, n1),
@@ -2278,7 +2278,7 @@ make: { |name|
 			(	gest: \klankMachine,
 				prob: 1,
 				excTime: 0.08,
-				newDelta: Pfin({ |ev| ev[\parms][\numEv] }, Pnsym(
+				newDelta: Pfinval({ |ev| ev[\parms][\numEv] }, Pnsym(
 					parms[\rhythms] ?? { Pfsm([
 						(0..7),
 						one: (1..8).dup(2).flat ++ #[0],
@@ -2341,7 +2341,7 @@ PR(\abstractProcess).clone {
 	~numNotes = Pwrand(#[2, 3], #[0.8, 0.2], inf);
 	// ~intervals = Pexprand(1, 6, inf).round;
 	~intervals = Pwrand((1..6), #[1, 3, 2, 2, 1, 1].normalizeSum, inf);
-	~degree = Pkey(\top) -.x Pseries(0, Plazy { |ev| Pfin(ev[\numNotes], ~intervals) }, inf)
+	~degree = Pkey(\top) -.x Pseries(0, Plazy { |ev| Pfinval(ev[\numNotes], ~intervals) }, inf)
 		.clump(Pkey(\numNotes));
 	~mode = \g;
 	~bufbase = Plazy { Prand(~bufBases, inf) };
