@@ -1695,7 +1695,7 @@ p.sustain =
 		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
 	} => Func(\addMovingRvbOut);
 
-
+// first graph-func arg must be moveTime
 \addMovingRvbOut.eval(\innermod1Mv, { |moveTime = 1, inbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0, pan2 = 0|
 	var	sig = Instr("busfx.innermod1").valueArray([inbus, 2, 4, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
 	pan = Line.kr(pan, pan2, moveTime);
@@ -1703,6 +1703,52 @@ p.sustain =
 }).add;
 
 // need sound with "zoomier" envelope than VC(\shp)
+
+b = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+
+x = Signal.fill(1024, { 1.0.rand2 });
+x.do { |a, i| x[i] = (a + x.wrapAt(i+1)) * 0.5 };
+x.plot
+b.sendCollection(x.asWavetable);
+
+a = m.play {
+	var	freq = LFDNoise1.kr(11, 10, 60);
+	COsc.ar(b, freq, 1);
+};
+
+Instr("cosc", { |bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1|
+	var	freq = LFDNoise1.kr(speed, width, center),
+	sig = COsc.ar(bufnum, freq, 1);
+	sig = sig + AllpassL.ar(sig, 0.5, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	BPF.ar(sig, ffreq, rq) ! 2;
+}, [\mybuf, #[2, 200, \exp], #[0.1, 80, \exp], #[0.1, 10, \exp], \freq, \myrq, #[0.001, 0.1, \exp], #[0.0001, 0.09, \exp], #[0.01, 1.0, \exp], #[0.0001, 0.1, \exp]]);
+
+a = n.play(Instr("cosc"), [b]); a.gui;
+
+a.free
+
+BP(\tt).use {
+	f = n.playfx(\innermod1, [
+		distance: ~distance,
+		pan: ~pan,
+		distFar: 20,
+		glrvbout: ~glrvbmc.inbus.index,
+		lcrvbout: ~lcrvbmc.inbus.index,
+		glrvbamt: 0.1,
+		lcrvbamt: 0.1,
+		inbus: ~sideBus,
+		rq: ~rq,
+		speedMul: ~speedMul,
+		fshift: ~fshift
+	]);
+};
+
+f.trace;
+f.free;
+
+// above, no good
+// try using voicer with freqlag for slides up/down
 
 
 
