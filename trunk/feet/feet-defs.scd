@@ -2141,7 +2141,7 @@ make: { |name|
 					\pan, sin(Pseries(0, Pseries.fromEndpoints(0.08, 0.33, parms[\numEv]), inf) * 2pi)
 					* #[-1, 1].choose,
 					\distance, Pseries.fromEndpoints(parms[\startY] ? 20, 5, parms[\numEv])
-				)
+				).trace
 			}
 		),
 
@@ -2300,14 +2300,14 @@ make: { |name|
 						Pseries.fromEndpoints(parms[\startAmp] ? 0.07, 1.0, parms[\numEv] ? 25)
 					} { 1 }
 				},
-				harm: (1, 3 .. 9),
+				harm: [(1, 3 .. 9)],
 				mainAmp: parms[\mainAmp] ? 0.15,
 				yEnds: #[18, 5],
 				numEv: parms[\numEv] ? 25,
 				start: ~pt.choose * 44100,
 				rate: 1.2, //Pexprand(0.6, 0.8, inf),
 				shapebuf: ~shapebuf,
-				chorusAmps: #[0.4, 0.4, 0.4],
+				chorusAmps: #[[0.4, 0.4, 0.4]],
 				glrvbamt: 0.25,
 				lcrvbamt: 0.14
 			)
@@ -2447,7 +2447,8 @@ PR(\abstractProcess).clone {
 	~klankfreq = Pexprand(700, 1100, inf);
 	~klanktimeMul = 0.05;
 	~klankkAmp = Pexprand(0.6, 1.0, inf);
-	~klankharm = (1, 3 .. 9);
+	// OMFG, the lack of []'s caused FIVE TIMES AS MANY SYNTHS as expected
+	~klankharm = [(1, 3 .. 9)];
 	~klankyEnds = #[5, 20];
 	~klanknumEv = Pwhite(9, 17, inf);
 	~klankstart = Plazy({ Prand(BP(~stepKey).pt, inf) * 44100 });
@@ -2535,9 +2536,9 @@ SynthDef(\krfall, { |outbus, low = 0.5, sustain = 1, proportion = 0.5, halfWidth
 		// use .override, or replace, for falling chords
 		fallLow: 1,
 		clickProb: true,
-		klanknumEv: Pwhite(18, 40, inf),
+		klanknumEv: Pwhite(12, 22, inf),
 		klanknewDelta: Pfunc({ |ev|
-			Pgeom.fromEndpoints(rrand(0.06, 0.08), rrand(0.22, 0.32), ev[\numEv])
+			Pgeom.fromEndpoints(rrand(0.09, 0.12), rrand(0.25, 0.32), ev[\numEv])
 			* Pexprand(0.75, 1.33, inf)
 		}),
 		klankfreq: Pfunc({ |ev|

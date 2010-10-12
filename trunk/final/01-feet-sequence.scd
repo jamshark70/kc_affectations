@@ -758,9 +758,10 @@
 									gest: \lauraslide,
 									notesKey: key,
 									ampAdjust: 0.15,
-									numEv: rrand(7, 12)
+									numEv: rrand(5, 8),
+									numNotesPat: 1
 								));
-								exprand(0.7, 1.25).wait  // waiting would be good here, (ahem)
+								rrand(0.9, 1.4).wait  // waiting would be good here, (ahem)
 							};
 						};
 						0
