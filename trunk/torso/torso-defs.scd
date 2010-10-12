@@ -695,3 +695,24 @@ make: { |name|
 	
 	out
 }, free: { [~target, ~bufs].free }, type: \voicer) => Fact(\modpad);
+
+
+
+SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+	amp = 1, moveTime = 1|
+	var	freq = LFDNoise1.kr(speed, width, center),
+	sig = COsc.ar(bufnum, freq, 1),
+	fenv = NamedControl.kr(\fenv, (0!24).overWrite(Env(#[2000, 2000], #[1]).asArray)),
+	ffreq = EnvGen.kr(fenv, timeScale: moveTime),
+	rqenv = NamedControl.kr(\rqenv, (0!24).overWrite(Env(#[0.35, 0.35], #[1]).asArray)),
+	rq = EnvGen.kr(rqenv, timeScale: moveTime),
+	ampenv = NamedControl.kr(\ampenv, (0!24).overWrite(Env.one.asArray)),
+	ampeg = EnvGen.kr(ampenv, timeScale: moveTime, doneAction: 2);
+	sig = BPF.ar(sig, ffreq, rq);
+	3.do {
+		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	};
+	Out.ar(outbus, (sig * amp * ampeg) ! 2)
+}).add;
+

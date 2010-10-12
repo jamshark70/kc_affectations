@@ -1630,7 +1630,7 @@ PeakMonitor(~master);
 
 // speedMul = 0.07 with large fshift is nice
 
-p.sustain = 
+p.sustain =
 
 
 /**** TODO Stephen's solo [0/2] ****/
@@ -1678,11 +1678,11 @@ p.sustain =
 					Error("Result of UGen func is not audio rate and has no Out unit").throw;
 				};
 			};
-	
+
 			distance = Line.kr(distance1, distance2, moveTime).clip(distNear, distFar);
 			result = result * distNear;
 			Out.ar(outctl, result / distance);
-	
+
 	//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
 			result = BHiShelf.ar(result,
 				distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
@@ -1721,7 +1721,7 @@ Instr("cosc", { |bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 
 	var	freq = LFDNoise1.kr(speed, width, center),
 	sig = COsc.ar(bufnum, freq, 1);
 	sig = BPF.ar(sig, ffreq, rq);
-	3.do { 
+	3.do {
 		sig = sig + AllpassL.ar(sig, 0.5, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
 	};
 	sig ! 2;
@@ -1757,8 +1757,225 @@ f.free;
 // above, no good - actually, it sounded like crap when accidentally played on laptop speakers!
 // much better on real speakers
 
+Error.debug = true;
+Error.debug = false;
 
 
+SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+	amp = 1, moveTime = 1|
+	var	freq = LFDNoise1.kr(speed, width, center),
+	sig = COsc.ar(bufnum, freq, 1),
+	fenv = NamedControl.kr(\fenv, (0!24).overWrite(Env(#[2000, 2000], #[1]).asArray)),
+	ffreq = EnvGen.kr(fenv, timeScale: moveTime),
+	rqenv = NamedControl.kr(\rqenv, (0!24).overWrite(Env(#[0.35, 0.35], #[1]).asArray)),
+	rq = EnvGen.kr(rqenv, timeScale: moveTime),
+	ampenv = NamedControl.kr(\ampenv, (0!24).overWrite(Env.one.asArray)),
+	ampeg = EnvGen.kr(ampenv, timeScale: moveTime, doneAction: 2);
+	sig = BPF.ar(sig, ffreq, rq);
+	3.do {
+		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	};
+	Out.ar(outbus, (sig * amp * ampeg) ! 2)
+}).add;
+
+// fricken hot
+a = n.play(\nrgxch, [bufnum: b, center: 30, speed: 8, chorDecay: 0.0001, amp: 0.8, moveTime: 1.5,
+	fenv: Env(#[0, 0.5, 1, 0.5, 0].linexp(0, 1, rrand(200, 400), rrand(1000, 3000)),
+		#[0.3, 0.1, 0.1, 0.5], #[5, -3, 3, -2.5]),
+	// rqenv: ,
+	ampenv: Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)
+]);
+
+BP(\tt).use {
+	var	moveTime = rrand(1.0, 4.0);
+	e = (
+		instrument: \nrgxch,
+		chan: n,
+		bufnum: b, center: 30, speed: 8, chorDecay: 0.0001, amp: 0.8,
+		moveTime: moveTime,
+		fenv: [Env(#[0, 0.5, 1, 0.5, 0].linexp(0, 1, rrand(200, 400), rrand(1000, 3000)),
+			#[0.3, 0.1, 0.1, 0.5], #[5, -3, 3, -2.5])],
+		// rqenv: ,
+		ampenv: [Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)],
+		amp: 10.dbamp,
+		lpcEv: (
+			instrument: \innermod1Mv,
+			distance1: 18,
+			distance2: 6,
+			pan: rrand(-1.0, -0.5),
+			pan2: rrand(0.5, 1.0),
+			distFar: 20,
+			glrvbout: ~glrvbmc.inbus.index,
+			lcrvbout: ~lcrvbmc.inbus.index,
+			// glrvbamt: 0.1,
+			// lcrvbamt: 0.1,
+			// inbus: ~sideBus,
+			rq: ~rq,
+			speedMul: ~speedMul,
+			fshift: ~fshift,
+			moveTime: moveTime,
+			killNode: true
+		)
+	).parent_(ProtoEvent(\polySynthBusLock).copy.parent);
+	e.play;
+};
+
+
+(1018..1028).do(s.sendMsg(\n_free, _));
+
+
+// PR(\abstractProcess).clone {
+// 	~event = (eventKey: \polySynthPlayer);
+
+// } => PR(\noiseDrone);
+
+(
+BP(\nd).free;
+PR(\basicSynthChooser).chuck(BP(\nd), nil, (
+	event: (eventKey: \singleSynthPlayer),
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\cRvbMc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+	userprep: {
+		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+		[~glrvbmc, ~lcrvbmc].do { |mc|
+			mc.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	},
+	userfree: {
+		~noisebuf.free;
+	},
+	delta: Pwhite(12.0, 20.0, inf),
+	sustain: Pkey(\delta) * Pwhite(1.4, 1.9, inf),
+	objects: { (
+		drone: (
+			def: \addRvbOut.eval(\nrgxdrone, SynthDescLib.at(\nrgxch).def.func),
+			args: [
+				bufnum: ~noisebuf,
+				center: 30,
+				speed: 8,
+				chorDecay: 0.0001,
+				moveTime: Pkey(\sustain),
+				amp: 8.dbamp,
+				fenv: Pfunc { Env(exprand(100, 180) ! 2, #[1]) },
+				rqenv: `Env(#[0.2, 0.2], #[1]),
+				ampenv: `Env(#[0, 1, 1, 0], #[0.25, 0.5, 0.25], #[3, 0, -3]),
+				distance: Pwhite(10.0, 20.0, inf)
+			]
+		)
+	) }
+));
+0 => BP(\nd);
+)
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+p = BP(\nd);
+p.dronerqenv = `Env(#[0.2, 0.2], #[1]);
+p.dronefenv = Pfunc { Env(exprand(100, 180) ! 2, #[1]) };
+p.droneamp = 8.dbamp;
+
+p.delta = Pwhite(12.0, 20.0, inf);
+
+p.xferfunc = atan((-4.0, -3.98 .. 4.0)).normalize;
+
+p.delta = Pwhite(0.0, 0.999, inf).trace.collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }.trace;
+
+p.sustain = Pkey(\delta) * Pwhite(2.2, 3.8, inf);
+
+PeakMonitor(p.chan);
+
+SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+	amp = 1, moveTime = 1|
+})
+
+
+(
+BP(\thr).free;
+PR(\basicSynthChooser).chuck(BP(\thr), nil, (
+	event: (eventKey: \polySynthBusLock),
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\cRvbMc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+	fxrq: 0.2,
+	fxspeedMul: 0.71,
+	fxfshift: 34.8,
+	delta: Pwhite(1.8, 4.0, inf),
+	sustain: Pwhite(1.0, 5.5, inf),
+	userprep: {
+		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+		[~glrvbmc, ~lcrvbmc].do { |mc|
+			mc.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	},
+	userfree: {
+		~noisebuf.free;
+	},
+	objects: { (
+		throw: (
+			def: \nrgxch,
+			args: [
+				bufnum: ~noisebuf,
+				center: 30, speed: 8, chorDecay: 0.0001, amp: 10.dbamp,
+				moveTime: Pkey(\sustain),
+				fLow: Pwhite(200, 400, inf),
+				fHi: Pwhite(1000, 3000, inf),
+				fenv: Pfunc({ |ev|
+					[Env(#[0, 0.5, 1, 0.5, 0].linexp(0, 1, ev[\fLow], ev[\fHi]),
+						#[0.3, 0.1, 0.1, 0.5], #[5, -3, 3, -2.5])]
+				}),
+				// rqenv: ,
+				ampenv: `[Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)],
+				lpcEv: Pbind(
+					\instrument, \innermod1Mv,
+					\distance1, Pwhite(15.0, 20.0, inf),
+					\distance2, Pkey(\distance1) / Pwhite(2.0, 3.0, inf),
+					\pan, Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf),
+					\pan2, Pwhite(0.5, 1.0, inf) * Pkey(\pan).sign.neg,
+					\distFar, 20,
+					// \glrvbout, ~glrvbmc.inbus.index,
+					// \lcrvbout, ~lcrvbmc.inbus.index,
+					\rq, BPStream(\fxrq),
+					\speedMul, BPStream(\fxspeedMul),
+					\fshift, BPStream(\fxfshift),
+					\killNode, true
+				)
+			]
+		)
+	) }
+));
+0 => BP(\thr);
+)
+
+p = BP(\thr);
+
+p.throwampenv = `[Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)];
+
+p.sustain = Pwhite(1.0, 1.5, inf);
+p.sustain = Pwhite(0.5, 2.0, inf);
+
+p.delta = Pswitch1([
+	Pwhite(2.5, 4.0, inf),
+	Pexprand(0.2, 0.9, inf)
+], Pwrand(#[0, 1], #[0.7, 0.3], inf));
+
+// p.sustain = min(Pkey(\delta) * Pwhite(0.9, 1.2, inf), Pwhite());
+p.sustain = Pexprand(0.7, 2.8, inf);
+
+o.do(_.remove);
+o = #['/n_go', '/n_end'].collect { |cmd|
+	OSCresponderNode(s.addr, cmd, { |t, r, m| m.postln }).add;
+};
+
+p.triggerOneEvent(0);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
 
 
 /**** TODO Rework past inversion material ****/
