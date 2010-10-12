@@ -434,6 +434,7 @@
 					// replaying does NOT resume them if autoRun == false
 					[	0.2,
 						bpCmd: (name: \st, shouldSync: false, prepareBP: { |bp|
+							bp.gest = Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf);
 							bp.autoRun = false;
 						})
 					],

@@ -258,7 +258,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		play: {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
-			~lock ?? { "lock event is making new lock".debug; ~lock = PR(~lockKey).copy.prep((
+			~lock ?? { ~lock = PR(~lockKey).copy.prep((
 				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \audio
 			)) };
 			~bus = ~lock.bus;

@@ -1720,11 +1720,18 @@ Instr("cosc", { |bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 
 	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1|
 	var	freq = LFDNoise1.kr(speed, width, center),
 	sig = COsc.ar(bufnum, freq, 1);
-	sig = sig + AllpassL.ar(sig, 0.5, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
-	BPF.ar(sig, ffreq, rq) ! 2;
+	sig = BPF.ar(sig, ffreq, rq);
+	3.do { 
+		sig = sig + AllpassL.ar(sig, 0.5, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	};
+	sig ! 2;
 }, [\mybuf, #[2, 200, \exp], #[0.1, 80, \exp], #[0.1, 10, \exp], \freq, \myrq, #[0.001, 0.1, \exp], #[0.0001, 0.09, \exp], #[0.01, 1.0, \exp], #[0.0001, 0.1, \exp]]);
 
 a = n.play(Instr("cosc"), [b]); a.gui;
+
+a = Patch("cosc", [b]).play(n.synthgroup, bus: SharedBus.newFrom(BP(\tt).sideBus)); a.gui
+
+a.synth.trace;
 
 a.free
 
@@ -1747,8 +1754,10 @@ BP(\tt).use {
 f.trace;
 f.free;
 
-// above, no good
-// try using voicer with freqlag for slides up/down
+// above, no good - actually, it sounded like crap when accidentally played on laptop speakers!
+// much better on real speakers
+
+
 
 
 
