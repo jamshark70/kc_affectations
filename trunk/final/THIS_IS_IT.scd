@@ -72,6 +72,11 @@ s.nextNodeID
 BP(\st).free;
 
 PeakMonitor(~master);
+PeakMonitor(~glrvbmc);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
 
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds;
 ~seq.sections[~seq.currentSection].currentIterator.activeCmds.do(_.listVars); ""

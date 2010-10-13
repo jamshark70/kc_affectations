@@ -90,14 +90,16 @@ PR(\penUtils).clone({
 		~view.drawFunc_(~drawFunc)
 			.canFocus_(false)
 			.mouseDownAction_(e { |view|
-				view.drawFunc_(~drawPressedFunc)
-					.refresh;
+				if(~enabled) {
+					view.drawFunc_(~drawPressedFunc).refresh;
+				};
 			})
 			.mouseUpAction_(e { |view, x, y, modifiers|
-				view.drawFunc_(~drawFunc)
-					.refresh;
-				if(~mouseCheckBounds.containsPoint(x@y)) {
-					~action.(view, x, y, modifiers);
+				if(~enabled) {
+					view.drawFunc_(~drawFunc).refresh;
+					if(~mouseCheckBounds.containsPoint(x@y)) {
+						~action.(view, x, y, modifiers);
+					};
 				};
 			})
 			.refresh;
@@ -110,7 +112,8 @@ PR(\penUtils).clone({
 	~thickness = 2;
 	~offset = 2;
 	~draw = { |bounds, pressed = false|
-		var	leftTopColor, rightBottomColor;
+		var	leftTopColor, rightBottomColor,
+			backColor = if(~enabled) { ~background } { ~background.blend(Color.white, 0.5) };
 		if(pressed) {
 			leftTopColor = Color.black;
 			rightBottomColor = Color.white;
@@ -118,9 +121,9 @@ PR(\penUtils).clone({
 			leftTopColor = Color.white;
 			rightBottomColor = Color.black;
 		};
-		GUI.pen.color_(~background)
+		GUI.pen.color_(backColor)
 			.fillRect(~drawBounds);
-		~border3d.(~drawBounds, ~thickness, ~background, leftTopColor, rightBottomColor);
+		~border3d.(~drawBounds, ~thickness, backColor, leftTopColor, rightBottomColor);
 		~drawContents.(bounds, pressed);
 	};
 	~drawContents = { |bounds, pressed|
@@ -132,6 +135,11 @@ PR(\penUtils).clone({
 		// +1, -1? Jury's out
 	~drawPressedFunc = { |view| ~draw.(~drawBounds.moveBy(~offset ? 1, ~offset ? 1), true) };
 	~remove = { ~view.remove };
+	~enabled = true;
+	~enabled_ = { |bool = true|
+		~enabled = bool;
+		~view.refresh;
+	};
 }) => PR(\userButton);
 
 PR(\userButton).clone({
@@ -180,12 +188,13 @@ PR(\userButton).clone({
 PR(\userButton).clone({
 	~arrowColor = Color.gray(0.3);
 	~drawContents = { |bounds, pressed|
-		var	halfwidth, midx;
+		var	halfwidth, midx,
+			arrowColor = if(~enabled) { ~arrowColor } { ~arrowColor.blend(Color.white, 0.5) };
 		bounds = bounds.insetBy(bounds.width * 0.2, bounds.height * 0.2);
 		halfwidth = bounds.width * 0.5;
 		midx = bounds.left + halfwidth;
-		~triangle.(bounds.copy.left_(midx).width_(halfwidth), ~arrowColor, true);
-		~triangle.(bounds.copy.width_(halfwidth), ~arrowColor, true);
+		~triangle.(bounds.copy.left_(midx).width_(halfwidth), arrowColor, true);
+		~triangle.(bounds.copy.width_(halfwidth), arrowColor, true);
 		GUI.pen.fillRect(Rect(bounds.left - (halfwidth*0.2), bounds.top, halfwidth*0.2, bounds.height));
 	};
 }) => PR(\gotoBeginningButton);
@@ -193,8 +202,9 @@ PR(\userButton).clone({
 PR(\userButton).clone({
 	~arrowColor = Color.gray(0.3);
 	~drawContents = { |bounds, pressed|
+		var arrowColor = if(~enabled) { ~arrowColor } { ~arrowColor.blend(Color.white, 0.5) };
 		bounds = bounds.insetBy(bounds.width * 0.2, bounds.height * 0.2);
-		~triangle.(bounds, ~arrowColor, true);
+		~triangle.(bounds, arrowColor, true);
 		GUI.pen.fillRect(Rect(bounds.left - (bounds.width*0.1), bounds.top,
 			bounds.width*0.1, bounds.height));
 	};
@@ -203,8 +213,9 @@ PR(\userButton).clone({
 PR(\userButton).clone({
 	~arrowColor = Color.gray(0.3);
 	~drawContents = { |bounds, pressed|
+		var arrowColor = if(~enabled) { ~arrowColor } { ~arrowColor.blend(Color.white, 0.5) };
 		bounds = bounds.insetBy(bounds.width * 0.2, bounds.height * 0.2);
-		~triangle.(bounds, ~arrowColor);
+		~triangle.(bounds, arrowColor);
 		GUI.pen.fillRect(Rect(bounds.right, bounds.top, bounds.width*0.1, bounds.height));
 	};
 }) => PR(\fwdOneSectionButton);
@@ -546,7 +557,9 @@ Proto({
 	~showPlaying = { |bool|
 		defer(e {
 			~playButton.currentState = bool.binaryValue;
-			~clearAllButton.enabled = bool.not;
+			[~clearAllButton, ~toStartButton, ~backSection, ~fwdSection].do { |button|
+				button.enabled = bool.not;
+			};
 		});
 	};
 	

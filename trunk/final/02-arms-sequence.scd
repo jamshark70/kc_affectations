@@ -164,7 +164,10 @@
 					bpCmd: Library.at(\diparms),
 					bpCmd: (id: \stack, name: \stack)
 				],
-				dur: \sync
+				dur: \trigger,  // or \sync
+				id: 505,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
 			), 1)
 		}
 	)),
@@ -176,7 +179,7 @@
 			\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
 				env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
 				fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
-			));
+			).putAll(Library.at(\rvbs)));
 			\chuckIf.eval(PR(\armsInv), BP, \ai);
 			BP(\ai).ampCtl.value = 0.045;
 			VC(\sp) => BP(\ai);
@@ -218,7 +221,7 @@
 					sig = HPF.ar(sig, 668);
 					sig = StaticEQ.eqFuncs[\hishelf].(sig, hishelf.k, hishelf.a0);
 				}
-			));
+			).putAll(Library.at(\rvbs)));
 			if(BP.exists(\am0).not) { Fact(\shivaBPs).makev(Library.at(\rvbs)) };
 			\chuckIf.eval(PR(\thinChords), BP, \tc);
 			BP(\tc).finalAmp = 0.2;
