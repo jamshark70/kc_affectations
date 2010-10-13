@@ -800,7 +800,7 @@ PR(\sectionSequencer).clone({
 		thisThread.clock.sched(0, ~sectionRoutine = Routine({
 			~status = \playing;
 			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
-				// ~savedCmds.debug("playing section % with saved cmds".format(~sections[~currentSection].name));
+				/*~savedCmds.*/debug("playing section %".format(~sections[~currentSection].name));
 				~sections[~currentSection].play(~savedCmds);
 				//"section sequencer: set savedCmds to nil".debug;
 				~savedCmds = nil;

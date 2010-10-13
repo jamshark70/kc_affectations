@@ -557,7 +557,7 @@ Proto({
 	~showPlaying = { |bool|
 		defer(e {
 			~playButton.currentState = bool.binaryValue;
-			[~clearAllButton, ~toStartButton, ~backSection, ~fwdSection].do { |button|
+			[~clearAllButton/*, ~toStartButton, ~backSection, ~fwdSection*/].do { |button|
 				button.enabled = bool.not;
 			};
 		});
