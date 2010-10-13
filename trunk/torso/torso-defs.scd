@@ -716,3 +716,584 @@ SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffre
 	Out.ar(outbus, (sig * amp * ampeg) ! 2)
 }).add;
 
+// didn't wanna do this but...
+{ |name, ugenFunc, metadata, rates|
+	var	findCtl = { |cname|
+		block { |break|
+			UGen.buildSynthDef.children.do { |unit|
+				if(unit.isKindOf(Control)) {
+					unit.channels.do { |out|
+						if(out.name == cname) { break.(out) }
+					}
+				}
+			};
+			nil
+		}
+	};
+	SynthDef(name, { |distance1 = 5, distance2 = 5, distNear = 5, distFar = 14,
+		glrvbout, lcrvbout, glrvbamt = 0.075, lcrvbamt = 0.035,
+		attNearFreq = 9000, attFarFreq = 3000,
+		attNearDb = -5, attFarDb = -18,
+		attNearRs = 2, attFarRs = 2,
+		moveTime = 1|
+		var result = SynthDef.wrap(ugenFunc, rates, [moveTime]), out, pan, outctl, distance;
+		// don't add a new \pan control if the function already made one
+		if((pan = findCtl.(\pan)).isNil) {
+			pan = NamedControl(\pan, 0);
+		};
+		if((outctl = findCtl.(\outbus)).isNil and: { (outctl = findCtl.(\out)).isNil }) {
+			//			"make out namedcontrol".debug;
+			outctl = NamedControl(\out, 0);
+		};
+		if(result.rate != \audio) {
+			// not audio rate, look for Out unit
+			// (Out.ar returns 0.0, which is scalar)
+			out = UGen.buildSynthDef.children.detect(_.writesToBus);
+			if(out.notNil) {
+				result = out.inputs[out.inputs.size - out.numAudioChannels .. ];
+				UGen.buildSynthDef.children.remove(out);
+			} {
+				Error("Result of UGen func is not audio rate and has no Out unit").throw;
+			};
+		};
+
+		distance = Line.kr(distance1, distance2, moveTime).clip(distNear, distFar);
+		result = result * distNear;
+		Out.ar(outctl, result / distance);
+
+		//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
+		result = BHiShelf.ar(result,
+			distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
+			distance.linlin(distNear, distFar, attNearRs, attFarRs),
+			distance.linlin(distNear, distFar, attNearDb, attFarDb)
+		);
+		distance = distance.sqrt;
+		Out.ar(glrvbout, result * glrvbamt / distance);
+		Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
+	}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
+} => Func(\addMovingRvbOut);
+
+Instr("busfx.innermod1", { | /*bus,*/ inbus, numChan = 1,
+	numbands = 10, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1,
+	fshift = 0, modMix = 1, remainderMix = 0.5|
+	var	sig = In.ar(inbus, numChan).asArray,
+		lfnoises = LFDNoise3.kr(({ Rand(0.2, 12) } ! numbands) * speedMul),
+		bpfreqs = lfnoises.exprange(freq, freq*centerMul.clip(20, 20000)),
+		modsig = sig.collect { |chan| BPF.ar(chan, bpfreqs, rq) },
+		modsigsum = modsig.flop.sum,
+		remainder = sig - modsigsum,
+		fshifts = lfnoises.scramble * fshift,
+		modded = modsig.collect { |chan| FreqShift.ar(chan, fshifts).sum };
+		modsig = XFade2.ar(modsigsum, modded, modMix.madd(2, -1));
+	(remainder * remainderMix) + modsig
+}, [/*\audiobus,*/ \audiobus, StaticSpec(1, 8, \lin, 1), StaticSpec(1, 20, \lin, 1), \freq, #[1, 50, \exp], #[2.0, 0.01, \exp], #[0.001, 2, \exp], #[-150, 150], nil, nil]);
+
+
+// non-moving
+\addRvbOut.eval(\innermod1, { |inbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0|
+	var	sig = Instr("busfx.innermod1").valueArray([inbus, 2, 4, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
+	Balance2.ar(sig[0], sig[1], pan) // Pan2.ar(sig, pan)
+}).add;
+
+
+// moving: first graph-func arg must be moveTime
+\addMovingRvbOut.eval(\innermod1Mv, { |moveTime = 1, inbus, freq = 261, centerMul = 25, rq = 0.04, speedMul = 1, fshift = 0, modMix = 1, remainderMix = 0.5, pan = 0, pan2 = 0|
+	var	sig = Instr("busfx.innermod1").valueArray([inbus, 2, 4, freq, centerMul, rq, speedMul, fshift, modMix, remainderMix]);
+	pan = Line.kr(pan, pan2, moveTime);
+	Balance2.ar(sig[0], sig[1], pan) // Pan2.ar(sig, pan)
+}).add;
+
+
+
+(
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayer),
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\cRvbMc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		xferfunc: atan((-4.0, -3.98 .. 4.0)).normalize,
+		userprep: {
+			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+			[~glrvbmc, ~lcrvbmc].do { |mc|
+				mc.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~event.proto = topEnvironment[\rvbEvent].proto;
+		},
+		userfree: {
+			~noisebuf.free;
+		},
+		// xferfunc pulls the deltas toward the edges of the range
+		delta: Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }, // Pwhite(12.0, 20.0, inf),
+		sustain: Pkey(\delta) + Pwhite(3.0, 4.5, inf),
+		objects: { (
+			drone: (
+				def: \addRvbOut.eval(\nrgxdrone, SynthDescLib.at(\nrgxch).def.func),
+				args: [
+					bufnum: ~noisebuf,
+					center: Pexprand(60, 110, inf),
+					speed: Pwhite(2.0, 9.0, inf),
+					chorDecay: 0.0001,
+					moveTime: Pkey(\sustain),
+					amp: 0.4, // 8.dbamp,
+					fenv: Pfunc({ Env({ exprand(220, 360) } ! 6, 5.reciprocal ! 5) }),
+					rqenv: `Env(#[0.2, 0.2], #[1]),
+					ampenv: `Env(#[0, 1, 1, 0], #[0.25, 0.5, 0.25], #[3, 0, -3]),
+					distance: Pwhite(10.0, 20.0, inf)
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\torsoDrone);
+
+
+(
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \polySynthBusLock),
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\cRvbMc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		fxrq: 0.2,
+		fxspeedMul: 0.71,
+		fxfshift: 34.8,
+		delta: Pwhite(1.8, 4.0, inf),
+		sustain: Pwhite(1.0, 5.5, inf),
+		userprep: {
+			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+			[~glrvbmc, ~lcrvbmc].do { |mc|
+				mc.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~event.proto = topEnvironment[\rvbEvent].proto;
+		},
+		userfree: {
+			~noisebuf.free;
+		},
+		objects: { (
+			throw: (
+				def: \nrgxch,
+				args: [
+					bufnum: ~noisebuf,
+					center: 30, speed: 8, chorDecay: 0.0001, amp: 10.dbamp,
+					moveTime: Pkey(\sustain),
+					fLow: Pwhite(200, 400, inf),
+					fHi: Pwhite(1000, 3000, inf),
+					fenv: Pfunc({ |ev|
+						[Env(#[0, 0.5, 1, 0.5, 0].linexp(0, 1, ev[\fLow], ev[\fHi]),
+							#[0.3, 0.1, 0.1, 0.5], #[5, -3, 3, -2.5])]
+					}),
+					// rqenv: ,
+					ampenv: `[Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)],
+					lpcEv: Pbind(
+						\instrument, \innermod1Mv,
+						\distance1, Pwhite(15.0, 20.0, inf),
+						\distance2, Pkey(\distance1) / Pwhite(2.0, 3.0, inf),
+						\pan, Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf),
+						\pan2, Pwhite(0.5, 1.0, inf) * Pkey(\pan).sign.neg,
+						\distFar, 20,
+						// \glrvbout, ~glrvbmc.inbus.index,
+						// \lcrvbout, ~lcrvbmc.inbus.index,
+						\rq, BPStream(\fxrq),
+						\speedMul, BPStream(\fxspeedMul),
+						\fshift, BPStream(\fxfshift),
+						\killNode, true
+					)
+				]
+			)
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\nrgThrows);
+
+
+
+// stephen solo
+
+(
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayNotify),
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\cRvbMc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		alwaysReset: true,
+		noiseDef: \mappedDrone,
+		gcSpecs: ~gcSpecs ?? { (
+			distance: #[5, 20],
+			center: \freq.asSpec.copy.default_(60),
+			width: #[0, 80, \lin, 0, 10],
+			speed: #[0.05, 20, \exp, 0, 8],
+			ffreq: \freq.asSpec.copy.default_(rrand(100.0, 180.0)),
+			rq: \myrq.asSpec.copy.default_(0.2),
+			amp: [0, 10.dbamp, \lin, 0, 1],
+			pan: \bipolar
+		) },
+		userprep: {
+			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+			[~glrvbmc, ~lcrvbmc].do { |mc|
+				mc.tryPerform(\receivesSignalFrom, ~chan);
+			};
+			~event.proto = topEnvironment[\rvbEvent].proto;
+			~event.put(\chan, nil);  // these are kr synths, shouldn't use MixerCh's bus
+			~event.put(\target, ~chan.synthgroup);  // ignored for sound-synth event (w/ ~chan)
+	
+			~gcs = ~gcSpecs.collect { |spec, name|
+				spec = spec.asSpec;
+				GenericGlobalControl(name, nil, spec.default, spec);
+			};
+			~gcMaps = ~gcs.collect { |gc| gc.asMap };
+			~gcBuses = ~gcs.collect { |gc| gc.index };
+
+			\addRvbOut.eval(\mappedDrone, { |outbus, bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 0.2,
+				chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+				pan = 0, amp = 1, timeScale = 1, gate = 1|
+				var	freq = LFDNoise1.kr(speed, width, center),
+					sig = COsc.ar(bufnum, freq, 1),
+					ampenv = Env.asr(1, 1, 1),
+					ampeg = EnvGen.kr(ampenv, gate, timeScale: timeScale, doneAction: 2);
+				sig = BPF.ar(sig, ffreq, rq);
+				3.do {
+					sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+				};
+				Out.ar(outbus, Pan2.ar(sig, pan, amp * ampeg))
+			}).add;
+		},
+		userfree: {
+			~noisebuf.free;
+			~gcs.free;
+		},
+		delta: Pwhite(1.5, 3.0, inf),
+		sustain: Pnsym1(Pkey(\synthKey), (
+			distance: Pwhite(1.5, 6.0, inf),
+			center: Pwhite(1.5, 6.0, inf),
+			width: Pwhite(1.5, 6.0, inf),
+			speed: Pwhite(1.5, 6.0, inf),
+			rq: Pwhite(1.5, 6.0, inf),
+			amp: Pwhite(1.5, 6.0, inf),
+			ffreq: Pexprand(5.5, 10.0, inf),
+			pan: Pexprand(5.5, 10.0, inf)
+		)),
+		synth: Pwxrand(#[distance, pan, center, ffreq, speed, amp],
+			#[4, 1, 2, 1, 3, 2].normalizeSum, inf),
+		objects: { (
+			distance: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					// note: it doesn't matter what the first level is! It's never used.
+					// 'connect' is 1 by default, ignoring that level
+					levels: Ptuple([18, Pwhite(5.0, 11.0, inf), Pwhite(17.5, 20.0, inf)], inf),
+					times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+					curve: \lin,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			),
+			center: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					levels: Ptuple([30, Pexprand(200.0, 1200.0, inf), Pexprand(40.0, 70.0, inf)], inf),
+					times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+					curve: \exp,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			),
+			// width: (
+			// 	def: \ctlEnv,
+			// 	args: [
+			// 		gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+			// 		bus: Pfunc({ |ev| ev[\gc].index }),
+			// 		time: Pkey(\sustain),
+			// 		levels: Ptuple([], inf),
+			// 		times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+			// 		curve: \exp,
+			// 		env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			// 	]
+			// ),
+			speed: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					levels: Ptuple([8, Pwhite(0.5, 1.2, inf), Pwhite(12.0, 18.0, inf), Pwhite(7.0, 9.0, inf)], inf),
+					times: Pwhite(0.1, 0.4, inf).collect { |num| [num, 1.0-(num*2), num] },
+					curve: \exp,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			),
+			ffreq: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					levels: Pfunc({
+						var	n = rrand(3, 5);
+						[{ exprand(100.0, 180.0) } ! n, { exprand(340.0, 800.0) } ! n]
+							.lace(n*2).drop(#[-1, 0].choose)
+					}),
+					times: Pfunc({ |ev|
+						Array.geom(ev[\levels].size - 1, 0.01, rrand(1.2, 1.6)).normalizeSum
+					}),
+					curve: \exp,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			),
+			// rq: (
+			// 	def: \ctlEnv,
+			// 	args: [
+			// 		gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+			// 		bus: Pfunc({ |ev| ev[\gc].index }),
+			// 		time: Pkey(\sustain),
+			// 		levels: Ptuple([], inf),
+			// 		times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+			// 		curve: \exp,
+			// 		env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			// 	]
+			// ),
+			amp: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					levels: Ptuple([1, Pwhite(3.dbamp, 8.dbamp, inf), Pwhite(0.8, 1.0, inf)], inf),
+					times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+					curve: \exp,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			),
+			pan: (
+				def: \ctlEnv,
+				args: [
+					gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+					bus: Pfunc({ |ev| ev[\gc].index }),
+					time: Pkey(\sustain),
+					levels: Pfunc({
+						var	n = rrand(3, 5);
+						[{ rrand(-1.0, -0.75) } ! n, { rrand(0.75, 1.0) } ! n]
+							.lace(n*2).drop(#[-1, -2].choose).add(0.2.rand2)
+							* #[-1, 1].choose
+					}),
+					times: Pfunc({ |ev|
+						Array.geom(ev[\levels].size - 1, 0.01, rrand(1.2, 1.6)).normalizeSum
+					}),
+					curve: \lin,
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+				]
+			)
+		) },
+		recvEventNotify: { |node, ev|
+			if(ev[\instrument] == ~noiseDef) {
+				~freeNoise.();	// release the old one, jes' in case
+				~noiseSynth = node;
+			}
+		},
+		freeNoise: {
+			~noiseSynth !? {
+				(type: \off, hasGate: true, id: ~noiseSynth.nodeID).play;
+				~noiseSynth = nil;
+			};
+		},
+		preparePlay: {
+			~gcs.do { |gc| gc.value = gc.spec.default }
+		},
+		stopCleanup: {
+			// maybe I need other cleanups
+			~freeNoise.();
+		},
+		superPattern: PR(\basicSynthChooser).v[\asPattern],
+		asPattern: {
+			Pseq([
+				(	instrument: ~noiseDef,
+					bufnum: ~noisebuf,
+					chorDecay: 0.0001,
+					sustain: inf,
+					chan: ~chan,
+					// not really but I want this to go in fx group anyway
+					isFx: true,
+					delta: rrand(2.0, 5.0)
+				).putAll(~gcMaps),
+				~superPattern.()
+			], 1)
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\torsoSolo);
+
+
+
+// IMPORTANT: pass in [~glrvbmc, ~lcrvbmc] as chuck parms
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayNotify);
+	~alwaysReset = true;  // for fx
+
+	~gate = Pexprand(0.08, 0.2, inf);
+	~attackTimeScale = Pkey(\gate).linlin(0.01, 1.0, 5, 0.5);
+	~decayTimeScale = Pkey(\attackTimeScale);
+	~mode = Pstutter(
+		Pwhite(5, 12, inf),
+		Ppatlace([\ab0, Pxrand(Mode.keys.asArray.select { |key| key.asString.last == $0 }, inf)],
+			inf)
+	);
+	~degree = Pvbrown(21, 33, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf)
+	/*+ #[0, 7]*/ + Prand(#[-7, 0], inf);
+	~chordDegree = Pvbrown(35, 49, Pwrand(#[1, 2, 3, 4], #[3, 4, 3, 1].normalizeSum, inf), inf, { rrand(42, 49) })
+	- Pxrand(#[
+		[0],
+		[0, -1],
+		[0, 1, 6],
+		[0, 2],
+		[0, 2, 3],
+		[0, 4, 5]
+	], inf);
+	~delta = Pwhite(15.0, 25.0, inf);
+	~sustain = Pkey(\delta) * Pwhite(0.6, 0.8, inf);
+
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master]);
+		[~glrvbmc, ~lcrvbmc].do { |mc|
+			mc.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~sideBus = Bus.audio(s, 2);
+		~event.put(\chan, nil).put(\target, ~chan.synthgroup).put(\bus, ~sideBus.index);
+		~rq = GenericGlobalControl(\rq, nil, 0.04, #[2, 0.01, \exp]);
+		~speedMul = GenericGlobalControl(\speedMul, nil, 0.1, #[0.01, 2, \exp]);
+		~fshift = GenericGlobalControl(\fshift, nil, 0, #[-120, 120]);
+		// guarantee consecutive buses for distance and pan
+		~gcbuspair = Bus.control(s, 2);
+		~distance = GenericGlobalControl(\distance, ~gcbuspair.index.asBus(\control, 1, s), 17, #[5, 20]);
+		~pan = GenericGlobalControl(\pan, (~gcbuspair.index + 1).asBus(\control, 1, s), 0, \bipolar);
+		~nodes = IdentitySet.new;
+	};
+
+	~useGui = { |vpi|
+		#[rq, speedMul, fshift, distance].do { |key|
+			key.envirGet => VP(vpi);
+		}
+	};
+
+	~freeCleanup = {
+		[~chan, ~sideBus, ~rq, ~speedMul, ~fshift, ~distance, ~pan].free;
+	};
+
+	~preparePlay = {
+		~fxSynth ?? {
+			~fxSynth = ~chan.playfx(\innermod1, [
+				distance: ~distance,
+				pan: ~pan,
+				distFar: 20,
+				glrvbout: ~glrvbmc.inbus.index,
+				lcrvbout: ~lcrvbmc.inbus.index,
+				glrvbamt: 0.1,
+				lcrvbamt: 0.1,
+				inbus: ~sideBus,
+				rq: ~rq,
+				speedMul: ~speedMul,
+				fshift: ~fshift
+			]);
+			~event[\voicer].globalControls[\bufmod]
+				.watch
+				.automate { LFDNoise1.kr(3.5).range(0, 6.999) };
+			~distance.automate {
+				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
+					angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
+				[(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
+					cos(angle) * radius]
+			};
+		}
+	};
+
+	~recvEventNotify = { |node|
+		var	self = currentEnvironment,
+			endFunc = { |obj, what|
+				if(what == \n_end) {
+					self.use {
+						obj.removeDependant(endFunc);
+						~nodes.remove(obj);
+						if(~nodes.isEmpty and: { ~isPlaying.not and: { ~fxSynth.notNil } }) {
+							~fxSynth.free;
+							~fxSynth = nil;
+							~event[\voicer].globalControls[\bufmod].stopWatching.stopAuto;
+							~distance.stopAuto;
+						};
+					};
+				};
+			};
+		node.do { |node|
+			~nodes.add(node);
+			node.addDependant(endFunc);
+			NodeWatcher.register(node);
+		};
+	};
+
+	~asPattern = {
+		Pbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\gate, BPStream(\gate),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree),
+			\freq, Pfunc { |ev| ev[\mode].asMode.cps(ev[\degree]) },
+			\ffreq, ~event[\voicer].globalControls[\ffreq].asMap,
+			\rq, ~event[\voicer].globalControls[\rq].asMap,
+			\finalAmp, ~event[\voicer].globalControls[\finalAmp].asMap,
+			\bufmod, ~event[\voicer].globalControls[\bufmod].asMap,
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain)
+		)
+	};
+
+	~bindVoicer = { |vc|
+		SynthDescLib.at(vc.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
+		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
+	};
+} => PR(\torsoTones);
+
+
+(
+vcKey: \tton,
+make: { |name|
+	BP(name).free;
+	PR(\torsoTones).chuck(BP(name), nil, (
+		glrvbmc: topEnvironment[\cRvbMc],
+		lcrvbmc: topEnvironment[\lcrvbmc]
+	));
+	if(VC.exists(~vcKey)) {
+		BP(name) => VC(~vcKey);
+	} {
+		"VC(%) not found; set voicer manually".format(~vcKey.asCompileString).warn;
+	};
+	0 => BP(name);
+}, type: \bp) => Fact(\ttonesBP);
+
+
+{ |name|
+	Fact(\shimmerpad).chuck(VC(name), nil, (
+		makeTempAmps: {
+			{ |i| Array.squareAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
+		},
+		randomizeAmps: { |amps|
+			var	indices = (0 .. amps.size-1).scramble.keep(max(1, amps.size div: 3));
+			amps = amps.copy;
+			indices.do { |i| amps[i] = amps[i] + 0.12.rand2 };
+			amps
+		},
+		bufModFunc: { Lag.kr(NamedControl.kr(\bufmod, 0), 0.08) },
+		spatialize: false
+	));
+	VC(name).v.mapGlobal(\bufmod, nil, 0, #[0, 6.999]);
+	VC(name).v.mapGlobal(\finalAmp, nil, 1, \amp);
+	VC(name).v.globalControls[\ffreq].value = 3000;
+} => Func(\makettoneVC);
+

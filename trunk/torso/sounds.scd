@@ -1373,11 +1373,6 @@ Fact(\shimmerpad).chuck(VC(\shp), nil, (
 	makeTempAmps: {
 		{ |i| Array.squareAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
 	},
-	// randomizeAmps: { |amps, i|
-	// 	var	col = (i % ~numCols).linlin(0, ~numCols-1, 0.25, 0.75),  // variation #
-	// 		env = Env(#[0, 0, 0.2, 0, 0], [col - 0.2, 0.2, 0.2, 0.8 - col], \sin);
-	// 	amps + env.discretize(amps.size)
-	// },
 	randomizeAmps: { |amps|
 		var	indices = (0 .. amps.size-1).scramble.keep(max(1, amps.size div: 3));
 		amps = amps.copy;
@@ -1634,6 +1629,267 @@ p.sustain =
 
 
 /**** TODO Stephen's solo [0/2] ****/
+
+\addRvbOut.eval(\mappedDrone, { |outbus, bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+	pan = 0, amp = 1, timeScale = 1, gate = 1|
+	var	freq = LFDNoise1.kr(speed, width, center),
+		sig = COsc.ar(bufnum, freq, 1),
+		ampenv = Env.asr(1, 1, 1),
+		ampeg = EnvGen.kr(ampenv, gate, timeScale: timeScale, doneAction: 2);
+	sig = BPF.ar(sig, ffreq, rq);
+	3.do {
+		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	};
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampeg))
+}).add;
+
+SynthDescLib.at(\mappedDrone).controlNames.do(_.postln); ""
+
+
+
+(
+BP(\ssd).free;
+PR(\basicSynthChooser).chuck(BP(\ssd), nil, (
+	event: (eventKey: \singleSynthPlayNotify),
+	master: topEnvironment[\master],
+	glrvbmc: topEnvironment[\cRvbMc],
+	lcrvbmc: topEnvironment[\lcrvbmc],
+	alwaysReset: true,
+	noiseDef: \mappedDrone,
+	gcSpecs: (
+		distance: #[5, 20],
+		center: \freq.asSpec.copy.default_(60),
+		width: #[0, 80, \lin, 0, 10],
+		speed: #[0.05, 20, \exp, 0, 8],
+		ffreq: \freq.asSpec.copy.default_(rrand(100.0, 180.0)),
+		rq: \myrq.asSpec.copy.default_(0.2),
+		amp: [0, 10.dbamp, \lin, 0, 1],
+		pan: \bipolar
+	),
+	userprep: {
+		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
+		[~glrvbmc, ~lcrvbmc].do { |mc|
+			mc.tryPerform(\receivesSignalFrom, ~chan);
+		};
+		~event.proto = topEnvironment[\rvbEvent].proto;
+		~event.put(\chan, nil);  // these are kr synths, shouldn't use MixerCh's bus
+		~event.put(\target, ~chan.synthgroup);  // ignored for sound-synth event (w/ ~chan)
+
+		~gcs = ~gcSpecs.collect { |spec, name|
+			spec = spec.asSpec;
+			GenericGlobalControl(name, nil, spec.default, spec);
+		};
+		~gcMaps = ~gcs.collect { |gc| gc.asMap };
+		~gcBuses = ~gcs.collect { |gc| gc.index };
+	},
+	userfree: {
+		~noisebuf.free;
+		~gcs.free;
+	},
+	delta: Pwhite(12.0, 20.0, inf),
+	sustain: Pkey(\delta) * Pwhite(1.4, 1.9, inf),
+	objects: { (
+		distance: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				// note: it doesn't matter what the first level is! It's never used.
+				// 'connect' is 1 by default, ignoring that level
+				levels: Ptuple([18, Pwhite(5.0, 11.0, inf), Pwhite(17.5, 20.0, inf)], inf),
+				times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+				curve: \lin,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		),
+		center: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				levels: Ptuple([30, Pexprand(200.0, 1200.0, inf), Pexprand(40.0, 70.0, inf)], inf),
+				times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+				curve: \exp,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		),
+		// width: (
+		// 	def: \ctlEnv,
+		// 	args: [
+		// 		gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+		// 		bus: Pfunc({ |ev| ev[\gc].index }),
+		// 		time: Pkey(\sustain),
+		// 		levels: Ptuple([], inf),
+		// 		times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+		// 		curve: \exp,
+		// 		env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+		// 	]
+		// ),
+		speed: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				levels: Ptuple([8, Pwhite(0.5, 1.2, inf), Pwhite(12.0, 18.0, inf), Pwhite(7.0, 9.0, inf)], inf),
+				times: Pwhite(0.1, 0.4, inf).collect { |num| [num, 1.0-(num*2), num] },
+				curve: \exp,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		),
+		ffreq: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				levels: Pfunc({
+					var	n = rrand(3, 5);
+					[{ exprand(100.0, 180.0) } ! n, { exprand(340.0, 800.0) } ! n]
+						.lace(n*2).drop(#[-1, 0].choose)
+				}),
+				times: Pfunc({ |ev|
+					Array.geom(ev[\levels].size - 1, 0.01, rrand(1.2, 1.6)).normalizeSum
+				}),
+				curve: \exp,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		),
+		// rq: (
+		// 	def: \ctlEnv,
+		// 	args: [
+		// 		gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+		// 		bus: Pfunc({ |ev| ev[\gc].index }),
+		// 		time: Pkey(\sustain),
+		// 		levels: Ptuple([], inf),
+		// 		times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+		// 		curve: \exp,
+		// 		env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+		// 	]
+		// ),
+		amp: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				levels: Ptuple([1, Pwhite(3.dbamp, 8.dbamp, inf), Pwhite(0.8, 1.0, inf)], inf),
+				times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+				curve: \exp,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		),
+		pan: (
+			def: \ctlEnv,
+			args: [
+				gc: Pfunc({ |ev| ~gcs[ev[\synthKey]] }),
+				bus: Pfunc({ |ev| ev[\gc].index }),
+				time: Pkey(\sustain),
+				levels: Pfunc({
+					var	n = rrand(3, 5);
+					[{ rrand(-1.0, -0.75) } ! n, { rrand(0.75, 1.0) } ! n]
+						.lace(n*2).drop(#[-1, -2].choose).add(0.2.rand2)
+						* #[-1, 1].choose
+				}),
+				times: Pfunc({ |ev|
+					Array.geom(ev[\levels].size - 1, 0.01, rrand(1.2, 1.6)).normalizeSum
+				}),
+				curve: \lin,
+				env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+			]
+		)
+	) },
+	recvEventNotify: { |node, ev|
+		if(ev[\instrument] == ~noiseDef) {
+			~freeNoise.();	// release the old one, jes' in case
+			~noiseSynth = node;
+		}
+	},
+	freeNoise: {
+		~noiseSynth !? {
+			(type: \off, hasGate: true, id: ~noiseSynth.nodeID).play;
+			~noiseSynth = nil;
+		};
+	},
+	preparePlay: {
+		~gcs.do { |gc| gc.value = gc.spec.default }
+	},
+	stopCleanup: {
+		// maybe I need other cleanups
+		~freeNoise.();
+	},
+	superPattern: PR(\basicSynthChooser).v[\asPattern],
+	asPattern: {
+		Pseq([
+			(	instrument: ~noiseDef,
+				bufnum: ~noisebuf,
+				chorDecay: 0.0001,
+				sustain: inf,
+				chan: ~chan,
+				// not really but I want this to go in fx group anyway
+				isFx: true,
+				delta: rrand(2.0, 5.0)
+			).putAll(~gcMaps),
+			~superPattern.()
+		], 1)
+	}
+));
+0 => BP(\ssd);
+)
+
+p = BP(\ssd);
+
+p.delta = Pwhite(1.5, 3.0, inf);
+p.delta = Pwhite(0.2, 0.8, inf);
+p.sustain = Pwhite(1.5, 6.0, inf);
+
+p.synth = Pn(Pshuf(p.objects.keys.asArray, 1), inf);
+
+p.synth = Pwxrand(#[distance, pan, center, ffreq, speed, amp],
+	#[4, 1, 2, 1, 3, 2].normalizeSum, inf)
+
+p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
+p.override(\delta, Pwhite(0.2, 0.8, 10));
+p.override(\sustain, Pkey(\delta) * Pwhite(1.5, 3.0, 10));
+
+
+p.synthStream.next
+p.synth.postcs
+
+p.panlevels = Pfunc({
+					var	n = rrand(3, 5);
+					[{ rrand(-1.0, -0.75) } ! n, { rrand(0.75, 1.0) } ! n]
+						.lace(n*2).drop(#[-1, -2].choose).add(0.2.rand2)
+						* #[-1, 1].choose
+				});
+
+p.sustain = Pnsym1(Pkey(\synthKey), (
+	distance: Pwhite(1.5, 6.0, inf),
+	center: Pwhite(1.5, 6.0, inf),
+	width: Pwhite(1.5, 6.0, inf),
+	speed: Pwhite(1.5, 6.0, inf),
+	rq: Pwhite(1.5, 6.0, inf),
+	amp: Pwhite(1.5, 6.0, inf),
+	ffreq: Pexprand(5.5, 10.0, inf),
+	pan: Pexprand(5.5, 10.0, inf)
+));
+
+
+
+p.debug = true;
+p.reset;
+
+
+
+p.noiseSynth.trace
+
+~master.synth.trace
+
+p.asPattern.inspect
+
 /***** TODO Hopping movement *****/
 /***** TODO Arm raising *****/
 /**** TODO Energy exchanges ****/
@@ -1765,13 +2021,13 @@ SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffre
 	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
 	amp = 1, moveTime = 1|
 	var	freq = LFDNoise1.kr(speed, width, center),
-	sig = COsc.ar(bufnum, freq, 1),
-	fenv = NamedControl.kr(\fenv, (0!24).overWrite(Env(#[2000, 2000], #[1]).asArray)),
-	ffreq = EnvGen.kr(fenv, timeScale: moveTime),
-	rqenv = NamedControl.kr(\rqenv, (0!24).overWrite(Env(#[0.35, 0.35], #[1]).asArray)),
-	rq = EnvGen.kr(rqenv, timeScale: moveTime),
-	ampenv = NamedControl.kr(\ampenv, (0!24).overWrite(Env.one.asArray)),
-	ampeg = EnvGen.kr(ampenv, timeScale: moveTime, doneAction: 2);
+		sig = COsc.ar(bufnum, freq, 1),
+		fenv = NamedControl.kr(\fenv, (0!24).overWrite(Env(#[2000, 2000], #[1]).asArray)),
+		ffreq = EnvGen.kr(fenv, timeScale: moveTime),
+		rqenv = NamedControl.kr(\rqenv, (0!24).overWrite(Env(#[0.35, 0.35], #[1]).asArray)),
+		rq = EnvGen.kr(rqenv, timeScale: moveTime),
+		ampenv = NamedControl.kr(\ampenv, (0!24).overWrite(Env.one.asArray)),
+		ampeg = EnvGen.kr(ampenv, timeScale: moveTime, doneAction: 2);
 	sig = BPF.ar(sig, ffreq, rq);
 	3.do {
 		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
@@ -1831,12 +2087,15 @@ BP(\tt).use {
 // } => PR(\noiseDrone);
 
 (
-BP(\nd).free;
-PR(\basicSynthChooser).chuck(BP(\nd), nil, (
+(
+make: { |name|
+BP(name).free;
+PR(\basicSynthChooser).chuck(BP(name), nil, (
 	event: (eventKey: \singleSynthPlayer),
 	master: topEnvironment[\master],
 	glrvbmc: topEnvironment[\cRvbMc],
 	lcrvbmc: topEnvironment[\lcrvbmc],
+	xferfunc: atan((-4.0, -3.98 .. 4.0)).normalize,
 	userprep: {
 		~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
 		[~glrvbmc, ~lcrvbmc].do { |mc|
@@ -1847,19 +2106,20 @@ PR(\basicSynthChooser).chuck(BP(\nd), nil, (
 	userfree: {
 		~noisebuf.free;
 	},
-	delta: Pwhite(12.0, 20.0, inf),
-	sustain: Pkey(\delta) * Pwhite(1.4, 1.9, inf),
+	// xferfunc pulls the deltas toward the edges of the range
+	delta: Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }, // Pwhite(12.0, 20.0, inf),
+	sustain: Pkey(\delta) + Pwhite(3.0, 4.5, inf),
 	objects: { (
 		drone: (
 			def: \addRvbOut.eval(\nrgxdrone, SynthDescLib.at(\nrgxch).def.func),
 			args: [
 				bufnum: ~noisebuf,
-				center: 30,
-				speed: 8,
+				center: Pexprand(60, 110, inf),
+				speed: Pwhite(2.0, 9.0, inf),
 				chorDecay: 0.0001,
 				moveTime: Pkey(\sustain),
-				amp: 8.dbamp,
-				fenv: Pfunc { Env(exprand(100, 180) ! 2, #[1]) },
+				amp: 0.4, // 8.dbamp,
+				fenv: Pfunc({ Env({ exprand(220, 360) } ! 6, 5.reciprocal ! 5) }),
 				rqenv: `Env(#[0.2, 0.2], #[1]),
 				ampenv: `Env(#[0, 1, 1, 0], #[0.25, 0.5, 0.25], #[3, 0, -3]),
 				distance: Pwhite(10.0, 20.0, inf)
@@ -1867,24 +2127,38 @@ PR(\basicSynthChooser).chuck(BP(\nd), nil, (
 		)
 	) }
 ));
-0 => BP(\nd);
+0 => BP(name);
+}, type: \bp) => Fact(\torsoDrone);
 )
 
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
 
+Fact(\torsoDrone) => BP(\nd);
+Fact(\torsoDrone) => BP(\nd2);
+
+BP(\nd2).dronecenter_(Pexprand(60, 110, inf) * 2)
+.dronefenv_(Pfunc({ Env({ exprand(500, 900) } ! 6, 5.reciprocal ! 5) }))
+.delta_(Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 1.0, 4.5) });
+
 p = BP(\nd);
 p.dronerqenv = `Env(#[0.2, 0.2], #[1]);
 p.dronefenv = Pfunc { Env(exprand(100, 180) ! 2, #[1]) };
-p.droneamp = 8.dbamp;
+p.dronefenv = Pfunc({ Env({ exprand(220, 360) } ! 6, 5.reciprocal ! 5) });
+BP(\nd).droneamp = 0.4; // 8.dbamp;
+
+p.dronecenter = Pexprand(60, 110, inf);
 
 p.delta = Pwhite(12.0, 20.0, inf);
 
 p.xferfunc = atan((-4.0, -3.98 .. 4.0)).normalize;
 
-p.delta = Pwhite(0.0, 0.999, inf).trace.collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }.trace;
+p.delta = Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) };
 
 p.sustain = Pkey(\delta) * Pwhite(2.2, 3.8, inf);
+p.sustain = Pkey(\delta) + Pwhite(3.0, 4.5, inf);
+
+p.dronespeed = Pwhite(2.0, 9.0, inf).trace;
 
 PeakMonitor(p.chan);
 
@@ -1954,15 +2228,15 @@ PR(\basicSynthChooser).chuck(BP(\thr), nil, (
 
 p = BP(\thr);
 
-p.throwampenv = `[Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)];
+p.throwampenv = `[Env(#[0, 0.1, 1, 0.1, 0] * 0.4, #[0.3, 0.1, 0.1, 0.5], \sin)];
 
 p.sustain = Pwhite(1.0, 1.5, inf);
 p.sustain = Pwhite(0.5, 2.0, inf);
 
 p.delta = Pswitch1([
-	Pwhite(2.5, 4.0, inf),
+	Pwhite(1.5, 3.0, inf),
 	Pexprand(0.2, 0.9, inf)
-], Pwrand(#[0, 1], #[0.7, 0.3], inf));
+], Pwrand([0, Pn(1, Prand(#[1, 2, 3, 4], inf).asStream)], #[0.7, 0.3], inf));
 
 // p.sustain = min(Pkey(\delta) * Pwhite(0.9, 1.2, inf), Pwhite());
 p.sustain = Pexprand(0.7, 2.8, inf);
@@ -1976,6 +2250,71 @@ p.triggerOneEvent(0);
 
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
+// test drone procs
+
+BP.all.free;
+
+// I am SO not crazy about this - sound maybe OK, melody = crap
+\makeTmelVC.eval(\tmel);
+Fact(\tmelBP) => BP(\tmel);
+
+
+// controllable parms:
+// bp: rq, speedmul, fshift, distance - also event density/pitch, gate controls env speed
+// vc: ffreq, rq, bufmod, amp
+
+Func(\makettoneVC).value(\tton);
+Fact(\ttonesBP) => BP(\tton);
+
+
+// stephen's solo -- these are too loud
+Fact(\torsoSolo) => BP(\ssd);
+
+// BP(\ssd).noisebuf.plotWavetable
+
+Fact(\torsoSolo).chuck(BP(\ssd2), nil, (
+	gcSpecs: (
+		distance: #[5, 20],
+		center: \freq.asSpec.copy.default_(exprand(100, 140)),
+		width: #[0, 80, \lin, 0, 10],
+		speed: #[0.05, 20, \exp, 0, 8],
+		ffreq: \freq.asSpec.copy.default_(exprand(500, 900)),
+		rq: \myrq.asSpec.copy.default_(0.2),
+		amp: [0, 10.dbamp, \lin, 0, 0.4],
+		pan: \bipolar
+	)
+));
+
+BP(\ssd2).ffreqlevels = Pfunc({
+	var	n = rrand(3, 5);
+	[{ exprand(600.0, 1000.0) } ! n, { exprand(1800.0, 2100.0) } ! n]
+	.lace(n*2).drop(#[-1, 0].choose)
+});
+BP(\ssd2).centerlevels = Ptuple([30, Pexprand(600.0, 2100.0, inf), Pexprand(80.0, 140.0, inf)], inf);
+BP(\ssd2).amplevels = (Ptuple([1, Pwhite(0.6, 0.8, inf), Pwhite(0.18, 0.23, inf)], inf) * 4.5);
+
+BP(\ssd2).gcs[\amp].spec = BP(\ssd2).gcs[\amp].spec.copy.default_(1);
+
+BP(\ssd2).delta = Pwhite(0.6, 1.8, inf);
+BP(\ssd2).sustain = Pkey(\delta) * Pwhite(0.8, 1.8, inf);
+
+BP(\ssd).ffreqlevels = Pfunc({
+	var	n = rrand(3, 5);
+	[{ exprand(100.0, 180.0) } ! n, { exprand(340.0, 800.0) } ! n]
+	.lace(n*2).drop(-1)
+})
+
+BP(\ssd2).noiseSynth.trace
+BP(\ssd2).debug = false;
+BP(\ssd2).reset;
+
+
+Fact(\torsoDrone) => BP(\td);
+
+
+
 
 
 /**** TODO Rework past inversion material ****/

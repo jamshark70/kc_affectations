@@ -521,8 +521,10 @@ makeTempAmps: {
 randomizeAmps: { |amps|
 	amps + ({ 0.12.rand2 } ! amps.size)
 },
+spatialize: true,
 make: { |name|
 	var	tempAmps = ~makeTempAmps.(),
+		ugenfunc,
 		out;
 
 	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
@@ -580,7 +582,7 @@ make: { |name|
 	}, [\freq, \amp, #[0, 1000, \linear, 1, 0], #[0, 20], EnvSpec(Env.adsr), #[0, 1], #[0.9, 1.1, \linear, 0, 1], \freq, #[1, 0.001], EnvSpec(Env.one), nil, #[0, 20, \lin, 1, 0], #[0, 20, \lin, 1, 0], \freq, \freq, #[0.01, 10, \exp, 0, 1], #[0.01, 10, \exp, 0, 1]]);
 
 	~defname = (name ++ "def").asSymbol;
-	\addRvbOut.eval(~defname, { |pan, finalAmp = 1, freq = 440, freqlag = 0, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1|
+	ugenfunc = { |pan, finalAmp = 1, freq = 440, freqlag = 0, gate = 1, ffreq = 14000, rq = 1, vsens = 0.8, fenvsens = 1, attackTimeScale = 1, decayTimeScale = 1|
 		var	sig = WrapInstr("osc2.vosc3matrix").valueArray([
 			Lag.kr(freq, freqlag), gate,
 			~bufs[0].bufnum,  // bufbase
@@ -602,7 +604,14 @@ make: { |name|
 		]);
 		~graphInsert !? { sig = ~graphInsert.(sig) };
 		Pan2.ar(sig, pan, finalAmp)
-	}).add;
+	};
+	if(~spatialize != false) {
+		\addRvbOut.eval(~defname, ugenfunc).add;
+	} {
+		SynthDef(~defname, { |outbus|
+			Out.ar(outbus, SynthDef.wrap(ugenfunc))
+		}).add;
+	};
 
 	out = Voicer(25, ~defname, target: ~target);
 	

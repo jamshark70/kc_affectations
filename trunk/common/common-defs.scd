@@ -28,7 +28,7 @@ s.waitForBoot {
 		};
 	
 		~lcrvbmc.doWhenReady {
-			if(~lcrvb.isNil.debug("no lcrvb patch") or: { ~lcrvb.isPlaying.not.debug("lcrvb not playing") }) {
+			if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
 				~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
 			};
 			~lcrvb.doWhenPlaying {
