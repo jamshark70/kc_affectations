@@ -2141,7 +2141,7 @@ make: { |name|
 					\pan, sin(Pseries(0, Pseries.fromEndpoints(0.08, 0.33, parms[\numEv]), inf) * 2pi)
 					* #[-1, 1].choose,
 					\distance, Pseries.fromEndpoints(parms[\startY] ? 20, 5, parms[\numEv])
-				).trace
+				)
 			}
 		),
 
