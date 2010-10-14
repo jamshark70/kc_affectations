@@ -2293,9 +2293,17 @@ BP(\ssd2).ffreqlevels = Pfunc({
 	.lace(n*2).drop(#[-1, 0].choose)
 });
 BP(\ssd2).centerlevels = Ptuple([30, Pexprand(600.0, 2100.0, inf), Pexprand(80.0, 140.0, inf)], inf);
-BP(\ssd2).amplevels = (Ptuple([1, Pwhite(0.6, 0.8, inf), Pwhite(0.18, 0.23, inf)], inf) * 4.5);
+BP(\ssd2).amplevels = (Ptuple([1, Pwhite(0.6, 0.8, inf), Pwhite(0.18, 0.23, inf)], inf) * 2.5);
 
-BP(\ssd2).gcs[\amp].spec = BP(\ssd2).gcs[\amp].spec.copy.default_(1);
+BP(\ssd2).panlevels = Pfunc({
+	var	n = rrand(3, 5);
+	[{ rrand(-1.0, -0.75) } ! n, { rrand(0.75, 1.0) } ! n]
+	.lace(n*2).drop(#[-1, -2].choose).add(0.7.rand2)
+	* #[-1, 1].choose
+});
+
+
+// BP(\ssd2).gcs[\amp].spec = BP(\ssd2).gcs[\amp].spec.copy.default_(0.4);
 
 BP(\ssd2).delta = Pwhite(0.6, 1.8, inf);
 BP(\ssd2).sustain = Pkey(\delta) * Pwhite(0.8, 1.8, inf);
@@ -2311,9 +2319,32 @@ BP(\ssd2).debug = false;
 BP(\ssd2).reset;
 
 
+// hopping
+p = BP(#[ssd, ssd2]);
+
+p.do { |p|
+	p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
+	p.override(\delta, Pwhite(0.2, 0.8, 10));
+	p.override(\sustain, Pkey(\delta) * Pwhite(1.5, 3.0, 10));
+};
+
+p.noiseSynth.trace
+
+
+Fact.collection.select { |f| f.path.basename == "torso-defs.scd" }.keys.asArray.sort
+
+
 Fact(\torsoDrone) => BP(\td);
+BP(\td).sustain = Pkey(\delta) + Pwhite(5.0, 8.5, inf);
+BP(\td).droneamp.postcs;
+BP(\td).droneamp = 4.dbamp;
 
+BP(\td).rq = 0.11;
+BP(\td).fshift = Pwhite(4.0, 12.0, inf);
 
+BP(\td).debug = true;
+
+s.audioBusAllocator.debug;
 
 
 

@@ -390,19 +390,22 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 	// trajectories for cheap-ass spatialization
 	Proto {
 		~numSynths = 10;
+		~def = \xy1;
+		~synthArgs = [];
 		~prep = {
 			~group = Group.before(s.asTarget);
 	
-			SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0|
+			SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0,
+				lowDur = 0.25, hiDur = 0.9, lowRDur = 0.6, hiRDur = 2.0|
 				var	theta, r, x, y;
 				theta = DemandEnvGen.kr(
 					Dwhite(-2pi, 2pi, inf),
-					Dwhite(0.25, 0.9, inf),
+					Dwhite(lowDur, hiDur, inf),
 					Env.shapeNumber(\sine)
 				);
 				r = DemandEnvGen.kr(
 					Dwhite(0.1, 1.0, inf),
-					Dwhite(0.0, 1.0, inf).linexp(0, 1, 0.6, 2.0),
+					Dwhite(0.0, 1.0, inf).linexp(0, 1, lowRDur, hiRDur),
 					Env.shapeNumber(\sine)
 				);
 				x = theta.cos * r;
@@ -425,7 +428,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		~makeSynths = {
 			~xysynths ?? {
 				~xysynths = ~xys.collect { |xybus|
-					Synth(\xy1, [mul: 1, send: 0, out: xybus], ~group);
+					Synth(\xy1, [mul: 1, send: 0, out: xybus] ++ ~synthArgs, ~group);
 				}
 			};
 		};

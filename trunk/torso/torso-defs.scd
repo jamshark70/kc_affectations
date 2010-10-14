@@ -809,41 +809,105 @@ Instr("busfx.innermod1", { | /*bus,*/ inbus, numChan = 1,
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayer),
+		// event: (eventKey: \singleSynthPlayer),
+		event: (eventKey: \polySynthBusLock,
+			notifyDependents: ProtoEvent(\polySynthPlayNotify).v[\notifyDependents]
+		),
 		master: topEnvironment[\master],
 		glrvbmc: topEnvironment[\cRvbMc],
 		lcrvbmc: topEnvironment[\lcrvbmc],
 		xferfunc: atan((-4.0, -3.98 .. 4.0)).normalize,
+		trajectoryKey: \droneTraj,
+		trajectoryParms: [
+			lowDur: 1.5, hiDur: 4.5, lowRDur: 2.0, hiRDur: 5.0
+		],
 		userprep: {
 			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
 			[~glrvbmc, ~lcrvbmc].do { |mc|
 				mc.tryPerform(\receivesSignalFrom, ~chan);
 			};
 			~event.proto = topEnvironment[\rvbEvent].proto;
+			~activeSynths = IdentitySet.new;
+
+			if(BP.exists(~trajectoryKey).not) {
+				PR(\trajectories) => BP(~trajectoryKey);
+			};
+			BP(~trajectoryKey).synthArgs = ~trajectoryParms;
+			// ~krPool = { Bus.control(s, 2) } ! 10;
 		},
 		userfree: {
 			~noisebuf.free;
+			// ~krPool.free;
 		},
 		// xferfunc pulls the deltas toward the edges of the range
 		delta: Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }, // Pwhite(12.0, 20.0, inf),
-		sustain: Pkey(\delta) + Pwhite(3.0, 4.5, inf),
+		sustain: Pkey(\delta) + Pwhite(5.0, 8.5, inf),
+		rq: 0.11,
+		speedMul: Pwhite(6.0, 10.0, inf),
+		fshift: Pexprand(4.0, 12.0, inf),
+		remainderMix: 0.9,
 		objects: { (
 			drone: (
-				def: \addRvbOut.eval(\nrgxdrone, SynthDescLib.at(\nrgxch).def.func),
+				def: \nrgxch, // \addRvbOut.eval(\nrgxdrone, SynthDescLib.at(\nrgxch).def.func),
 				args: [
 					bufnum: ~noisebuf,
 					center: Pexprand(60, 110, inf),
 					speed: Pwhite(2.0, 9.0, inf),
 					chorDecay: 0.0001,
 					moveTime: Pkey(\sustain),
-					amp: 0.4, // 8.dbamp,
+					amp: 4.dbamp,
 					fenv: Pfunc({ Env({ exprand(220, 360) } ! 6, 5.reciprocal ! 5) }),
 					rqenv: `Env(#[0.2, 0.2], #[1]),
 					ampenv: `Env(#[0, 1, 1, 0], #[0.25, 0.5, 0.25], #[3, 0, -3]),
-					distance: Pwhite(10.0, 20.0, inf)
+					distance: Pwhite(10.0, 20.0, inf),
+					lpcEv: Pbind(
+						\instrument, \innermod1,
+						\glrvbout, ~glrvbmc.inbus.index,
+						\lcrvbout, ~lcrvbmc.inbus.index,
+						\glrvbamt, 0.1,
+						\lcrvbamt, 0.1,
+						\rq, BPStream(\rq),
+						\speedMul, BPStream(\speedMul),
+						\fshift, BPStream(\fshift),
+						\remainderMix, BPStream(\remainderMix),
+						#[pan, distance], Plazy { Pseq(BP(~trajectoryKey).xymaps, inf) },
+						\killNode, true
+					)
 				]
 			)
-		) }
+		) },
+		preparePlay: {
+			if(BP.exists(~trajectoryKey)
+				and: { BP(~trajectoryKey).clients.includes(~collIndex).not }
+			) {
+				BP(~trajectoryKey).isUsedBy(~collIndex);
+			};
+		},
+		stopCleanup: {
+			// must check: trajectories could have been .free'd
+			if(BP.exists(~trajectoryKey) and: { ~activeSynths.isEmpty }) {
+				BP(~trajectoryKey).notUsedBy(~collIndex);
+			};
+		},
+		recvEventNotify: { |node|
+			var	self, ufunc;
+			if(node.isKindOf(Synth)) {
+				self = currentEnvironment;
+				ufunc = { |obj, what|
+					if(what == \n_end) {
+						obj.removeDependant(ufunc);
+						self[\activeSynths].remove(obj);
+						if(self[\isPlaying].not and: { self[\activeSynths].isEmpty
+								and: { BP.exists(self[\trajectoryKey]) } }) {
+							BP(self[\trajectoryKey]).notUsedBy(self.collIndex);
+						};
+					}
+				};
+				~activeSynths.add(node);
+				NodeWatcher.register(node);
+				node.addDependant(ufunc);
+			};
+		}
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\torsoDrone);
@@ -922,6 +986,7 @@ make: { |name|
 		lcrvbmc: topEnvironment[\lcrvbmc],
 		alwaysReset: true,
 		noiseDef: \mappedDrone,
+		timeScale: 5,
 		gcSpecs: ~gcSpecs ?? { (
 			distance: #[5, 20],
 			center: \freq.asSpec.copy.default_(60),
@@ -1121,6 +1186,7 @@ make: { |name|
 					chan: ~chan,
 					// not really but I want this to go in fx group anyway
 					isFx: true,
+					timeScale: ~timeScale,
 					delta: rrand(2.0, 5.0)
 				).putAll(~gcMaps),
 				~superPattern.()
