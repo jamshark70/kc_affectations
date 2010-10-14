@@ -266,10 +266,89 @@ make: { |name|
 
 // melody synth
 // Func, not Fact, b/c Fact-calling-a-Fact will mess up the environments
+
+(// keys: #[master, glrvbmc, lcrvbmc],
+defaultCarDetune: 1.005716,
+defaultDetune: 1.25,
+car_amps: #[1, 2, 3].reciprocal,
+mod_amps: #[1],
+car_env: Env.adsr(0.5, 0.8, 0.75, 1.0),
+mod_env: Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),
+keyScale: 0.28621534453893,
+defaultCarVs: 0.833,
+defaultModVs: 0.819,
+isMono: false,
+customize: nil,
+make: { |name|
+	var	args, out;
+	~sideBus = Bus.audio(s, 2);
+	~target = MixerChannel(name, s, 2, 2/*, level: -17.dbamp*/, outbus: ~master,
+		completionFunc: { |chan|
+			SynthDef(name ++ "Chorus", { |inbus, outbus|
+				var	sig = Instr("busfx.chorus").valueArray([inbus, 2, 0.011924888841111, 0.15615231995716, 0.0044072173729238, 1.1, 0.5]);
+				ReplaceOut.ar(outbus, sig);
+			}).add;
+			s.sync;
+			~chorus = Synth(name ++ "Chorus", [#[inbus, outbus], ~sideBus].flop.flat, chan.effectgroup);
+			StaticEQ(2, \hishelf, 3654.349, 4.274.dbamp, 1, \eq, 301.329, -5.641.dbamp, 1.286)
+				.play(chan.effectgroup, ~sideBus, addAction: \addToTail);
+			~modfx = ~target.playfx(\innermod1, [distance: [10, 5, 20, ~glrvbmc.inbus.index, ~lcrvbmc.inbus.index, 0.1, 0.1], inbus: [~sideBus, 300, 25, 0.04, 0.25]]);
+			// ~chorus.doWhenPlaying { ~chorus.synth.moveToHead(chan.effectgroup) };
+		});
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\receivesSignalFrom, ~target);
+	};
+	~cb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(~car_amps) });
+	~mb = Buffer.alloc(s, 1024, 1, { |buf| buf.sine1Msg(~mod_amps) });
+
+	~def = SynthDef((name ++ "def").asSymbol, { |pan, freq = 440, freqlag = 0, gate = 1,
+			mod_lev = 0.01, mod_ratio = 1, detune = 0, car_detune = 0.99798261661993,
+			car_vs = 0, mod_vs = 0,
+			attackTimeScale = 1, decayTimeScale = 1, finalAmp = 1, outbus|
+		Out.ar(outbus, WrapInstr("osc2.fm2car_stereo").valueArray([
+			pan, freq, freqlag, gate,
+			~car_env,
+			~mod_env,
+			mod_lev, mod_ratio,
+			detune, car_detune,
+			~cb.bufnum, ~mb.bufnum, car_vs, mod_vs, // 0.66141732283465 /* car_vs */, 0 /* mod_vs */,
+			440, ~keyScale, /* basefreq, keyScale */
+			attackTimeScale, decayTimeScale, finalAmp
+		]))
+	}).add;
+	SynthDescLib.at(~def.name.asSymbol).msgFuncKeepGate = true;
+
+	// default args for voicer: supply reverb targets automatically
+// 	if(~glrvbmc.isKindOf(MixerChannel)) {
+// 		args = [glrvbout: ~glrvbmc.inbus, lcrvbout: ~lcrvbmc.inbus];
+// 	} {
+// 		"VC(%): Spatialization reverbs not found.".format(name.asCompileString).warn;
+// 	};
+	if(~isMono ? false) {
+		out = MonoPortaVoicer(1, ~def.name, args, bus: ~sideBus, target: ~target.synthgroup);
+	} {
+		out = Voicer(45, ~def.name, args, bus: ~sideBus, target: ~target.synthgroup);
+	};
+	out.mapGlobal(\detune, nil, ~defaultDetune, #[-5, 5], false);
+	out.mapGlobal(\car_detune, nil, ~defaultCarDetune, \mydetune);
+	out.mapGlobal(\car_vs, nil, ~defaultCarVs, nil, false);
+	out.mapGlobal(\mod_vs, nil, ~defaultModVs, nil, false);
+	out.mapGlobal(\finalAmp, nil, 1, #[0.1, 10, \exp]);
+	~customize.(out);
+	out
+},
+free: {
+	[~glrvbmc, ~lcrvbmc].do { |mc|
+		mc.tryPerform(\stopsReceivingFrom, ~target);
+	};
+	[~cb, ~mb, ~target, ~sideBus].free
+}, type: \voicer) => Fact(\torsoVC);
+
+
 { |name|
 	VC(name).free;
 	topEnvironment.use {
-		Fact(\armsChordVC).chuck(VC(name), nil, (
+		Fact(\torsoVC).chuck(VC(name), nil, (
 			defaultCarDetune: 1.0066,
 			defaultDetune: 2.234,
 			car_amps: Array.squareAmps(5),
@@ -279,11 +358,12 @@ make: { |name|
 			keyScale: 0.3669,
 			defaultCarVs: 0.145,
 			defaultModVs: 0.145,
-			isMono: true,
-			cRvbMc: topEnvironment[\cRvbMc],
+			isMono: false,
+			glrvbmc: topEnvironment[\cRvbMc],
+			lcrvbmc: topEnvironment[\lcrvbmc],
 			// called within the VC's new environment
 			customize: { |v|
-				~target.newPostSend(~cRvbMc, 1.2);
+				// ~target.newPostSend(~cRvbMc, 1.2);
 				v.mapGlobal(\mod_ratio, nil, 3, #[1, 10, \exp]);
 				v.mapGlobal(\mod_lev, nil, 1.6, #[0.01, 15, \exp]);
 				// v.mapGlobal(\distance, nil, 10, #[5, 20]);
@@ -714,6 +794,26 @@ SynthDef(\nrgxch, { |outbus, bufnum, center = 60, width = 10, speed = 4, // ffre
 		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
 	};
 	Out.ar(outbus, (sig * amp * ampeg) ! 2)
+}).add;
+
+SynthDef(\nrgxch2, { |outbus, bufnum, /*center = 60,*/ width = 10, speed = 4, // ffreq = 1000, rq = 0.2,
+	chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
+	amp = 1, moveTime = 1|
+	var	ctrenv = NamedControl.kr(\ctrenv, (0!24).overWrite(Env(100 ! 2, #[1]).asArray)),
+		center = EnvGen.kr(ctrenv, timeScale: moveTime),
+		freq = LFDNoise1.kr(speed, width, center),
+		sig = COsc.ar(bufnum, freq, 1),
+		fenv = NamedControl.kr(\fenv, (0!24).overWrite(Env(#[2000, 2000], #[1]).asArray)),
+		ffreq = EnvGen.kr(fenv, timeScale: moveTime),
+		rqenv = NamedControl.kr(\rqenv, (0!24).overWrite(Env(#[0.35, 0.35], #[1]).asArray)),
+		rq = EnvGen.kr(rqenv, timeScale: moveTime),
+		ampenv = NamedControl.kr(\ampenv, (0!24).overWrite(Env.one.asArray)),
+		ampeg = EnvGen.kr(ampenv, timeScale: moveTime, doneAction: 2);
+	sig = BPF.ar(sig, ffreq, rq);
+	3.do {
+		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
+	};
+	Out.ar(outbus, Limiter.ar((sig * amp * ampeg)) ! 2)
 }).add;
 
 // didn't wanna do this but...

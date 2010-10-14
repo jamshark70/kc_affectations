@@ -2349,6 +2349,65 @@ s.audioBusAllocator.debug;
 
 
 /**** TODO Rework past inversion material ****/
+
+Error.debug = true;
+Error.debug = false;
+
+VC(\tmel).free;
+\makeTmelVC.eval(\tmel);
+
+k.free;
+k = VoicerMIDISocket(0, VC(\tmel).v);
+
+m = VC(\tmel).env.target;
+
+// nice!
+a = Synth(\nrgxch, [outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 71.midicps, 10, 4], amp: 30.dbamp, moveTime: 8, fenv: Env(83.midicps ! 2, #[1]), rqenv: Env(0.1 ! 2, #[1]), ampenv: Env.linen(0.1, 0.8, 0.1)], m.synthgroup);
+
+a.trace; s.sendMsg(\n_trace, 1123);
+m.inbus
+
+PeakMonitor(m)
+
+
+// well, this really ought to have worked but it doesn't, so f*ck it
+e = (
+	instrument: \nrgxch,
+	numCh: 1,  // kr channels required
+	bus: VC(\tmel).env.sideBus,
+	target: m.synthgroup,
+	bufnum: BP(\ssd).noisebuf,
+	center: { ~lock.bus.asMap }, // 71.midicps,
+	width: 10,
+	speed: 4,
+	amp: 30.dbamp,
+	moveTime: 8,
+	fenv: Env(83.midicps ! 2, #[1]),
+	rqenv: Env(0.1 ! 2, #[1]),
+	ampenv: Env.linen(0.1, 0.8, 0.1),
+	lpcEv: (
+		instrument: \ctlEnv,
+		env: Env([100, 100, 71.midicps], #[0.2, 0.4], \exp),
+		time: 8,
+		connect: 0,
+		killNode: true
+	)
+).parent_(ProtoEvent(\polySynthKrBusLock).v.parent);
+
+e.play;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
+// just move the damn 'center' curve into the source synthdef
+a = Synth(\nrgxch2, [outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 10, 4], amp: 40.dbamp, moveTime: 12, fenv: Env([100, 100, 71.midicps] * 2, #[0.2, 0.4], \exp), rqenv: Env(0.1 ! 2, #[1]), ampenv: Env.linen(0.1, 0.8, 0.1), ctrenv: Env([100, 100, 71.midicps], #[0.2, 0.4], \exp)], m.synthgroup);
+a.trace;
+
+
+
+s.controlBusAllocator.debug;
+
 /**** TODO Poses/changing places ****/
 /**** TODO Ilana's solo - probably mostly inner-modulation sounds ****/
 /**** TODO S&L duet - maybe tinkly things growing into inner-mods ****/

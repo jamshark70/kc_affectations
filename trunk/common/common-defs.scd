@@ -259,7 +259,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
 			~lock ?? { ~lock = PR(~lockKey).copy.prep((
-				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \audio
+				numCh: ~numCh, server: ~chan.tryPerform(\server) ?? { Server.default }, rate: ~busRate ? \audio
 			)) };
 			~bus = ~lock.bus;
 			~target = ~chan.synthgroup;
@@ -317,7 +317,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			var	chan = ~chan;
 			~numCh ?? { ~numCh = ~chan.inChannels };
 			~lock ?? { ~lock = PR(~lockKey).copy.prep((
-				numCh: ~numCh, server: ~chan.server, rate: ~busRate ? \control
+				numCh: ~numCh, server: ~chan.tryPerform(\server) ?? { Server.default }, rate: ~busRate ? \control
 			)) };
 			// ~bus = ~lock.bus;
 			// ~target = ~chan.synthgroup;
@@ -336,7 +336,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			if(~lpcEv.size > 0) {
 				~lpcEv.putAll((
 					bus: ~lock.bus,
-					target: chan.synthgroup,
+					target: if(chan.notNil) { chan.synthgroup } { ~target },
 					chan: nil,
 					// inbus: ~lock.bus,
 					collIndex: ~collIndex,

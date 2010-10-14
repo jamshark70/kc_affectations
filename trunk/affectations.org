@@ -343,7 +343,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** DONE Watch video!
 **** Silence to open this section would be nice after drums
 **** Pauses on the box
-*** Sounds [6/11]
+*** Sounds [7/11]
 **** Silences!
 **** DONE Bells
 **** DONE Washes
@@ -359,9 +359,9 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
      Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
      Later, integrate tinkles with chords(?) -- rework Klank as effect
 **** DONE Steady pitches with modulation based on movement
-**** TODO Stephen's solo [0/2]
-***** TODO Hopping movement
-***** TODO Arm raising
+**** DONE Stephen's solo [2/2]
+***** DONE Hopping movement
+***** DONE Arm raising
 **** DONE Energy exchanges
 **** TODO Rework past inversion material
 **** TODO Poses/changing places
