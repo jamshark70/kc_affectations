@@ -1,12 +1,14 @@
 // everybody needs these...
 
+// work around crappy Cocoa limitation - I do not miss SC.app AT ALL
+var screenBounds = Window.screenBounds;
 
 s.waitForBoot {
 
 	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
 	
 	// don't want reverb on netbook
-	if(Window.screenBounds.height > 600) {
+	if(screenBounds.height > 600) {
 		// global reverb
 		~glrvbmc ?? {
 			~glrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
@@ -645,7 +647,7 @@ Proto {
 // ));
 
 ~trigParms = (
-	sbounds: Window.screenBounds,
+	sbounds: screenBounds,
 	// play: \dummy,
 	setDoneSignal: {
 		~doneSignal = OSCresponderNode(s.addr, '/event', e { |t, r, m|
@@ -667,7 +669,7 @@ Proto {
 );
 
 {	|item|
-	var	sbounds = Window.screenBounds;
+	var	sbounds = screenBounds;
 	~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
 		var	inSeg = m[3], i;
 		case { inSeg == item[\id] or: { inSeg == 99999 } } {
