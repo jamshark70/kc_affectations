@@ -333,7 +333,7 @@ make: { |name|
 	out.mapGlobal(\car_detune, nil, ~defaultCarDetune, \mydetune);
 	out.mapGlobal(\car_vs, nil, ~defaultCarVs, nil, false);
 	out.mapGlobal(\mod_vs, nil, ~defaultModVs, nil, false);
-	out.mapGlobal(\finalAmp, nil, 1, #[0.1, 10, \exp]);
+	out.mapGlobal(\finalAmp, nil, 0.16, #[0.001, 0.5, \exp]);
 	~customize.(out);
 	out
 },
@@ -944,7 +944,7 @@ make: { |name|
 		delta: Pwhite(0.0, 0.999, inf).collect { |d| ~xferfunc.blendAt(d * ~xferfunc.size).linlin(0, 1, 5, 20) }, // Pwhite(12.0, 20.0, inf),
 		sustain: Pkey(\delta) + Pwhite(5.0, 8.5, inf),
 		rq: 0.11,
-		speedMul: Pwhite(6.0, 10.0, inf),
+		speedMul: Pwhite(0.4, 0.9, inf), // Pwhite(6.0, 10.0, inf),
 		fshift: Pexprand(4.0, 12.0, inf),
 		remainderMix: 0.9,
 		objects: { (
@@ -1025,8 +1025,11 @@ make: { |name|
 		fxrq: 0.2,
 		fxspeedMul: 0.71,
 		fxfshift: 34.8,
-		delta: Pwhite(1.8, 4.0, inf),
-		sustain: Pwhite(1.0, 5.5, inf),
+		delta: Pswitch1([
+			Pwhite(1.5, 3.0, inf),
+			Pexprand(0.2, 0.9, inf)
+		], Pwrand([0, Pn(1, Prand(#[1, 2, 3, 4], inf).asStream)], #[0.7, 0.3], inf)), //Pwhite(1.8, 4.0, inf),
+		sustain: Pexprand(0.7, 2.8, inf), //Pwhite(1.0, 5.5, inf),
 		userprep: {
 			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
 			[~glrvbmc, ~lcrvbmc].do { |mc|
@@ -1051,7 +1054,7 @@ make: { |name|
 							#[0.3, 0.1, 0.1, 0.5], #[5, -3, 3, -2.5])]
 					}),
 					// rqenv: ,
-					ampenv: `[Env(#[0, 0.1, 1, 0.1, 0], #[0.3, 0.1, 0.1, 0.5], \sin)],
+					ampenv: `[Env(#[0, 0.1, 1, 0.1, 0] * 0.4, #[0.3, 0.1, 0.1, 0.5], \sin)],
 					lpcEv: Pbind(
 						\instrument, \innermod1Mv,
 						\distance1, Pwhite(15.0, 20.0, inf),
@@ -1371,16 +1374,15 @@ PR(\abstractProcess).clone {
 			~event[\voicer].globalControls[\bufmod]
 				.watch
 				.automate { LFDNoise1.kr(3.5).range(0, 6.999) };
-			~distance.automate {
+			~pan.automate {
 				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
 					angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
-				[(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
-					cos(angle) * radius]
+				cos(angle) * radius
 			};
 		}
 	};
 
-	~recvEventNotify = { |node|
+	~recvEventNotify = { |node, event|
 		var	self = currentEnvironment,
 			endFunc = { |obj, what|
 				if(what == \n_end) {
@@ -1400,6 +1402,10 @@ PR(\abstractProcess).clone {
 			~nodes.add(node);
 			node.addDependant(endFunc);
 			NodeWatcher.register(node);
+			~distance.automate(\ctlEnv, [
+				time: event[\sustain] * rrand(0.85, 0.95),
+				env: Env([17, rrand(5.0, 9.5), 17], #[0.4, 0.6], \sine)
+			], ~chan.synthgroup, \addBefore);
 		};
 	};
 
@@ -1474,17 +1480,18 @@ PR(\abstractProcess).clone {
 	~requiredKeys = #[vcKey];
 	~resetAllSources = false;
 	~repeats = inf;
+	~controlsVCPos = true;
 	~prep = {
 		~ctlBus = Bus.control(s, 3).setn(#[0, 10, 0]);
 	};
 	~freeCleanup = {
-		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+		if(~controlsVCPos and: { VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil } }) {
 			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
 		};
 		~ctlBus.free
 	};
 
-	~freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2).collect { |deg| Mode(\a).cps(deg) };
+	~freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2);
 	~freq2 = Pseq([Mode(\a).cps(19), Pkey(\freqdelay)], 1);
 	~freqlag = Pseq([8, Pwhite(1.5, 3.2, inf)], 1);
 	~changingDelta = Prout({ |inval|
@@ -1499,9 +1506,12 @@ PR(\abstractProcess).clone {
 		Pkey(\delta) + Pwhite(4.0, 7.0, inf)
 	);
 	~gate = 0.05;
+	~mode = \a;
+	~attackTimeScale = Pkey(\gate).linlin(0, 1, 6, 0.5);
+	~decayTimeScale = max(Pkey(\attackTimeScale), 2.5);
 
 	~preparePlay = {
-		~rotSynth ?? {
+		if(~controlsVCPos and: { ~rotSynth.isNil }) {
 			~rotSynth = {
 				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
 				angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
@@ -1523,15 +1533,16 @@ PR(\abstractProcess).clone {
 	};
 	~userPattern = {
 		Pn(Pbind(
-			\freq, BPStream(\freq, ~resetAllSources),
+			\mode, BPStream(\mode, ~resetAllSources),
+			\freq, BPStream(\freq, ~resetAllSources).collect { |deg, ev| ev[\mode].asMode.cps(deg) },
 			\freqdelay, Pdelay(Pkey(\freq), 1),
 			\freq2, BPStream(\freq2, ~resetAllSources),
 			\freqlag, BPStream(\freqlag, ~resetAllSources),
 			\delta, BPStream(\delta, resetSource: true),
 			\sustain, BPStream(\sustain, ~resetAllSources),
 			\gate, BPStream(\gate, ~resetAllSources),
-			\attackTimeScale, Pkey(\gate).linlin(0, 1, 6, 0.5),
-			\decayTimeScale, max(Pkey(\attackTimeScale), 2.5)
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale)
 		), ~repeats)
 	};
 	~asPattern = {
@@ -1555,7 +1566,7 @@ PR(\abstractProcess).clone {
 	};
 
 	~bindVoicer = { |vc|
-		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+		if(~controlsVCPos and: { VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil } }) {
 			// unmap position in old voicer
 			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
 		};
@@ -1565,7 +1576,7 @@ PR(\abstractProcess).clone {
 			bus: VC(~vcKey).env[\sideBus] ?? { VC(~vcKey).env.target.inbus },
 			instrument: VC(~vcKey).v.nodes[0].defname
 		));
-		if(VC(~vcKey).env[\modfx].notNil) {
+		if(~controlsVCPos and: { VC(~vcKey).env[\modfx].notNil }) {
 			// unmap position in old voicer
 			VC(~vcKey).env[\modfx].map(*(
 				[#[pan, distance, fshift], ~ctlBus.index + #[0, 1, 2]].flop.flat
@@ -1582,3 +1593,38 @@ PR(\abstractProcess).clone {
 } => PR(\tposes);
 
 
+
+(make: { |name|
+PR(\tposes).chuck(BP(name), nil, (
+	// controlsVCPos: false,  // REENABLE FOR SEQUENCE
+	mode: Pseq([
+		Pn(\a0, { rrand(25, 65) }),
+		Pstutter(Pwhite(6, 10, { rrand(1, 3) }),
+			Pxrand(Mode.keys.select { |key| key != \a0 and: { key.asString.last == $0 } }.asArray, inf)
+		)
+	], inf),
+	num: Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf),
+	freq: Pvbrown(28, 47, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
+		var	n;
+		~numStream ?? { ~makeStreamForKey.(\num) };
+		n = ~numStream.next(ev);
+		(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
+	}),
+	freq2: Pkey(\freq) * Pif(0.02.asPattern.coin, Pwhite(0.6, 0.8, inf), 1),
+	freqlag: Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0, Pwhite(0.2, 0.8, inf)),
+	changingDelta: Prand([
+		Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+		Pexprand(0.08, 0.2, { rrand(8, 17) }),
+		Plazy({
+			var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+			Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+		})
+	], inf),
+	sustain: max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf)),
+	attackTimeScale: 0.1,
+	decayTimeScale: Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0.4,
+		(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.4, 0.8, inf))
+	)
+));
+0 => BP(name);
+}, type: \bp) => Fact(\fastnotesBP);

@@ -2268,6 +2268,9 @@ Fact(\tmelBP) => BP(\tmel);
 Func(\makettoneVC).value(\tton);
 Fact(\ttonesBP) => BP(\tton);
 
+s.sendMsg(\n_trace, 12410)
+s.sendMsg(\n_free, 12410)
+
 
 // stephen's solo -- these are too loud
 Fact(\torsoSolo) => BP(\ssd);
@@ -2677,19 +2680,140 @@ r = BP(\fast);
 
 // 'k but EVEN FASTER!!
 r.delta = Prand([
-	Pstutter(inf, Pwhite(0.1, 0.23, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
-	Pexprand(0.08, 0.3, { rrand(8, 17) }),
-	Plazy({ Pgeom.fromEndpoints(rrand(0.08, 0.12), rrand(0.25, 0.55), rrand(8, 14)) }),
-], inf);
-r.sustain = Pkey(\delta) * Pwhite(0.25, 0.6, inf);
+	Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+	Pexprand(0.08, 0.2, { rrand(8, 17) }),
+	// Plazy({ Pgeom.fromEndpoints(rrand(0.06, 0.09), rrand(0.18, 0.35), rrand(8, 14).debug("endpts")) }),
+	Plazy({
+		var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+		Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+	})
+], inf) * Env(#[4, 1], #[8], -2);
+
+r.sustain = max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf));
 
 r.throwfLow = Prand([
 	Plazy({ Pser({ exprand(600, 1400) } ! 2, rrand(2, 4) * 2 + 1) }),
 	Plazy({ Pgeom.fromEndpoints(rrand(200, 500), rrand(2000, 4500), rrand(8, 14)) }),
 	Pexprand(600, 1800, { rrand(8, 17) })
 ], inf);
-r.throwfHigh = Pkey(\fLow);
-r.throwampenv = `[Env.perc(0.9, 0.1, 0.2)];
+r.throwfHigh = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
+r.throwampenv = Prand([
+	[Env.perc(0.9, 0.1, 0.4).asArray],
+	[Env.perc(0.1, 0.9, 0.4).asArray]
+], inf);
+
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+
+
+VC(\tmel).free;
+\makeTmelVC.eval(\tmel);
+
+BP(\tp).free;
+PR(\tposes) => BP(\tp);
+VC(\tmel) => BP(\tp);
+0 => BP(\tp);
+BP(\tp) => MT(1);
+
+VC(\tmel).v.set(#[finalAmp, 0.16]);
+
+p = BP(\tp);
+
+p.mode = \a0;
+p.mode = Pseq([
+	Pn(\a0, { rrand(25, 65) }),
+	Pstutter(Pwhite(6, 10, { rrand(1, 3) }),
+		Pxrand(Mode.keys.select { |key| key != \a0 and: { key.asString.last == $0 } }.asArray, inf)
+	)
+], inf);
+
+p.num = Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf);
+
+p.freq = Pvbrown(28, 47, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
+	var	n;
+	~numStream ?? { ~makeStreamForKey.(\num) };
+	n = ~numStream.next(ev);
+	(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
+});
+
+e = p.use { ~eventStream.next(()) };
+
+e[\freq] == e[\freq2]
+
+
+p.freq2 = Pkey(\freq) * Pif(0.02.asPattern.coin, Pwhite(0.6, 0.8, inf), 1);
+p.freqlag = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0, Pwhite(0.2, 0.8, inf));
+
+p.changingDelta = Prand([
+	Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+	Pexprand(0.08, 0.2, { rrand(8, 17) }),
+	Plazy({
+		var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+		Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+	})
+], inf);
+
+p.sustain = max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf));
+
+	max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf)),
+	Pkey(\freqlag) * Pwhite(1.4, 1.7, inf)
+);
+
+p.attackTimeScale = 0.1;
+p.decayTimeScale = 1;
+
+();
+p.decayTimeScale = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0.4,
+	(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.4, 0.8, inf)).trace(prefix: "slide decayscale: ")
+);
+
+
+(make: { |name|
+PR(\tposes).chuck(BP(name), nil, (
+	// controlsVCPos: false,  // REENABLE FOR SEQUENCE
+	mode: Pseq([
+		Pn(\a0, { rrand(25, 65) }),
+		Pstutter(Pwhite(6, 10, { rrand(1, 3) }),
+			Pxrand(Mode.keys.select { |key| key != \a0 and: { key.asString.last == $0 } }.asArray, inf)
+		)
+	], inf),
+	num: Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf),
+	freq: Pvbrown(28, 47, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
+		var	n;
+		~numStream ?? { ~makeStreamForKey.(\num) };
+		n = ~numStream.next(ev);
+		(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
+	}),
+	freq2: Pkey(\freq) * Pif(0.02.asPattern.coin, Pwhite(0.6, 0.8, inf), 1),
+	freqlag: Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0, Pwhite(0.2, 0.8, inf)),
+	changingDelta: Prand([
+		Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+		Pexprand(0.08, 0.2, { rrand(8, 17) }),
+		Plazy({
+			var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+			Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+		})
+	], inf),
+	sustain: max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf)),
+	attackTimeScale: 0.1,
+	decayTimeScale: Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 0.4,
+		(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.4, 0.8, inf))
+	)
+));
+0 => BP(name);
+}, type: \bp) => Fact(\fastnotesBP);
+
+
+BP(\fastnotes).delta = BP(\fastnotes).changingDelta * Env([1, 4], #[40], 5);
+
+
+VC(\tmel) => BP(\fastnotes);
+
+VC(\tmel).v.globalControls[\finalAmp].spec = #[0.001, 0.5, \exp];
+
 
 
 /**** TODO Ilana's solo - probably mostly inner-modulation sounds ****/

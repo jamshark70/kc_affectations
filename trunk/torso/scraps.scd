@@ -57,3 +57,21 @@ stopfx: { |self| self.use {
 	}
 } },
 
+
+
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+
+	~asPattern = {
+		Pbind(
+			\freq,
+			\dur,
+			\length,
+			\gate,
+			\freq2,
+			
+		)
+	};
+};

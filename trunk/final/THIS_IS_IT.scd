@@ -113,3 +113,6 @@ BP(\st) => MT(1);
 			startAt.debug("loadResources auto-chose startAt");
 		};
 };
+
+
+BP(\tton).listVars
