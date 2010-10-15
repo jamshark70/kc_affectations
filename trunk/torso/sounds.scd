@@ -2348,7 +2348,8 @@ s.audioBusAllocator.debug;
 
 
 
-/**** TODO Rework past inversion material ****/
+/**** TODO Poses/changing places ****/
+
 
 Error.debug = true;
 Error.debug = false;
@@ -2372,59 +2373,112 @@ k.noteOnArgsPat = Pbind(
 (
 PR(\abstractProcess).clone {
 	~event = (eventKey: \monoSupport, protoEvent: \polySynthPlayNotify);
+	~alwaysReset = true;
 	~requiredKeys = #[vcKey];
-	~prep = {};
+	~prep = {
+		~ctlBus = Bus.control(s, 3).setn(#[0, 10, 0]);
+	};
+	~freeCleanup = {
+		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
+		};
+		~ctlBus.free
+	};
 
-	~freq = Pexprand(200, 600);
-	~freq2 = Pkey(\freq) * 0.5;
-	~freqlag = 3;
-	~delta = 5;
-	~sustain = 5;
+	~freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2).collect { |deg| Mode(\a).cps(deg) };
+	~freq2 = Pseq([Mode(\a).cps(19), Pkey(\freqdelay)], 1);
+	~freqlag = Pseq([8, Pwhite(1.5, 3.2, inf)], 1);
+	~changingDelta = Prout({ |inval|
+		inval = Pseq([12, Pwhite(1.0, 3.0, { rrand(2, 5) }), Pwhite(6.0, 10.0, 1)], 1)
+			.embedInStream(inval);
+		~delta = Pseq([Pwhite(1.0, 3.0, { rrand(3, 6) }), Pwhite(6.0, 10.0, 1)], 1);
+		~deltaStream.next(inval).yield  // this routine gets gc'ed after this
+	});
+	~sustain = Pif(
+		Pbinop('and', Pkey(\delta) >= 6, Pdiff(Pkey(\delta)) > 1),
+		Pwhite(5.0, 8.0, inf),
+		Pkey(\delta) + Pwhite(4.0, 7.0, inf)
+	);
 	~gate = 0.05;
 
+	~preparePlay = {
+		~rotSynth ?? {
+			~rotSynth = {
+				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
+				angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
+				[	cos(angle) * radius,
+					(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
+					LFDNoise1.kr(0.07).exprange(0.001, 8)
+				]
+			}.play(VC(~vcKey).env.target.fadergroup, ~ctlBus, addAction: \addToHead);
+		};
+	};
+	~stopCleanup = {
+		~clock.sched(10, e {
+			if(~isPlaying.not and: { ~rotSynth.notNil }) {
+				~rotSynth.free;
+				~rotSynth = nil;
+			};
+			nil
+		});
+	};
 	~userPattern = {
-		Pbind(
+		Pn(Pbind(
 			\freq, BPStream(\freq),
+			\freqdelay, Pdelay(Pkey(\freq), 1),
 			\freq2, BPStream(\freq2),
 			\freqlag, BPStream(\freqlag),
-			\delta, BPStream(\delta),
+			\delta, BPStream(\delta, resetSource: true),
 			\sustain, BPStream(\sustain),
-// 			\moveTime, Pkey(\sustain),
 			\gate, BPStream(\gate),
 			\attackTimeScale, Pkey(\gate).linlin(0, 1, 6, 0.5),
 			\decayTimeScale, max(Pkey(\attackTimeScale), 2.5)
-		)
+		))
 	};
 	~asPattern = {
 		Pchain(
 			Pfunc({ |ev|
-				var ev2, id = s.nextNodeID;
+				var ev2;
 				if(ev[\freq] != ev[\freq2]) {
 					ev2 = ev.copy
 						.put(\freq, ev[\freq2])
-						.put(\delta, 0.01)
-						.put(\id, [id])
-						.debug("\nmain");
+						.put(\delta, 0.01);
 					ev2.yield;
-ev2.debug("main event after yield");
 					(protoEvent: \polySynthTrigger,
-						node: Synth.basicNew(ev[\instrument], s, id),
+						node: ev2[\node],
 						freq: ev[\freq], delta: ev[\delta] - 0.01)
 					.parent_(~event.parent)
-					.debug("slide")
 				} { ev }
 			}),
-			~userPattern.()
+			~userPattern.(),
+			().putPairs(~event[\voicer].nodes[0].mapArgs)
 		)
 	};
 
 	~bindVoicer = { |vc|
+		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+			// unmap position in old voicer
+			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
+		};
 		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
 		~event.putAll((
 			target: VC(~vcKey).env.target.synthgroup,
 			bus: VC(~vcKey).env[\sideBus] ?? { VC(~vcKey).env.target.inbus },
 			instrument: VC(~vcKey).v.nodes[0].defname
 		));
+		if(VC(~vcKey).env[\modfx].notNil) {
+			// unmap position in old voicer
+			VC(~vcKey).env[\modfx].map(*(
+				[#[pan, distance, fshift], ~ctlBus.index + #[0, 1, 2]].flop.flat
+			))
+		};		
+	};
+
+	~reset = {
+		~delta = ~changingDelta;
+		#[delta, freq, freq2, freqlag, sustain].do { |key|
+			~makeStreamForKey.(key)
+		};
 	};
 } => PR(\tposes);
 )
@@ -2435,13 +2489,57 @@ VC(\tmel) => BP(\tp);
 0 => BP(\tp);
 BP(\tp) => MT(1);
 
-BP(\tp).use { p = ~asPattern.().asStream };
+VC(\tmel).v.set(#[finalAmp, 0.16]);
 
-q = p.next(BP(\tp).event.copy);
+VC(\tmel).env.modfx.trace
 
-q.play;
-q.parent.parent
+p = BP(\tp);
 
+// p.freq = Pseq([
+// 	36, Pvbrown(28, 46, Pwhite(1, 3, inf), inf, { #[34, 35, 37, 38].choose })
+// ], 1).collect { |deg| Mode(\a).cps(deg) };
+
+p.freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2).collect { |deg| Mode(\a).cps(deg) };
+
+p.freq2 = Pseq([Mode(\a).cps(19), Pkey(\freqdelay)], 1);
+p.freqlag = Pseq([8, Pwhite(1.5, 3.2, inf)], 1);
+
+// another godawful hack...
+p.changingDelta = Prout({ |inval|
+	inval = Pseq([14, Pwhite(1.0, 3.0, { rrand(2, 5) }), Pwhite(6.0, 10.0, 1)], 1)
+		.embedInStream(inval);
+	~delta = Pseq([Pwhite(1.0, 3.0, { rrand(3, 6) }), Pwhite(6.0, 10.0, 1)], 1);
+	~deltaStream.next(inval).yield  // this routine gets gc'ed after this
+});
+
+//Pseq([Pwhite(1.0, 3.0, { rrand(3, 6) }), Pwhite(6.0, 10.0, 1)], 1);
+p.sustain = Pif(
+	Pbinop('and', Pkey(\delta) >= 6, Pdiff(Pkey(\delta)) > 1),
+	Pwhite(5.0, 8.0, inf),
+	Pkey(\delta) + Pwhite(4.0, 7.0, inf)
+);
+
+p.alwaysReset = true;
+
+p[\reset] = {
+	"reset func".debug;
+	~delta = ~changingDelta;
+	~makeStreamForKey.(\delta);
+	~makeStreamForKey.(\freq);
+	~makeStreamForKey.(\freq2);
+	~makeStreamForKey.(\freqlag);
+	~makeStreamForKey.(\sustain);
+	// // dangerous to call override if it's already overriding
+	// if(~savedeltaStream.debug("savedeltaStream").isNil) {
+	// 	"overriding".debug;
+	// 	~override.(\delta, Pn(15, 1), false, { "override done".debug });
+	// }
+};
+
+p.reset;
+
+p.savedeltaStream
+p.unOverride(\delta)
 
 BP(\tp).event;
 
@@ -2499,6 +2597,100 @@ a.trace;
 
 s.controlBusAllocator.debug;
 
-/**** TODO Poses/changing places ****/
+
+/**** TODO Rework past inversion material ****/
+\makeTmelVC.eval(\tmel);
+
+BP(\tp).free;
+PR(\tposes) => BP(\tp);
+VC(\tmel) => BP(\tp);
+0 => BP(\tp);
+BP(\tp) => MT(1);
+
+VC(\tmel).v.set(#[finalAmp, 0.16]);
+
+
+p = BP(\tp);
+
+p.resetAllSources = true;
+p.changingDelta = Plazy({
+	Pseq([
+		Pgeom.fromEndpoints(rrand(0.2, 0.4), rrand(0.06, 0.09), rrand(6, 12)),
+		Pwhite(6.0, 9.0, 1)
+	], 1)
+});
+p.sustain = Pwhite(2.0, 3.5, inf);
+
+p.freq = Plazy({
+	Pseries(rrand(26, 36), Pwrand(#[1, 2, 3], #[0.45, 0.45, 0.1], inf), inf)
+}).collect { |deg| Mode(\a).cps(deg) };
+p.freq2 = Pkey(\freq);
+
+p.repeats = 1;
+p.printStopMsg = false;
+
+
+Fact(\bellfx).chuck(BP(\bfx), nil, (
+	parentChan: VC(\tmel).env.target,
+	longDelayMax: 7,
+	longDelayTime: 7,
+	delayInbus: VC(\tmel).env.sideBus
+));
+
+BP(\bfx).attenCtl.value = 0.0125;
+BP(\bfx).longDelayTime = 5.5;
+BP(\bfx).sustain = Pexprand(3.0, 5.8, inf);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+BP(\bfx).dlySynth.trace
+BP(\bfx).delayInbus
+
+
+p[\stopCleanup] = 0
+
+BP(\tp).free;
+
+
+// need some fast stuff
+// bells, not so much
+Fact(\bells) => BP(\bb);
+
+q = BP(\bb);
+
+q.delta = Pseq([
+	Plazy({ Pgeom.fromEndpoints(rrand(0.2, 0.4), rrand(0.06, 0.09), ~numInSeries = rrand(6, 12)) }),
+	Pwhite(5.0, 8.0, 1)
+], inf);
+q.sustain = Pwhite(3.0, 7.0, inf);
+q.lowbellfLow = Pn(Plazy({
+	Pseries(rrand(19, 29), Pwrand(#[1, 2, 3], #[0.45, 0.45, 0.1], inf), ~numInSeries+1)
+}), inf).collect { |deg| Mode(\a).cps(deg) };
+q.lowbellfHigh = Pkey(\fLow) * 8;
+
+
+// LOUD fix it
+Fact(\nrgThrows) => BP(\fast);
+
+r = BP(\fast);
+
+// 'k but EVEN FASTER!!
+r.delta = Prand([
+	Pstutter(inf, Pwhite(0.1, 0.23, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+	Pexprand(0.08, 0.3, { rrand(8, 17) }),
+	Plazy({ Pgeom.fromEndpoints(rrand(0.08, 0.12), rrand(0.25, 0.55), rrand(8, 14)) }),
+], inf);
+r.sustain = Pkey(\delta) * Pwhite(0.25, 0.6, inf);
+
+r.throwfLow = Prand([
+	Plazy({ Pser({ exprand(600, 1400) } ! 2, rrand(2, 4) * 2 + 1) }),
+	Plazy({ Pgeom.fromEndpoints(rrand(200, 500), rrand(2000, 4500), rrand(8, 14)) }),
+	Pexprand(600, 1800, { rrand(8, 17) })
+], inf);
+r.throwfHigh = Pkey(\fLow);
+r.throwampenv = `[Env.perc(0.9, 0.1, 0.2)];
+
+
 /**** TODO Ilana's solo - probably mostly inner-modulation sounds ****/
 /**** TODO S&L duet - maybe tinkly things growing into inner-mods ****/

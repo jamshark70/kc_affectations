@@ -37,7 +37,7 @@ make: { |name|
 			};
 		},
 		sustain: Pwhite(9.0, 18.0, inf),
-		delta: Pif(Pwhite(0.0, 1.0, inf) < 0.2, Pwhite(1.5, 4.0, inf), Pwhite(10.0, 16.0, inf)),
+		// delta: Pif(Pwhite(0.0, 1.0, inf) < 0.2, Pwhite(1.5, 4.0, inf), Pwhite(10.0, 16.0, inf)),
 		delta: Pseq([
 			Plazy({
 				var	last = rrand(0.9, 1.2);
@@ -571,11 +571,12 @@ longDelayTime: 8,
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayer),
+		event: (eventKey: \singleSynthPlayer, addAction: \addToHead),
 		alwaysReset: true,
 		chan: ~parentChan,
 		longDelayMax: ~longDelayMax,
 		longDelayTime: ~longDelayTime,
+		delayInbus: ~delayInbus,
 		isFx: true,
 		// master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		userprep: {
@@ -608,7 +609,7 @@ make: { |name|
 						BufDelayL.ar(buf + #[0, 1], In.ar(inbus, 2), delaytime: delaytime)
 					)
 				}).play(~chan.effectgroup, [
-					inbus: ~chan.inbus, outbus: ~delayBus,
+					inbus: ~delayInbus ?? { ~chan.inbus }, outbus: ~delayBus,
 					buf: ~longDelayBuf, delaytime: ~longDelayTime
 				], \addToHead);
 			}
@@ -624,7 +625,7 @@ make: { |name|
 					// chfreq = 0.6, chamt = 0.002, chdly = 0.008,
 					pan = 0, panWidth = 1, panFreq = 1,
 					wet = 0.8|
-					var	n = 10,
+					var	n = 6,
 						in = In.ar(inbus, 2),
 						initTrig = Impulse.kr(0),
 						exc = LPF.ar(in, beaterFilt)
@@ -1462,4 +1463,122 @@ make: { |name|
 	VC(name).v.mapGlobal(\finalAmp, nil, 1, \amp);
 	VC(name).v.globalControls[\ffreq].value = 3000;
 } => Func(\makettoneVC);
+
+
+
+// poses on chair
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport, protoEvent: \polySynthPlayNotify);
+	~alwaysReset = true;
+	~requiredKeys = #[vcKey];
+	~resetAllSources = false;
+	~repeats = inf;
+	~prep = {
+		~ctlBus = Bus.control(s, 3).setn(#[0, 10, 0]);
+	};
+	~freeCleanup = {
+		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
+		};
+		~ctlBus.free
+	};
+
+	~freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2).collect { |deg| Mode(\a).cps(deg) };
+	~freq2 = Pseq([Mode(\a).cps(19), Pkey(\freqdelay)], 1);
+	~freqlag = Pseq([8, Pwhite(1.5, 3.2, inf)], 1);
+	~changingDelta = Prout({ |inval|
+		inval = Pseq([12, Pwhite(1.0, 3.0, { rrand(2, 5) }), Pwhite(6.0, 10.0, 1)], 1)
+			.embedInStream(inval);
+		~delta = Pseq([Pwhite(1.0, 3.0, { rrand(3, 6) }), Pwhite(6.0, 10.0, 1)], 1);
+		~deltaStream.next(inval).yield  // this routine gets gc'ed after this
+	});
+	~sustain = Pif(
+		Pbinop('and', Pkey(\delta) >= 6, Pdiff(Pkey(\delta)) > 1),
+		Pwhite(5.0, 8.0, inf),
+		Pkey(\delta) + Pwhite(4.0, 7.0, inf)
+	);
+	~gate = 0.05;
+
+	~preparePlay = {
+		~rotSynth ?? {
+			~rotSynth = {
+				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
+				angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
+				[	cos(angle) * radius,
+					(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
+					LFDNoise1.kr(0.07).exprange(0.001, 8)
+				]
+			}.play(VC(~vcKey).env.target.fadergroup, ~ctlBus, addAction: \addToHead);
+		};
+	};
+	~stopCleanup = {
+		(~clock ?? { TempoClock.default }).sched(10, e {
+			if(~isPlaying.not and: { ~rotSynth.notNil }) {
+				~rotSynth.free;
+				~rotSynth = nil;
+			};
+			nil
+		});
+	};
+	~userPattern = {
+		Pn(Pbind(
+			\freq, BPStream(\freq, ~resetAllSources),
+			\freqdelay, Pdelay(Pkey(\freq), 1),
+			\freq2, BPStream(\freq2, ~resetAllSources),
+			\freqlag, BPStream(\freqlag, ~resetAllSources),
+			\delta, BPStream(\delta, resetSource: true),
+			\sustain, BPStream(\sustain, ~resetAllSources),
+			\gate, BPStream(\gate, ~resetAllSources),
+			\attackTimeScale, Pkey(\gate).linlin(0, 1, 6, 0.5),
+			\decayTimeScale, max(Pkey(\attackTimeScale), 2.5)
+		), ~repeats)
+	};
+	~asPattern = {
+		Pchain(
+			Pfunc({ |ev|
+				var ev2;
+				if(ev[\freq] != ev[\freq2]) {
+					ev2 = ev.copy
+						.put(\freq, ev[\freq2])
+						.put(\delta, 0.01);
+					ev2.yield;
+					(protoEvent: \polySynthTrigger,
+						node: ev2[\node],
+						freq: ev[\freq], delta: ev[\delta] - 0.01)
+					.parent_(~event.parent)
+				} { ev }
+			}),
+			~userPattern.(),
+			().putPairs(~event[\voicer].nodes[0].mapArgs)
+		)
+	};
+
+	~bindVoicer = { |vc|
+		if(VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil }) {
+			// unmap position in old voicer
+			VC(~vcKey).env[\modfx].map(\distance, -1, \pan, -1, \fshift, -1)
+		};
+		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
+		~event.putAll((
+			target: VC(~vcKey).env.target.synthgroup,
+			bus: VC(~vcKey).env[\sideBus] ?? { VC(~vcKey).env.target.inbus },
+			instrument: VC(~vcKey).v.nodes[0].defname
+		));
+		if(VC(~vcKey).env[\modfx].notNil) {
+			// unmap position in old voicer
+			VC(~vcKey).env[\modfx].map(*(
+				[#[pan, distance, fshift], ~ctlBus.index + #[0, 1, 2]].flop.flat
+			))
+		};		
+	};
+
+	~reset = {
+		~delta = ~changingDelta;
+		#[delta, freq, freq2, freqlag, sustain].do { |key|
+			~makeStreamForKey.(key)
+		};
+	};
+} => PR(\tposes);
+
 

@@ -362,9 +362,9 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** DONE Stephen's solo [2/2]
 ***** DONE Hopping movement
 ***** DONE Arm raising
-**** DONE Energy exchanges
+**** TODO Energy exchanges -- TOO LOUD!
 **** TODO Rework past inversion material
-**** TODO Poses/changing places
+**** DONE Poses/changing places
 **** TODO Ilana's solo - probably mostly inner-modulation sounds
 **** TODO S&L duet - maybe tinkly things growing into inner-mods
 *** Data needed from Lorne
