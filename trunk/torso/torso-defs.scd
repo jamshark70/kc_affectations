@@ -813,7 +813,7 @@ SynthDef(\nrgxch2, { |outbus, bufnum, /*center = 60,*/ width = 10, speed = 4, //
 	3.do {
 		sig = sig + AllpassL.ar(sig, chorCtr + chorWidth, max(0.0001, LFDNoise1.kr(chorSpeed, chorWidth, chorCtr)), chorDecay);
 	};
-	Out.ar(outbus, Limiter.ar((sig * amp * ampeg)) ! 2)
+	Out.ar(outbus, (Limiter.ar(sig * amp) * ampeg) ! 2)
 }).add;
 
 // didn't wanna do this but...

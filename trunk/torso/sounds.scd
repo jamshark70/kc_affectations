@@ -2359,7 +2359,98 @@ VC(\tmel).free;
 k.free;
 k = VoicerMIDISocket(0, VC(\tmel).v);
 
+VC(\tmel).v.nodes[0].initArgs
+
+VC(\tmel).v.globalControls.keys
+
+k.noteOnArgsPat = Pbind(
+	\attackTimeScale, Pkey(\velocity).linlin(0, 127, 6, 0.5),
+	\decayTimeScale, max(Pkey(\attackTimeScale), 2.5)
+);
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \monoSupport, protoEvent: \polySynthPlayNotify);
+	~requiredKeys = #[vcKey];
+	~prep = {};
+
+	~freq = Pexprand(200, 600);
+	~freq2 = Pkey(\freq) * 0.5;
+	~freqlag = 3;
+	~delta = 5;
+	~sustain = 5;
+	~gate = 0.05;
+
+	~userPattern = {
+		Pbind(
+			\freq, BPStream(\freq),
+			\freq2, BPStream(\freq2),
+			\freqlag, BPStream(\freqlag),
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain),
+// 			\moveTime, Pkey(\sustain),
+			\gate, BPStream(\gate),
+			\attackTimeScale, Pkey(\gate).linlin(0, 1, 6, 0.5),
+			\decayTimeScale, max(Pkey(\attackTimeScale), 2.5)
+		)
+	};
+	~asPattern = {
+		Pchain(
+			Pfunc({ |ev|
+				var ev2, id = s.nextNodeID;
+				if(ev[\freq] != ev[\freq2]) {
+					ev2 = ev.copy
+						.put(\freq, ev[\freq2])
+						.put(\delta, 0.01)
+						.put(\id, [id])
+						.debug("\nmain");
+					ev2.yield;
+ev2.debug("main event after yield");
+					(protoEvent: \polySynthTrigger,
+						node: Synth.basicNew(ev[\instrument], s, id),
+						freq: ev[\freq], delta: ev[\delta] - 0.01)
+					.parent_(~event.parent)
+					.debug("slide")
+				} { ev }
+			}),
+			~userPattern.()
+		)
+	};
+
+	~bindVoicer = { |vc|
+		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
+		~event.putAll((
+			target: VC(~vcKey).env.target.synthgroup,
+			bus: VC(~vcKey).env[\sideBus] ?? { VC(~vcKey).env.target.inbus },
+			instrument: VC(~vcKey).v.nodes[0].defname
+		));
+	};
+} => PR(\tposes);
+)
+
+BP(\tp).free;
+PR(\tposes) => BP(\tp);
+VC(\tmel) => BP(\tp);
+0 => BP(\tp);
+BP(\tp) => MT(1);
+
+BP(\tp).use { p = ~asPattern.().asStream };
+
+q = p.next(BP(\tp).event.copy);
+
+q.play;
+q.parent.parent
+
+
+BP(\tp).event;
+
 m = VC(\tmel).env.target;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
 
 // nice!
 a = Synth(\nrgxch, [outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 71.midicps, 10, 4], amp: 30.dbamp, moveTime: 8, fenv: Env(83.midicps ! 2, #[1]), rqenv: Env(0.1 ! 2, #[1]), ampenv: Env.linen(0.1, 0.8, 0.1)], m.synthgroup);
@@ -2401,7 +2492,7 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).a
 
 
 // just move the damn 'center' curve into the source synthdef
-a = Synth(\nrgxch2, [outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 10, 4], amp: 40.dbamp, moveTime: 12, fenv: Env([100, 100, 71.midicps] * 2, #[0.2, 0.4], \exp), rqenv: Env(0.1 ! 2, #[1]), ampenv: Env.linen(0.1, 0.8, 0.1), ctrenv: Env([100, 100, 71.midicps], #[0.2, 0.4], \exp)], m.synthgroup);
+a = Synth(\nrgxch2, [outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 10, 4], amp: 40.dbamp, moveTime: 24, fenv: Env([100, 100, 71.midicps] * 2, #[0.12, 0.3], \exp), rqenv: Env(0.1 ! 2, #[1]), ampenv: Env.linen(0.05, 0.75, 0.2), ctrenv: Env([100, 100, 71.midicps], #[0.12, 0.3], \exp)], m.synthgroup);
 a.trace;
 
 
