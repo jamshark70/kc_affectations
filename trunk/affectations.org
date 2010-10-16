@@ -467,6 +467,22 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
      2. Event trigger for silence
 **** H1500-Drones start (currently plays automatically)
 
+*** Torso
+**** T2000 - getting set for the first torso theme (right around 28:30 in the residency video)
+**** T2010 - as Laura and Ilana leave before Stephen's solo (30:20)
+     1. Event cue as Stephen speeds up for the hopping gesture -- hit this as he starts to speed up (31:20), so the musical gesture reaches full steam when he's moving fastest
+     2. A second event cue a little later (same action) (31:53)
+**** T2020 - Ilana enters (32:06)
+     1. Event cue for the same motion (32:32) - *before* Laura comes in
+**** T2030 - energy exchanges (32:53)
+**** T2040 - ensemble work when they all rise to stand (33:22)
+**** T2050 - as Ilana is starting to go down to the floor (33:53)
+**** T2060 - when they start moving quickly as an ensemble (34:45)
+**** T2070 - when they start to slow down (35:04)
+**** T2080 - when Ilana goes up onto the platform (OK to hit this as she is heading for the platform) -- let this run through Stephen's shorter solo (35:31)
+**** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
+**** T2100 - Stephen and Laura's duet (37:20-ish)
+
 
 * Sample attributions
     September 3, 2010
