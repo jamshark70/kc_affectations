@@ -13,7 +13,7 @@ if(BP.exists(\transports)) { BP(\transports).free };
 s = Server.local;
 s.waitForBoot {
 	var	cond = Condition.new;
-	(mypath.dirname.dirname +/+ "/common/common-defs.scd").debug.loadPath;
+	(mypath.dirname.dirname +/+ "/common/common-defs.scd").loadPath;
 	NotificationCenter.registerOneShot(\lcrvb, \lcrvbexists, \feetSeq, {
 		cond.unhang;
 	});

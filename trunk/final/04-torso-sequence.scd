@@ -92,6 +92,10 @@
 		name: "T2020-plus Ilana",
 		segID: 2020,
 		initProcesses: {
+			topEnvironment[\seq].sections.do { |sect|
+				if(sect.segID < 2000) { sect.prUnload };
+			};
+
 			\chuckIf.eval(Fact(\torsoSolo), BP, \ssd2, nil, (
 				gcSpecs: (
 					distance: #[5, 20],
@@ -207,7 +211,12 @@
 			if(VC.exists(\tmel).not) { \makeTmelVC.eval(\tmel) };
 			\chuckIf.eval(Fact(\fastnotesBP), BP, \fastnotes);
 			VC(\tmel) => BP(\fastnotes);
-			BP(\fastnotes).originalDelta = BP(\fastnotes).changingDelta;
+			BP(\fastnotes)[\originalDelta] ?? {
+				BP(\fastnotes).originalDelta = BP(\fastnotes).changingDelta
+			};
+			BP(\fastnotes)[\originalRotSynthDef] ?? {
+				BP(\fastnotes).originalRotSynthDef = BP(\fastnotes).rotSynthDef;
+			};
 		},
 		unloadProcesses: {
 			VC(\tmel).free; BP(\fastnotes).free;
@@ -235,7 +244,7 @@
 							Plazy({ Pgeom.fromEndpoints(rrand(200, 500), rrand(2000, 4500), rrand(8, 14)) }),
 							Pexprand(600, 1800, { rrand(8, 17) })
 						], inf);
-						r.throwfHigh = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
+						r.throwfHi = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
 						r.throwampenv = Prand([
 							[Env.perc(0.9, 0.1, 0.2).asArray],
 							[Env.perc(0.1, 0.9, 0.2).asArray]
@@ -249,6 +258,9 @@
 						bp.mod_ratio = Pwhite(2, 7, inf) + Pwhite(0.14, 0.88, inf);
 						bp.mod_lev = Pexprand(6, 14, inf);
 						bp.finalAmp = VC(\tmel).v.globalControls[\finalAmp].asMap;
+						bp.changingDelta = bp.originalDelta;
+						bp.rotSynthDef = bp.originalRotSynthDef;
+						VC(bp.vcKey).env.modfx.set(\distFar, 20);
 					}),
 					gcAutoSynthCmd: (gc: { VC(\tmel).v.globalControls[\finalAmp] },
 						name: \ctlEnv, outName: \outbus, shouldSync: false,
@@ -280,8 +292,9 @@
 					{	// Pif stops this stream, which will stop the BP
 						BP(\fastnotes).finalAmp = Pif(
 							Ptime() <= 3.5,
-							Env([VC(\tmel).v.globalControls[\finalAmp].value, 0.001], #[8], -1.7).postcs
+							Env([VC(\tmel).v.globalControls[\finalAmp].value, 0.001], #[8], -1.7)
 						);
+						BP(\fastnotes).rotSynthDef = BP(\fastnotes).originalRotSynthDef;
 						0
 					},
 					// for slow notes
@@ -299,7 +312,11 @@
 						ampenv: Env.linen(0.05, 0.75, 0.2),
 						ctrenv: Env([100, 100, 71.midicps], #[0.12, 0.3], \exp)
 					),
-					bpCmd: (name: \tp, prepareBP: { |bp| bp.reset })
+					bpCmd: (name: \tp, prepareBP: { |bp|
+						bp.controlsVCPos = true;
+						bp.reset;
+						bp.v.reset;  // it seems this func sometimes doesn't get called
+					})
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -319,15 +336,17 @@
 			Pn((
 				sequence: [
 					{	var bp = BP(\fastnotes);
+
+						// NOW DAMMIT DON'T GET CONFUSED ABOUT THIS AGAIN
+						// THIS PART IS FOR FASTNOTES
+
 						bp.useModGCs = false;
 						bp.num = Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf);
 						bp.mod_ratio = blend(Pwhite(2, 7, inf) + Pwhite(0.14, 0.88, inf),
 							3, Pseg(Pseq([0, 1], inf), Pwhite(2.0, 4.0, inf), \sine));
 						bp.mod_lev = Pseg(Ppatlace([Pexprand(6, 14, inf), 1.6], inf),
 							Pwhite(2.0, 4.0, inf), \sine);
-
-						bp = BP(\thr);
-						bp.delta = Prand([
+						bp.changingDelta = Prand([
 							Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
 							Pexprand(0.08, 0.2, { rrand(8, 17) }),
 							// Plazy({ Pgeom.fromEndpoints(rrand(0.06, 0.09), rrand(0.18, 0.35), rrand(8, 14).debug("endpts")) }),
@@ -336,6 +355,25 @@
 								Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
 							})
 						], inf);
+						bp.delta = bp.changingDelta;
+						bp.rotSynthDef = bp.originalRotSynthDef;
+						VC(bp.vcKey).env.modfx.set(\distFar, 20);
+
+
+						// AND THIS PART IS FOR THR
+						// DON'T PUT FASTNOTES PARMS BELOW HERE FOR F*CKS SAKE!!!!!
+
+						bp = BP(\thr);
+						bp.sustain = max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf));
+
+						bp.delta = Prand([
+							Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+							Pexprand(0.08, 0.2, { rrand(8, 17) }),
+							Plazy({
+								var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+								Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+							})
+						], inf) * Env(#[4, 1], #[8], -2);
 
 						bp.sustain = max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf));
 
@@ -344,7 +382,7 @@
 							Plazy({ Pgeom.fromEndpoints(rrand(200, 500), rrand(2000, 4500), rrand(8, 14)) }),
 							Pexprand(600, 1800, { rrand(8, 17) })
 						], inf);
-						bp.throwfHigh = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
+						bp.throwfHi = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
 						bp.throwampenv = Prand([
 							[Env.perc(0.9, 0.1, 0.5).asArray],
 							[Env.perc(0.1, 0.9, 0.5).asArray]
@@ -401,11 +439,208 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					
+					{	var	p = BP(\fastnotes);
+						p.stop(0);
+						p.slowFactor = Env(#[1, 6], #[16], \exp).asStream;
+						p.changingDelta = Pwrand([
+							Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1) * p.slowFactor,
+							Pexprand(0.08, 0.2, { rrand(8, 17) }) * p.slowFactor,
+							Plazy({
+								var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+								(Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)) * p.slowFactor).collect { |x| curve.envAt(x) }
+							}),
+							Pstutter(2, Pwhite(0.125, 0.18, 1))   // NOT slowed!
+						], #[0.2, 0.2, 0.2, 0.4], inf);
+						p.delta = p.changingDelta;
+
+						p.sustain = Pkey(\delta) * Pif(Pkey(\delta) > 0.18, Pwhite(0.9, 1.2, inf), 0.5);
+						p.finalAmp = 0.1;
+
+						p.mod_ratio = Pwrand(#[2, 3, 4, 5], #[0.1, 0.5, 0.2, 0.2], inf) + Pwrand([0, Pwhite(0.2, 0.8, { rrand(1, 4) })], #[0.9, 0.1], inf);
+						p.mod_lev = Pif(Pbinop('==', Pkey(\mod_ratio) % 1, 0), Pexprand(1.6, 5.0, inf), Pwhite(7.5, 15.0, inf));
+
+						p.num = Pwrand(#[2, 3, 4], #[0.15, 0.45, 0.4], inf);
+						p.freq2 = Pkey(\freq) * Pif(0.12.asPattern.coin, Pwhite(0.6, 0.8, inf), 1);
+						p.freq = Pvbrown(39, 52, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
+							var	n;
+							~numStream ?? { ~makeStreamForKey.(\num) };
+							n = ~numStream.next(ev);
+							(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
+						});
+
+						p.attackTimeScale = Pif(Pkey(\delta) > 0.18, Pwhite(0.6, 1.2, inf), 0.05);
+						p.decayTimeScale = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 
+							Pif(Pkey(\delta) > 0.18, 1.0, 0.05),
+							(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.8, 1.2, inf))
+						);
+						// HACK HACK hack hack hack
+						"replacing rotsynth".debug;
+						p[\rotSynth].free;
+						VC(p.vcKey).env.modfx.set(\distFar, 45);
+						p.rotSynth = SynthDef(\rotateGoBack, { |outbus|
+							Out.kr(outbus, [
+								LFDNoise1.kr(LFDNoise1.kr(0.4).range(0.1, 0.8)),
+								Line.kr(5, 45, 25),
+								LFDNoise1.kr(0.07).exprange(0.001, 8)
+							]);
+						}).play(VC(p.vcKey).env.target.fadergroup, [outbus: p.ctlBus], addAction: \addToHead);
+
+						0.02
+					},
+					bpCmd: (name: \fastnotes, shouldSync: false),
+					{ rrand(8.0, 14.0) },
+					bpCmd: (name: \thr, shouldSync: false, prepareBP: { |bp|
+						bp.sustain = Pwhite(8.0, 15.0, inf);
+						bp.delta = Pwhite(7.0, 14.0, inf);
+						bp.throwfLow = Pexprand(100, 170, inf);
+						bp.throwfHi = Pkey(\fLow);
+						bp.throwampenv = [Env.perc(0.01, 0.99, 0.4).asArray];
+						bp.amp = 14.dbamp;
+					}),
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 2080,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2080-Ilana up",
+		segID: 2080,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+					[	6.0,
+						{ BP(#[fastnotes, thr]).stop(0); 0 }
+					],
+					synthCmd: (
+						name: \nrgxch2, target: VC(\tmel).env.target,
+						outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 10, 4],
+						amp: 16.dbamp, moveTime: 24,
+						fenv: Env([100, 100, 71.midicps] * 2, #[0.12, 0.3], \exp),
+						rqenv: Env(0.1 ! 2, #[1]),
+						ampenv: Env.linen(0.05, 0.75, 0.2),
+						ctrenv: Env([100, 100, 71.midicps], #[0.12, 0.3], \exp)
+					),
+					// should stop after 1 event
+					bpCmd: (name: \tp, dur: 10, prepareBP: { |bp|
+						bp.controlsVCPos = false;
+						bp.reset;
+						bp.v.reset;
+					}),
+					8.0,
+					bpCmd: (name: \ssd2, shouldSync: false)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 2090,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2090-Ilana solo",
+		segID: 2090,
+		master: topEnvironment[\master],
+		glrvbmc: topEnvironment[\cRvbMc],
+		lcrvbmc: topEnvironment[\lcrvbmc],
+		initProcesses: {
+			\chuckIf.eval(Fact(\bells), BP, \bel, nil, Library.at(\rvbs).copy.put(\glrvbmc, topEnvironment[\cRvbMc]).debug("mixers passed into bells"));
+			\chuckIf.eval(Fact(\bellfx), BP, \belfx, nil, (
+				parentChan: BP(\bel).chan
+			));
+		},
+		unloadProcesses: { BP(#[bel, belfx]).free },
+		seqPattern: {
+			Pn((
+				sequence: [
+					[	6.0,
+						{ BP(\ssd2).stop(0); 0 }
+					],
+					{	var bp = BP(\bel);
+						bp.delta = Pwhite(12.0, 18.0, inf);
+						bp.prepareForPlay;
+						0
+					},
+					loopCmd: (
+						repeats: 2,
+						cmds: [
+							{	BP(\bel).triggerOneEvent(0);
+								rrand(11.0, 16.0)
+							}
+						]
+					),
+					\cmdSync,
+					bpCmd: (name: \bel, shouldSync: false, prepareBP: { |bp|
+						bp.delta = Pseq([
+							Plazy({
+								var	last;
+								if(~continue ? true) {
+									last = rrand(0.9, 1.2);
+									Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
+								} { nil /*.alwaysYield*/ /*BP(~collIndex).stop(0)*/ };
+							}),
+							Pwhite(10.0, 16.0, 1)
+						], inf);
+					}),
+					bpCmd: (name: \belfx, shouldSync: false,
+						setDoneSignal: {
+							~doneSignal = Updater(BP(\bel), { |obj, what, more|
+								if(more == \stopped) {
+									BP(\belfx).clock.sched(8, { BP(\belfx).stop(0) });
+								};
+							});
+						},
+						clearDoneSignal: { ~doneSignal.remove }
+					)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 2100,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2100-Duet",
+		segID: 2100,
+		initProcesses: {
+			Library.at(\rvbs).keysValuesDo { |key, val| key.envirPut(val) };
+			~cRvbMc = topEnvironment[\cRvbMc];
+			\chuckIf.eval(Fact(\wtpadnofx), VC, \wp);
+			\chuckIf.eval(Fact(\waterch), BP, \wch);
+			VC(\wp) => BP(\wch);
+			\chuckIf.eval(Fact(\bellfx), BP, \wfx, nil, (
+				parentChan: VC(\wp).env.target
+			));
+			\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\duetMelBP), BP, \duetm);
+		},
+		unloadProcesses: { VC(\wp).free; BP(#[wch, wfx]).free },
+		seqPattern: {
+			Pn((
+				sequence: [
+					{ BP(\bel).continue = false; 0 },
+					bpCmd: (name: \wch, prepareBP: { |bp|
+						bp.child.argPairs = [fenv_tscale: Pkey(\length)];
+						bp.reset;
+					}),
+					30,
+					bpCmd: (name: \wfx),
+					bpCmd: (name: \duetm)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 2110,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)

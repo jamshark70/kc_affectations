@@ -18,7 +18,7 @@ s.doWhenBooted {
 };
 
 (
-keys: #[master, glrvbmc, lcrvbmc],
+//keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
@@ -36,12 +36,17 @@ make: { |name|
 				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 			};
 		},
+		continue: true,
+		preparePlay: { ~continue = true },
 		sustain: Pwhite(9.0, 18.0, inf),
 		// delta: Pif(Pwhite(0.0, 1.0, inf) < 0.2, Pwhite(1.5, 4.0, inf), Pwhite(10.0, 16.0, inf)),
 		delta: Pseq([
 			Plazy({
-				var	last = rrand(0.9, 1.2);
-				Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
+				var	last;
+				if(~continue.debug("check continue flag") ? true) {
+					last = rrand(0.9, 1.2);
+					Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
+				} { nil.alwaysYield /*BP(~collIndex).stop(0)*/ };
 			}),
 			Pwhite(10.0, 16.0, 1)
 		], inf),
@@ -81,7 +86,7 @@ make: { |name|
 					fHigh: Pkey(\fLow) * Pwhite(4.0, 11.0, inf),
 					beaterFilt: Pexprand(1500, 5000, inf),
 					atten: 0.025,
-					distance: Pwhite(5.0, 20.0, inf),
+					distance: Pwhite(9.0, 20.0, inf),
 					pan: Pif(Pkey(\fLow) >= 120, Pwhite(-1.0, 1.0, inf), 0),
 					panWidth: 1,
 					chfreq: Pwhite(0.3, 0.8, inf)
@@ -134,8 +139,8 @@ make: { |name|
 		});
 	};
 	out = Voicer(16, WrapInstr("osc2.vosc3mapfiltenv"), [bufbase: ~wt.first.first.bufnum, numbufs: `(~wt.first.size), basefreq: `(48.midicps), topfreq: `(127.midicps), env: Env.adsr(1.6, 0.8, 0.6, 2.5), fenv: Env(#[1, 40, 1], #[3.5, 4.0].normalizeSum, \sin), fenv_tscale: (3.5+4.0), detune: 1.003, /* ffreq: 900,*/ fenv_sens: 0.8, fenv_vsens: 1, vsens: 0.2], target: ~target);
-// 	out.mapGlobal(\ffreq, nil, 400, \freq);
-// 	out.mapGlobal(\rq, nil, 1, \myrq);
+	out.mapGlobal(\ffreq, nil, 400, \freq);
+	out.mapGlobal(\rq, nil, 1, \myrq);
 	// out.mapGlobal(\clevel, nil, 1, \amp);
 	// out.mapGlobal(\density, nil, 0.8, #[0.5, 3.0]);
 	out.mapGlobal(\freqmul, nil, 1, #[0.5, 2.0, exp], allowGUI: false);
@@ -205,8 +210,8 @@ PR(\arpeg1).clone {
 	BP(name).free;
 	\newCh.eval(name, \arpeg1PreInsert, \macroRh, MBM(0)[\waterch], nil, Pwhite(16, 22, inf), \waterch, \blockNum, nil, \g);
 	BP(name).child.makeChordPattern = { Pclutch(Pseq(~chords, inf), Pdelay(Pkey(\numNotes) >= 7)) };
-	// MicRh accesses this
-	BP(name).child.gatePat = Pn(Pgeom(0.1, (10 ** (1/9)).reciprocal, { rrand(5, 10) }));
+	// MicRh accesses this - and *why* did I have .reciprocal in there?
+	BP(name).child.gatePat = Pn(Pgeom(0.1, 10 ** (1/9), { rrand(5, 10) }));
 	BP(name).child.argPairs = [fenv_tscale: Pexprand(0.8, 1.8, inf)];
 	BP(name).child[\reset] = BP(name).child[\reset] <> {
 		~preInsert = Pbind(
@@ -361,6 +366,7 @@ free: {
 			isMono: false,
 			glrvbmc: topEnvironment[\cRvbMc],
 			lcrvbmc: topEnvironment[\lcrvbmc],
+			master: ~master,
 			// called within the VC's new environment
 			customize: { |v|
 				// ~target.newPostSend(~cRvbMc, 1.2);
@@ -1355,7 +1361,7 @@ PR(\abstractProcess).clone {
 	};
 
 	~freeCleanup = {
-		[~chan, ~sideBus, ~rq, ~speedMul, ~fshift, ~distance, ~pan].free;
+		[~chan, ~sideBus, ~rq, ~speedMul, ~fshift, ~distance, ~pan, ~gcbuspair].free;
 	};
 
 	~preparePlay = {
@@ -1466,7 +1472,7 @@ make: { |name|
 		},
 		bufModFunc: { Lag.kr(NamedControl.kr(\bufmod, 0), 0.08) },
 		spatialize: false
-	));
+	).putAll(Library.at(\rvbs)).put(\glrvbmc, topEnvironment[\cRvbMc]));
 	VC(name).v.mapGlobal(\bufmod, nil, 0, #[0, 6.999]);
 	VC(name).v.mapGlobal(\finalAmp, nil, 1, \amp);
 	VC(name).v.globalControls[\ffreq].value = 3000;
@@ -1494,7 +1500,11 @@ PR(\abstractProcess).clone {
 		~ctlBus.free
 	};
 
-	~freq = \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2);
+	// Plazy? Yeah... ~freq is actually a Preject
+	// and .asStream'ing it doesn't reset the condition's function scope
+	// so I was getting wrong results
+	// Plazy will force it to rebuild every time it's reset
+	~freq = Plazy({ \patRejectLastN.eval(Pvbrown(28, 46, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], inf), inf, 36), 2) });
 	~freq2 = Pseq([Mode(\a).cps(19), Pkey(\freqdelay)], 1);
 	~freqlag = Pseq([8, Pwhite(1.5, 3.2, inf)], 1);
 	~changingDelta = Prout({ |inval|
@@ -1514,21 +1524,35 @@ PR(\abstractProcess).clone {
 	~decayTimeScale = max(Pkey(\attackTimeScale), 2.5);
 	~finalAmp = 0.16;
 
+	~rotSynthDef = SynthDef(~collIndex ++ "Rotate", { |outbus|
+		var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
+		angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
+		Out.kr(outbus, [
+			cos(angle) * radius,
+			(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
+			LFDNoise1.kr(0.07).exprange(0.001, 8)
+		]);
+	});
 	~preparePlay = {
+		// ~rotSynth !? { ~rotSynth.free };
 		if(~controlsVCPos and: { ~rotSynth.isNil }) {
-			~rotSynth = {
-				var	radius = LFDNoise1.kr(Rand(0.1, 0.4)).range(0.5, 1.0),
-				angle = Integrator.kr(LFDNoise1.kr(Rand(0.5, 1.1)).range(0.1, 0.6) * ControlDur.ir);
-				[	cos(angle) * radius,
-					(sin(angle) * radius).linlin(-1.0, 1.0, 5.0, 20.0),
-					LFDNoise1.kr(0.07).exprange(0.001, 8)
-				]
-			}.play(VC(~vcKey).env.target.fadergroup, ~ctlBus, addAction: \addToHead);
+			"making rotsynth".debug;
+			~rotSynth = ~rotSynthDef.play(VC(~vcKey).env.target.fadergroup, [outbus: ~ctlBus], addAction: \addToHead);
+			VC(~vcKey).env[\modfx].map(*(
+				[#[pan, distance, fshift], ~ctlBus.index + #[0, 1, 2]].flop.flat
+			))
 		};
 	};
+	~stopID = 0;
 	~stopCleanup = {
+		var	stopID;
+		~stopID = ~stopID + 1;
+		stopID = ~stopID;
 		(~clock ?? { TempoClock.default }).sched(10, e {
-			if(~isPlaying.not and: { ~rotSynth.notNil }) {
+			// it should ONLY do this for the latest stop request
+			// if it was stopped later, local stopID will not match BP's id
+			if(stopID == ~stopID and: { ~isPlaying.not and: { ~rotSynth.notNil } }) {
+				"removing rotsynth".debug;
 				~rotSynth.free;
 				~rotSynth = nil;
 			};
@@ -1640,3 +1664,85 @@ PR(\tposes).chuck(BP(name), nil, (
 ));
 0 => BP(name);
 }, type: \bp) => Fact(\fastnotesBP);
+
+
+// use armsmelVC
+(make: { |name|
+	BP(name).free;
+	PR(\melody).chuck(BP(name), nil, (
+		phrases: [
+			#[40, 41],
+			#[40, 43, 38, 37, 44],
+			#[46, 42, 34, 36, 37, 40]
+		],
+		dur: Pseq([
+			Pwhite(1.2, 1.8, { rrand(3, 8) }) * Pwrand(#[1, 2], #[0.8, 0.2], inf),
+			Pwhite(7.0, 15.0, 1)
+		], inf),
+		legato: Pif(Pkey(\delta) >= 7, Pwhite(0.55, 0.75, inf), 1.01),
+		degree: Plazy({
+			var	self = currentEnvironment;
+			Pswitch(
+				~phrases.collect { |row|
+					PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~levelStream.next }, 1), [
+						(_.notNil) -> { |item, level, inval|
+							if(self[\rewriteProb].coin) {
+								item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+							} { [item] }
+						}
+					])
+				},
+				\patRejectLastN.eval(Pseq([0, Prand((0 .. (a.size-1)), inf)]), 1)
+			)
+		}),
+		level: Pseq([0, Pexprand(0.01, 2.99, inf).collect(_.asInteger)], 1),
+		mode: \d,
+		pan: Plazy({ Pn(~panCtl.asMap, inf) }),
+		distance: Plazy({ Pn(~distanceCtl.asMap, inf) }),
+	
+		superPrep: PR(\melody).v[\prep],
+		prep: {
+			~superPrep.();
+			~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+			~distanceCtl = GenericGlobalControl(\distance, nil, 18, #[5, 20]);
+		},
+		freeCleanup: { [~panCtl, ~distanceCtl].free },
+		useGui: { |vp| [~panCtl, ~distanceCtl].do { |gc| gc => VP(vp) } },
+		// grr... didn't parameterize well...
+		asPattern: {
+			Pbind(
+				\instrument, VC(~vcKey).v.nodes[0].defname.asSymbol,
+				\node, Pfunc { ~node ?? { 0 } },
+				\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
+				\mode, BPStream(\mode),
+				\degree, BPStream(\degree),
+				\freq, Pkey(\degree).collect { |deg, ev| ev[\mode].asMode.cps(deg) },
+				\delta, BPStream(\dur),
+	 			\legato, BPStream(\legato),
+				\freqlag, BPStream(\freqlag),
+				\detune, BPStream(\detune),
+				\gate, BPStream(\gate),
+				\ffreq, BPStream(\ffreq),
+				\rq, BPStream(\rq),
+				\pan, BPStream(\pan),
+				\distance, BPStream(\distance),
+				\chan, VC(\am).env.target,
+				\ampMul, BPStream(\amp)
+			).collect { |ev|
+				~lastEvent = ev;
+				thisThread.clock.sched(0.05, e {
+					if(~node.notNil and: { ev[\legato] < 1 }) {
+						\schedEventBundleArray.eval(ev[\lag] ? 0,
+							(ev[\timingOffset] ? 0) + (ev[\delta] * ev[\legato]),
+							ev[\server] ?? { Server.default },
+							[~node.releaseMsg], nil, true  // true == suppress error
+						);
+						~node = nil;
+					};
+				});
+				ev
+			};
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\duetMelBP);

@@ -2849,13 +2849,34 @@ p.listVars
 p[\reset].postcs
 p.changingDelta.postcs
 
+p.useModGCs = false;
+
+p.originalDelta = p.changingDelta;
 p.changingDelta = p.originalDelta * 4;
+
+p.changingDelta = Pwrand([
+	Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1) * 4,
+	Pexprand(0.08, 0.2, { rrand(8, 17) }) * 4,
+	Plazy({
+		var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)] * 4, #[1], 5).asArray;
+		Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+	}),
+	Pstutter(2, Pwhite(0.125, 0.18, 1))
+], #[0.2, 0.2, 0.2, 0.4], inf);
+p.delta = p.changingDelta;
+
+p.changingDelta = Pseq([Pn(Pwhite(0.11, 0.18, 1), { rrand(4, 8) }), 0.5], inf);
+
+p.sustain = Pkey(\delta) * Pif(Pkey(\delta) > 0.18, Pwhite(0.9, 1.2, inf), 0.5);
+
 p.delta = p.originalDelta * 7;
 p.finalAmp = 0.1;
-p.mod_ratio = Pwrand(#[2, 3, 4, 5], #[0.1, 0.5, 0.2, 0.2], inf);
-p.mod_lev = Pexprand(1.6, 5.0, inf);
+
+p.mod_ratio = Pwrand(#[2, 3, 4, 5], #[0.1, 0.5, 0.2, 0.2], inf) + Pwrand([0, Pwhite(0.2, 0.8, { rrand(1, 4) })], #[0.9, 0.1], inf);
+p.mod_lev = Pif(Pbinop('==', Pkey(\mod_ratio) % 1, 0), Pexprand(1.6, 5.0, inf), Pwhite(7.5, 15.0, inf));
+
 p.num = Pwrand(#[2, 3, 4], #[0.15, 0.45, 0.4], inf);
-p.sustain = Pkey(\delta) * Pwhite(0.9, 1.2, inf);
+// p.sustain = Pkey(\delta) * Pwhite(0.9, 1.2, inf);
 p.freq2 = Pkey(\freq) * Pif(0.12.asPattern.coin, Pwhite(0.6, 0.8, inf), 1);
 p.freq = Pvbrown(39, 52, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
 		var	n;
@@ -2863,10 +2884,12 @@ p.freq = Pvbrown(39, 52, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
 		n = ~numStream.next(ev);
 		(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
 	});
-p.attackTimeScale = Pwhite(0.6, 1.2, inf);
-p.decayTimeScale = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 1.0,
-		(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.8, 1.2, inf))
-	);
+
+p.attackTimeScale = Pif(Pkey(\delta) > 0.18, Pwhite(0.6, 1.2, inf), 0.05);
+p.decayTimeScale = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 
+	Pif(Pkey(\delta) > 0.18, 1.0, 0.05),
+	(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.8, 1.2, inf))
+);
 
 
 p.mode = Pseq([
@@ -2882,6 +2905,125 @@ VC('tmel').env.modfx.run(true);
 
 // tton is not so hot for this - too similar in sound
 q.mode = Pfunc({ BP(\fastnotes).lastMode });
+
+
+
+r = BP(\thr);
+
+// 'k but EVEN FASTER!!
+r.delta = Prand([
+	Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+	Pexprand(0.08, 0.2, { rrand(8, 17) }),
+	// Plazy({ Pgeom.fromEndpoints(rrand(0.06, 0.09), rrand(0.18, 0.35), rrand(8, 14).debug("endpts")) }),
+	Plazy({
+		var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+		Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+	})
+], inf) * Env(#[4, 1], #[8], -2);
+
+r.sustain = Pwhite(8.0, 15.0, inf);
+r.delta = Pwhite(7.0, 14.0, inf);
+
+r.throwfLow = Pexprand(100, 170, inf);
+r.throwfHi = Pkey(\fLow);
+
+
+r.throwampenv = [Env.perc(0.01, 0.99, 0.4).asArray];
+r.amp = 20.dbamp;
+
+r.triggerOneEvent(0);
+
+r.use { e = ~eventStream.next(~event.copy) };
+
+e.play;
+e[\node].do(_.trace);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+
+Fact(\armsmelVC) => VC(\am);
+
+(make: { |name|
+	BP(name).free;
+	PR(\melody).chuck(BP(name), nil, (
+		phrases: [
+			#[40, 41],
+			#[40, 43, 38, 37, 44],
+			#[46, 42, 33.5, 36, 37, 40]
+		],
+		dur: Pseq([
+			Pwhite(1.2, 1.8, { rrand(3, 8) }) * Pwrand(#[1, 2], #[0.8, 0.2], inf),
+			Pwhite(7.0, 15.0, 1)
+		], inf),
+		legato: Pif(Pkey(\delta) >= 7, Pwhite(0.55, 0.75, inf), 1.01),
+		degree: Plazy({
+			var	self = currentEnvironment;
+			Pswitch(
+				~phrases.collect { |row|
+					PR(\rewriter).copy.prep(Pseq(row, 1), Pfuncn(e { ~levelStream.next }, 1), [
+						(_.notNil) -> { |item, level, inval|
+							if(self[\rewriteProb].coin) {
+								item + [0, rrand(1, 3) * #[-1, 1].choose].rotate(2.rand)
+							} { [item] }
+						}
+					])
+				},
+				\patRejectLastN.eval(Pseq([0, Prand((0 .. (a.size-1)), inf)]), 1)
+			)
+		}),
+		level: Pseq([0, Pexprand(0.01, 2.99, inf).collect(_.asInteger)], 1),
+		mode: \d,
+		pan: Plazy({ Pn(~panCtl.asMap, inf) }),
+		distance: Plazy({ Pn(~distanceCtl.asMap, inf) }),
+	
+		superPrep: PR(\melody).v[\prep],
+		prep: {
+			~superPrep.();
+			~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+			~distanceCtl = GenericGlobalControl(\distance, nil, 18, #[5, 20]);
+		},
+		freeCleanup: { [~panCtl, ~distanceCtl].free },
+		useGui: { |vp| [~panCtl, ~distanceCtl].do { |gc| gc => VP(vp) } },
+		// grr... didn't parameterize well...
+		asPattern: {
+			Pbind(
+				\instrument, VC(~vcKey).v.nodes[0].defname.asSymbol,
+				\node, Pfunc { ~node ?? { 0 } },
+				\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
+				\mode, BPStream(\mode),
+				\degree, BPStream(\degree),
+				\freq, Pkey(\degree).collect { |deg, ev| ev[\mode].asMode.cps(deg) },
+				\delta, BPStream(\dur),
+	 			\legato, BPStream(\legato),
+				\freqlag, BPStream(\freqlag),
+				\detune, BPStream(\detune),
+				\gate, BPStream(\gate),
+				\ffreq, BPStream(\ffreq),
+				\rq, BPStream(\rq),
+				\pan, BPStream(\pan),
+				\distance, BPStream(\distance),
+				\chan, VC(\am).env.target,
+				\ampMul, BPStream(\amp)
+			).collect { |ev|
+				~lastEvent = ev;
+				thisThread.clock.sched(0.05, e {
+					if(~node.notNil and: { ev[\legato] < 1 }) {
+						\schedEventBundleArray.eval(ev[\lag] ? 0,
+							(ev[\timingOffset] ? 0) + (ev[\delta] * ev[\legato]),
+							ev[\server] ?? { Server.default },
+							[~node.releaseMsg], nil, true  // true == suppress error
+						);
+						~node = nil;
+					};
+				});
+				ev
+			};
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\duetMelBP);
+
 
 
 
