@@ -1,7 +1,8 @@
 // sounds for torso
 
+MIDIPort.init([3]);  // linux
 
-MIDIPort.init([2]);
+MIDIPort.init([2]);  // mac+ultralite
 MIDIPort.autoFreeSockets = false;
 
 s.options.preferredDeviceFunc_(nil).device_("Aggregate Device");
@@ -2807,12 +2808,80 @@ PR(\tposes).chuck(BP(name), nil, (
 }, type: \bp) => Fact(\fastnotesBP);
 
 
+Fact(\fastnotesBP) => BP(\fastnotes);
+
 BP(\fastnotes).delta = BP(\fastnotes).changingDelta * Env([1, 4], #[40], 5);
 
+VC(\tmel).free;
+\makeTmelVC.eval(\tmel);
 
 VC(\tmel) => BP(\fastnotes);
 
-VC(\tmel).v.globalControls[\finalAmp].spec = #[0.001, 0.5, \exp];
+// VC(\tmel).v.globalControls[\finalAmp].spec = #[0.001, 0.5, \exp];
+
+p = BP(\fastnotes);
+
+p.num = 0;
+p.useModGCs = false;
+
+// regression? OK!
+p.mod_ratio = 3;
+p.mod_lev = 1.6;
+
+p.mod_lev = VC(\tmel).globalControls[\mod_lev].asMap;
+
+p.mod_ratio = Pwhite(2, 7, inf) + Pwhite(0.14, 0.88, inf);
+p.mod_lev = Pexprand(6, 14, inf);
+
+p.finalAmp = 0.16;
+p.finalAmp = Pif(
+	Ptime() <= 6,
+	Env([VC(\tmel).v.globalControls[\finalAmp].value, 0.001], #[6], -2).postcs
+);
+
+
+// slowing down fast ensemble materials
+
+p = BP(\fastnotes);
+q = BP(\tton);
+
+p.listVars
+p[\reset].postcs
+p.changingDelta.postcs
+
+p.changingDelta = p.originalDelta * 4;
+p.delta = p.originalDelta * 7;
+p.finalAmp = 0.1;
+p.mod_ratio = Pwrand(#[2, 3, 4, 5], #[0.1, 0.5, 0.2, 0.2], inf);
+p.mod_lev = Pexprand(1.6, 5.0, inf);
+p.num = Pwrand(#[2, 3, 4], #[0.15, 0.45, 0.4], inf);
+p.sustain = Pkey(\delta) * Pwhite(0.9, 1.2, inf);
+p.freq2 = Pkey(\freq) * Pif(0.12.asPattern.coin, Pwhite(0.6, 0.8, inf), 1);
+p.freq = Pvbrown(39, 52, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
+		var	n;
+		~numStream ?? { ~makeStreamForKey.(\num) };
+		n = ~numStream.next(ev);
+		(#[0] ++ ({ #[1, 2, 3].wchoose(#[0.2, 0.45, 0.35]) } ! (n-1))).integrate
+	});
+p.attackTimeScale = Pwhite(0.6, 1.2, inf);
+p.decayTimeScale = Pif(Pbinop('==', Pkey(\freq), Pkey(\freq2)), 1.0,
+		(Pkey(\freqlag) - Pkey(\sustain) + Pwhite(0.8, 1.2, inf))
+	);
+
+
+p.mode = Pseq([
+		Pn(\a0, { rrand(25, 65) }),
+		Pstutter(Pwhite(6, 10, { rrand(1, 3) }),
+			Pxrand(Mode.keys.select { |key| key != \a0 and: { key.asString.last == $0 } }.asArray, inf)
+		)
+	], inf).collect { |mode| ~lastMode = mode };
+
+
+VC('tmel').env.modfx.run(false);
+VC('tmel').env.modfx.run(true);
+
+// tton is not so hot for this - too similar in sound
+q.mode = Pfunc({ BP(\fastnotes).lastMode });
 
 
 

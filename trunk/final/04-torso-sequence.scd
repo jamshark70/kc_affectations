@@ -182,7 +182,8 @@
 						bp.sustain = Pexprand(0.7, 2.8, inf);
 						bp.throwfLow = Pwhite(200, 400, inf);
 						bp.throwfHi = Pwhite(1000, 3000, inf);
-						bp.throwampenv = `[Env(#[0, 0.1, 1, 0.1, 0] * 0.2, #[0.3, 0.1, 0.1, 0.5], \sin)];
+						bp.throwampenv = `[Env(#[0, 0.1, 1, 0.1, 0] * 0.5, #[0.3, 0.1, 0.1, 0.5], \sin)];
+						bp.amp = 1;
 					}),
 					bpCmd: (name: \td, shouldSync: false, prepareBP: { |bp|
 						bp.speedMul = Pwhite(0.7, 2.0, inf);
@@ -206,6 +207,7 @@
 			if(VC.exists(\tmel).not) { \makeTmelVC.eval(\tmel) };
 			\chuckIf.eval(Fact(\fastnotesBP), BP, \fastnotes);
 			VC(\tmel) => BP(\fastnotes);
+			BP(\fastnotes).originalDelta = BP(\fastnotes).changingDelta;
 		},
 		unloadProcesses: {
 			VC(\tmel).free; BP(\fastnotes).free;
@@ -238,20 +240,20 @@
 							[Env.perc(0.9, 0.1, 0.2).asArray],
 							[Env.perc(0.1, 0.9, 0.2).asArray]
 						], inf);
+						r.amp = 1;
 						6
 					},
-					bpCmd: (name: \fastnotes, prepareBP: { |bp|
+					bpCmd: (name: \fastnotes, shouldSync: false, prepareBP: { |bp|
+						bp.useModGCs = false;
 						bp.num = 0;
+						bp.mod_ratio = Pwhite(2, 7, inf) + Pwhite(0.14, 0.88, inf);
+						bp.mod_lev = Pexprand(6, 14, inf);
+						bp.finalAmp = VC(\tmel).v.globalControls[\finalAmp].asMap;
 					}),
 					gcAutoSynthCmd: (gc: { VC(\tmel).v.globalControls[\finalAmp] },
 						name: \ctlEnv, outName: \outbus, shouldSync: false,
-						env: Env(#[0.001, 0.16], #[1], \exp), connect: 0,
-						time: 9
-					),
-					gcAutoSynthCmd: (gc: { VC(\tmel).v.globalControls[\mod_ratio] },
-						name: \ctlEnv, outName: \outbus, shouldSync: false,
-						env: Env([rrand(9.2, 11.5), 3], #[1], \exp), connect: 0,
-						time: 18
+						env: Env(#[0.001, 0.16, 0.11], #[8, 2], \exp), connect: 0,
+						time: 1
 					),
 				],
 				onStop: { BP(#[thr, td]).stop(0) },
@@ -275,6 +277,19 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{	// Pif stops this stream, which will stop the BP
+						BP(\fastnotes).finalAmp = Pif(
+							Ptime() <= 3.5,
+							Env([VC(\tmel).v.globalControls[\finalAmp].value, 0.001], #[8], -1.7).postcs
+						);
+						0
+					},
+					// for slow notes
+					gcAutoSynthCmd: (gc: { VC(\tmel).v.globalControls[\finalAmp] },
+						name: \ctlEnv, outName: \outbus, shouldSync: false,
+						env: Env(#[0.16, 0.16], #[1], \exp), connect: 1,
+						time: 6
+					),
 					synthCmd: (
 						name: \nrgxch2, target: VC(\tmel).env.target,
 						outbus: [VC(\tmel).env.sideBus, BP(\ssd).noisebuf, 10, 4],
@@ -284,11 +299,113 @@
 						ampenv: Env.linen(0.05, 0.75, 0.2),
 						ctrenv: Env([100, 100, 71.midicps], #[0.12, 0.3], \exp)
 					),
-					bpCmd: (name: \tp)
+					bpCmd: (name: \tp, prepareBP: { |bp| bp.reset })
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 2060,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2060-Fast ensemble",
+		segID: 2060,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+					{	var bp = BP(\fastnotes);
+						bp.useModGCs = false;
+						bp.num = Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf);
+						bp.mod_ratio = blend(Pwhite(2, 7, inf) + Pwhite(0.14, 0.88, inf),
+							3, Pseg(Pseq([0, 1], inf), Pwhite(2.0, 4.0, inf), \sine));
+						bp.mod_lev = Pseg(Ppatlace([Pexprand(6, 14, inf), 1.6], inf),
+							Pwhite(2.0, 4.0, inf), \sine);
+
+						bp = BP(\thr);
+						bp.delta = Prand([
+							Pstutter(inf, Pexprand(0.08, 0.14, 1)) * Pseq([Pn(1, { rrand(3, 7) }), 3], 1),
+							Pexprand(0.08, 0.2, { rrand(8, 17) }),
+							// Plazy({ Pgeom.fromEndpoints(rrand(0.06, 0.09), rrand(0.18, 0.35), rrand(8, 14).debug("endpts")) }),
+							Plazy({
+								var	curve = Env([rrand(0.06, 0.09), rrand(0.18, 0.35)], #[1], 5).asArray;
+								Pseries.fromEndpoints(0.0, 1.0, rrand(8, 14)).collect { |x| curve.envAt(x) }
+							})
+						], inf);
+
+						bp.sustain = max(0.08, Pkey(\delta) * Pwhite(0.25, 0.6, inf));
+
+						bp.throwfLow = Prand([
+							Plazy({ Pser({ exprand(600, 1400) } ! 2, rrand(2, 4) * 2 + 1) }),
+							Plazy({ Pgeom.fromEndpoints(rrand(200, 500), rrand(2000, 4500), rrand(8, 14)) }),
+							Pexprand(600, 1800, { rrand(8, 17) })
+						], inf);
+						bp.throwfHigh = Pkey(\fLow) * Pwrand([1, Pwhite(0.6, 0.8, 1), Pwhite(1.2, 1.4, 1)], #[0.7, 0.15, 0.15], inf);
+						bp.throwampenv = Prand([
+							[Env.perc(0.9, 0.1, 0.5).asArray],
+							[Env.perc(0.1, 0.9, 0.5).asArray]
+						], inf);
+						
+						0
+					},
+					loopCmd: (
+						// proc: Pseq(#[fastnotes, thr], inf).asStream,
+						cmds: [
+							{	var dur = exprand(2.0, 3.5);
+								// [thisThread.clock.beats, dur, thisThread.clock.beats + dur].debug("fastnotes");
+								TLSequenceIterator([
+									{ BP(\fastnotes).stop(0); 0.02 },
+									bpCmd: (name: \fastnotes, shouldSync: false, dur: dur,
+										prepareBP: { |bp|
+											bp.finalAmp = Env([0.16, 0.01], [dur], 1);
+										}
+									),
+									dur * rrand(0.45, 0.65)
+								], autoSync: false)
+							},
+							\sync,
+							{	var dur = exprand(2.0, 3.5);
+								// [thisThread.clock.beats, dur, thisThread.clock.beats + dur].debug("thr");
+								TLSequenceIterator([
+									{ BP(\thr).stop(0); 0.02 },
+									bpCmd: (name: \thr, shouldSync: false, dur: dur,
+										prepareBP: { |bp|
+											bp.amp = Env([1, 0.01], [dur], 1);
+										}
+									),
+									dur * rrand(0.45, 0.65)
+								], autoSync: false)
+							},
+							\sync
+						]
+					)
+				],
+				onStop: {},
+				dur: \trigger,  // or \sync
+				id: 2070,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2070-Slow down",
+		segID: 2070,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+					
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 2080,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)

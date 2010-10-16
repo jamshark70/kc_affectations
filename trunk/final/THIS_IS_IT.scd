@@ -38,8 +38,8 @@ s.waitForBoot {
 	(mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
 	// (mypath.dirname +/+ "03*.scd").pathMatch.sort
 	.do { |path|
-		indices = indices.add(~sections.size.debug(path));
-		~sections = ~sections ++ path.debug("seq file").loadPath;
+		indices = indices.add(~sections.size);
+		~sections = ~sections ++ path.loadPath;
 	};
 
 	~seq = PR(\affSectSeq).copy.sections_(~sections).startLoadingAt_(indices);

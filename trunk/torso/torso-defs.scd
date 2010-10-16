@@ -1030,6 +1030,7 @@ make: { |name|
 			Pexprand(0.2, 0.9, inf)
 		], Pwrand([0, Pn(1, Prand(#[1, 2, 3, 4], inf).asStream)], #[0.7, 0.3], inf)), //Pwhite(1.8, 4.0, inf),
 		sustain: Pexprand(0.7, 2.8, inf), //Pwhite(1.0, 5.5, inf),
+		amp: 1,
 		userprep: {
 			~noisebuf = Buffer.sendCollection(s, Signal.fill(1024, { 1.0.rand2 }).asWavetable, wait: -1);
 			[~glrvbmc, ~lcrvbmc].do { |mc|
@@ -1055,6 +1056,7 @@ make: { |name|
 					}),
 					// rqenv: ,
 					ampenv: `[Env(#[0, 0.1, 1, 0.1, 0] * 0.4, #[0.3, 0.1, 0.1, 0.5], \sin)],
+					amp: BPStream(\amp),
 					lpcEv: Pbind(
 						\instrument, \innermod1Mv,
 						\distance1, Pwhite(15.0, 20.0, inf),
@@ -1481,6 +1483,7 @@ PR(\abstractProcess).clone {
 	~resetAllSources = false;
 	~repeats = inf;
 	~controlsVCPos = true;
+	~useModGCs = true;
 	~prep = {
 		~ctlBus = Bus.control(s, 3).setn(#[0, 10, 0]);
 	};
@@ -1509,6 +1512,7 @@ PR(\abstractProcess).clone {
 	~mode = \a;
 	~attackTimeScale = Pkey(\gate).linlin(0, 1, 6, 0.5);
 	~decayTimeScale = max(Pkey(\attackTimeScale), 2.5);
+	~finalAmp = 0.16;
 
 	~preparePlay = {
 		if(~controlsVCPos and: { ~rotSynth.isNil }) {
@@ -1532,7 +1536,7 @@ PR(\abstractProcess).clone {
 		});
 	};
 	~userPattern = {
-		Pn(Pbind(
+		var	pbind = Pbind(
 			\mode, BPStream(\mode, ~resetAllSources),
 			\freq, BPStream(\freq, ~resetAllSources).collect { |deg, ev| ev[\mode].asMode.cps(deg) },
 			\freqdelay, Pdelay(Pkey(\freq), 1),
@@ -1541,9 +1545,17 @@ PR(\abstractProcess).clone {
 			\delta, BPStream(\delta, resetSource: true),
 			\sustain, BPStream(\sustain, ~resetAllSources),
 			\gate, BPStream(\gate, ~resetAllSources),
-			\attackTimeScale, BPStream(\attackTimeScale),
-			\decayTimeScale, BPStream(\decayTimeScale)
-		), ~repeats)
+			\attackTimeScale, BPStream(\attackTimeScale, ~resetAllSources),
+			\decayTimeScale, BPStream(\decayTimeScale, ~resetAllSources)
+		);
+		if(~useModGCs.not) {
+			pbind = Pbindf(pbind,
+				\mod_ratio, BPStream(\mod_ratio, ~resetAllSources),
+				\mod_lev, BPStream(\mod_lev, ~resetAllSources),
+				\finalAmp, BPStream(\finalAmp)
+			);
+		};
+		PnNilSafe(pbind, ~repeats)
 	};
 	~asPattern = {
 		Pchain(
@@ -1602,7 +1614,7 @@ PR(\tposes).chuck(BP(name), nil, (
 		Pstutter(Pwhite(6, 10, { rrand(1, 3) }),
 			Pxrand(Mode.keys.select { |key| key != \a0 and: { key.asString.last == $0 } }.asArray, inf)
 		)
-	], inf),
+	], inf).collect { |mode| ~lastMode = mode },
 	num: Pwrand(#[1, 2, 3], #[0.7, 0.2, 0.1], inf),
 	freq: Pvbrown(28, 47, Pwhite(3, 6, inf), inf) - Pfunc({ |ev|
 		var	n;
