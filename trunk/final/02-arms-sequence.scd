@@ -1,6 +1,6 @@
 // Affectations: Arms controller sequence
 
-(Document.current.path.dirname.dirname +/+ "/arms/arms-defs1.scd").debug.loadPath;
+(Document.current.path.dirname.dirname +/+ "/arms/arms-defs1.scd")/*.debug*/.loadPath;
 
 [
 	PR(\tlsAff).copy.putAll((
@@ -40,6 +40,8 @@
 							{ 2.do { BP(\am).triggerOneEvent(0) }; 0 }
 						]
 					),
+					3.0,
+					{ BP(\st).stop(0); 0 }
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -636,6 +638,28 @@
 				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 515,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "A515-Silence before face",
+		segID: 515,
+		seqPattern: {
+			Pn((
+				sequence: [
+					{
+						BP.keys.do { |bpk|
+							if(bpk != \di) { BP(bpk).stop(0) };
+						};
+						0
+					}
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 1000,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)

@@ -8,7 +8,7 @@ var	t2;
 // HACK
 var drumLevel = -7.dbamp;
 
-(Document.current.path.dirname.dirname +/+ "/head/head-defs.scd").debug.loadPath;
+(Document.current.path.dirname.dirname +/+ "/head/head-defs.scd")/*.debug*/.loadPath;
 
 PR(\bpCmd).clone {
 	~setDoneSignal = {
@@ -851,7 +851,7 @@ t2 = [
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
 					TLSequenceIterator([
 						{ rrand(5.0, 8.0) },
-						subIterCmd: (subIter: t2[0], shouldSync: false)
+						subIterCmd: (id: \drumIterator, subIter: t2[0], shouldSync: false)
 					]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.oneNote_(false);
@@ -1216,8 +1216,8 @@ t2 = [
 					\cmdSync,
 				],
 				// onStop: {},
-				dur: \sync, // \trigger,  // or \sync
-				id: 1660,  // trig id
+				dur: \trigger,  // or \sync
+				id: 2000,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)

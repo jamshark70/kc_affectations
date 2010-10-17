@@ -1,6 +1,6 @@
 // Affectations: Torso controller sequence
 
-(Document.current.path.dirname.dirname +/+ "/torso/torso-defs.scd").debug.loadPath;
+(Document.current.path.dirname.dirname +/+ "/torso/torso-defs.scd")/*.debug*/.loadPath;
 
 [
 	PR(\tlsAff).copy.putAll((
@@ -14,8 +14,33 @@
 			VC(\tton).free; BP(\tton).free;
 		},
 		seqPattern: {
+			var	headChans = IdentitySet.new;
+			#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8, mstClock, int].do { |key|
+				BP(key)[\chan] !? { headChans.add(BP(key)[\chan]) };
+			};
+			headChans.add(BP(\mstClock).chan2);
+			"channels to fade out".debug;
+			headChans.do { |chan| chan.postln };
 			Pn((
 				sequence: [
+					{ BP(\hsd).stop(0); 0 },
+					TLSequenceIterator(
+						[\mixerAutoSynthCmd, 
+							headChans.asArray.collect { |chan|
+								(mixer: chan, name: \ctlPoint, outName: \outbus,
+									level: 0, time: 18, curve: -2.1)
+							}
+						].flop
+						++
+						[	\sync,
+							{	
+								BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8,
+								mstClock, int]).stop(0);
+								10
+							},
+							{ BP(\fmt).stop(0); 0 }
+						]
+					).shouldSync_(false),
 					bpCmd: (name: \tton, shouldSync: false, prepareBP: { |bp|
 						bp.speedMul.value = 0.1;
 						bp.fshift.value = 0;

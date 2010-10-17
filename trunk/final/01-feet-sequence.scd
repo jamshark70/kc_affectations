@@ -1,6 +1,6 @@
 // Affectations: Feet controller sequence
 
-(Document.current.path.dirname.dirname +/+ "/feet/feet-defs.scd").debug.loadPath;
+(Document.current.path.dirname.dirname +/+ "/feet/feet-defs.scd")/*.debug*/.loadPath;
 
 [
 	PR(\tlsAff).copy.putAll((

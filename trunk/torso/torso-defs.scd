@@ -1216,7 +1216,7 @@ make: { |name|
 					levels: Pfunc({
 						var	n = rrand(3, 5);
 						[{ exprand(100.0, 180.0) } ! n, { exprand(340.0, 800.0) } ! n]
-							.lace(n*2).drop(#[-1, 0].choose)
+							.lace(n*2).drop(-1)
 					}),
 					times: Pfunc({ |ev|
 						Array.geom(ev[\levels].size - 1, 0.01, rrand(1.2, 1.6)).normalizeSum
