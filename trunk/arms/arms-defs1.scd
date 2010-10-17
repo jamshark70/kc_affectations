@@ -710,6 +710,7 @@ PR(\abstractProcess).clone {
 	~amp = -14.dbamp;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
+	~mod_ratio = 1;
 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
 // 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
 
@@ -802,7 +803,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, mod_ratio, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time
@@ -894,6 +895,7 @@ PR(\abstractProcess).clone {
 				\mode, Pfunc { |ev| ev[\chordItem][\mode] },
 				\gate, BPStream(\gate),
 				\mod_lev, BPStream(\mod_lev),
+				\mod_ratio, BPStream(\mod_ratio),
 				\dur, BPStream(\dur),
 				\length, BPStream(\sustain),
 				\attackTimeScale, BPStream(\attScale),

@@ -386,6 +386,11 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** Bells and tinkles
 *** Sounds/processes [3/9]
 **** TODO Quick cuts
+***** Arms axial (twice)
+***** Bit of locomotive -> stop
+***** Waving arms overhead - formants
+***** Axial -> locomotive
+***** Wild arm movements - formants + drums
 **** TODO Three-as-one
 **** TODO Couple of locomotive cues
 **** TODO Head leaning
