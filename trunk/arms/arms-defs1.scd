@@ -11,8 +11,9 @@
 (keys: #[master, glrvbmc, lcrvbmc],
 env: Env.adsr(0.4, 0, 1, 1.2),
 bufenv: Env.zero,
+isMono: true,
 make: { |name|
-	var	out;
+	var	out, initArgs;
 	~wt = \makeWavetables.eval(8, s, 2048, 48, { |numharm|
 		var	array = Array.triangleAmps(numharm),
 			tweak = ((numharm div: 5) + 1 .. (numharm-1)), i;
@@ -50,7 +51,12 @@ make: { |name|
 	SynthDescLib.at(out.name.asSymbol).msgFuncKeepGate = true;
 
 // 	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
-	out = MonoPortaVoicer(1, out.name, [ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
+	initArgs = [ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003];
+	if(~isMono) {
+		out = MonoPortaVoicer(1, out.name, initArgs, target: ~target);
+	} {
+		out = Voicer(25, out.name, initArgs, target: ~target);
+	};
 	// no global maps - this is mostly to generate the synthdef
 // 	SynthDescLib.at(out.nodes[0].defname.asSymbol).msgFuncKeepGate = true;
 	out
@@ -1222,19 +1228,21 @@ PR(\abstractProcess).clone {
 Proto {
 	~canEmbed = true;
 	~outerOverridesInner = true;
-	~prep = { |outerPat, innerPat|
+	~prep = { |outerPat, innerPat, envir|
 		~outerPat = outerPat;
 		~innerPat = innerPat;
+		~envir = envir ?? { currentEnvironment };
 		currentEnvironment
 	};
 	~embedInStream = { |inval|
-		var outerStream = ~outerPat.asStream,
+		var self = currentEnvironment,
+			outerStream = ~envir.use { self[\outerPat].asStream },
 			innerStream,
 			outerEvent, innerEvent;
 		while { (outerEvent = outerStream.next(inval)).notNil } {
-			innerStream = ~innerPat.asStream;
+			innerStream = ~envir.use { self[\innerPat].asStream };
 			while { (innerEvent = innerStream.next(inval.copy.putAll(outerEvent))).notNil } {
-				if(~outerOverridesInner == true) { innerEvent.putAll(outerEvent) };
+				if(self[\outerOverridesInner] == true) { innerEvent.putAll(outerEvent) };
 				inval = innerEvent.yield;
 			};
 		};

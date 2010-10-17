@@ -339,13 +339,13 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				~lpcEv.putAll((
 					bus: ~lock.bus,
 					target: if(chan.notNil) { chan.synthgroup } { ~target },
-					chan: nil,
 					// inbus: ~lock.bus,
 					collIndex: ~collIndex,
 						// effectgroup might have post-lpc effect nodes (chorus etc.)
 						// so put lpc's up front
 					addAction: ~lpcEv[\addAction] ?? { \addToHead }
 				))
+				.put(\chan, nil)  // can't set to nil in putAll
 				// cuz parent: don't work in putAll #@$*$&*$&@#312
 				.parent_(ProtoEvent(~lpcProto ?? { \singleSynthPlayer }).v.parent)
 				.play;
