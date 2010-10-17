@@ -376,7 +376,16 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** Laura's solo: lpc chaos toward end, then bells/space from torso
 **** How to work in hints of drums?
 **** Stephen's feet on Ilana's back - fantastic!
-*** Sounds/processes [0/0]
+*** Sounds/processes [0/9]
+**** TODO Quick cuts
+**** TODO Three-as-one
+**** TODO Couple of locomotive cues
+**** TODO Head leaning
+**** TODO Foreshadow suspension
+**** TODO Arms (axial, then locomotive)
+**** TODO Walking
+**** TODO Foreshadow again
+**** TODO Final suspension
 *** Data needed from Lorne
 *** Data to send to Lorne
 
