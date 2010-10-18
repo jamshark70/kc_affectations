@@ -544,6 +544,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP.all.stop; 0 },
 					bpCmd: (name: \sus, prepareBP: { |bp|
 						bp.repeats = 1;
 						bp.phraseDur = 24;
