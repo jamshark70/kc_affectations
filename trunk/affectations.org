@@ -384,14 +384,14 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** Head formants (and LPC?)
 **** Torso sustained pitches (less noise)
 **** Bells and tinkles
-*** Sounds/processes [3/9]
-**** TODO Quick cuts
+*** Sounds/processes [4/9]
+**** DONE Quick cuts
 ***** Arms axial (twice)
 ***** Bit of locomotive -> stop
 ***** Waving arms overhead - formants
 ***** Axial -> locomotive
 ***** Wild arm movements - formants + drums
-**** TODO Three-as-one
+**** TODO Three-as-one - when Stephen touches Laura's arm
 **** TODO Couple of locomotive cues
 **** TODO Head leaning
 **** DONE Foreshadow suspension
@@ -479,6 +479,32 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** F160-Partnering - runs by itself
 
 *** Arms
+**** A500 -- first statement of axial theme
+     1. One event cue per arm gesture = one melody note
+**** A510 -- first statement of locomotive theme
+     1. each event cue makes an arpeggio -- I can automate these if it will be easier
+**** A520 -- sunrise
+**** A530 -- hand stacking
+**** A540 -- partnering
+**** A550 -- Shiva (axial)
+     1. As before, one event cue for each arm gesture
+**** A560 -- more partnering
+**** A570 -- axial theme, three levels
+     1. As before, one event cue for each arm gesture
+**** A580 -- Stephen and Ilana duet
+     1. Event cues trigger sequences of one or more chords -- these could be automated too
+**** A590 -- locomotive (short)
+     1. event cue = arpeggio (also open to automation)
+**** A600 -- manipulating Laura
+     1. As before, one event cue for each arm gesture
+**** A610 -- another short locomotive section
+     1. event cue = arpeggio (also open to automation)
+**** A620 -- Stephen solo
+     1. Like the earlier axial music, one event cue for each arm gesture
+**** A630 -- cradling gesture
+**** A640 -- Laura solo
+**** A650 -- fade out to make silence before the face dance
+
 *** Head
 **** H1000-Start of face dance
      1. 1 event trigger for creaking --> door sound
