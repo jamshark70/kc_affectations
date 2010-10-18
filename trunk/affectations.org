@@ -531,6 +531,18 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
 **** T2100 - Stephen and Laura's duet (37:20-ish)
 
+*** Body
+**** B2500 - Segment trigger on the first arms axial move.
+     1. Event triggers for successive axial moves (like arm section).
+	When she starts moving arms and torso, slow down the triggers.
+**** B2510 - At the restart of the axial sequence -- very short cue!
+**** B2520 - Locomotive theme, in place. Another very short cue.
+**** B2530 - Hit this when she stops in the triangle shape.
+**** B2540 - Restart axial sequence -- very short, as in 2510.
+**** B2550 - Locomotive in place, short like 2520.
+**** B2560 - Wild arm movements.
+**** B2570 - Coming...
+
 
 * Sample attributions
     September 3, 2010
