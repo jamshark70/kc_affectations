@@ -4,8 +4,8 @@
 
 [
 	PR(\tlsAff).copy.putAll((
-		name: "A1-axial",
-		segID: 501,
+		name: "A500-axial",
+		segID: 500,
 		initProcesses: {
 			\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
 				filename: "arms/NACL_Arms.wav"
@@ -45,7 +45,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 502,  // trig id
+				id: 510,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -53,8 +53,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A2-locomotive",
-		segID: 502,
+		name: "A510-locomotive",
+		segID: 510,
 		initProcesses: {
 			var	p;
 			\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
@@ -92,7 +92,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 503,  // trig id
+				id: 520,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -100,8 +100,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A3-sunrise",
-		segID: 503,
+		name: "A520-sunrise",
+		segID: 520,
 		initProcesses: {
 			\chuckIf.eval(PR(\sunrise), BP, \sr);
 			BP(\sr).ampCtl.value = -23.dbamp;
@@ -134,7 +134,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 504,  // trig id
+				id: 530,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -142,8 +142,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A4-stacking",
-		segID: 504,
+		name: "A530-stacking",
+		segID: 530,
 		initProcesses: {
 			\chuckIf.eval(PR(\stacking), BP, \stack, nil /*, (
 				// TEST
@@ -167,7 +167,7 @@
 					bpCmd: (id: \stack, name: \stack)
 				],
 				dur: \trigger,  // or \sync
-				id: 505,  // trig id
+				id: 540,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -175,8 +175,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A5-partnering",
-		segID: 505,
+		name: "A540-partnering",
+		segID: 540,
 		initProcesses: {
 			\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
 				env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
@@ -201,7 +201,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 506,  // trig id
+				id: 550,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -209,8 +209,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A6-Shiva",
-		segID: 506,
+		name: "A550-Shiva",
+		segID: 550,
 		initProcesses: {
 			\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
 			\chuckIf.eval(Fact(\shimmerpad), VC, \btp, nil, (
@@ -255,7 +255,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 507,  // trig id
+				id: 560,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -263,8 +263,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A7-partnering",
-		segID: 507,
+		name: "A560-partnering",
+		segID: 560,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -304,7 +304,7 @@
 				],
 				// onStop: {  },
 				dur: \trigger,  // or \sync
-				id: 508,  // trig id
+				id: 570,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -312,8 +312,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A8-axial 3 levels",
-		segID: 508,
+		name: "A570-axial 3 levels",
+		segID: 570,
 		initProcesses: {
 			if(BP.exists(\sm0).not) { Fact(\threelevBP).makev(Library.at(\rvbs)) };
 			BP(#[sm0, sm1, sm2]).do { |bp| bp.amp = -11.dbamp };
@@ -341,7 +341,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 509,  // trig id
+				id: 580,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -349,8 +349,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A9-S&I duet",
-		segID: 509,
+		name: "A580-S&I duet",
+		segID: 580,
 		initProcesses: {
 			\chuckIf.eval(PR(\siDuet), BP, \sid);
 			VC(\sp) => BP(\sid);
@@ -386,7 +386,7 @@
 				],
 				onStop: {},
 				dur: \trigger,  // or \sync
-				id: 509.5,  // trig id
+				id: 590,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -394,8 +394,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A9.5-locomotive(short)",
-		segID: 509.5,
+		name: "A590-locomotive(short)",
+		segID: 590,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -414,7 +414,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 510,  // trig id
+				id: 600,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -422,8 +422,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A10-manipulation",
-		segID: 510,
+		name: "A600-manipulation",
+		segID: 600,
 		initProcesses: {
 			\chuckIf.eval(Fact(\lauraManip), BP, \lm, nil, Library.at(\rvbs));
 			BP(\lm).amp = 0.45;
@@ -447,7 +447,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 511,  // trig id
+				id: 610,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -455,8 +455,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A11-locomotive(short)",
-		segID: 511,
+		name: "A610-locomotive(short)",
+		segID: 610,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -475,7 +475,7 @@
 				],
 				onStop: {},
 				dur: \trigger,  // or \sync
-				id: 512,  // trig id
+				id: 620,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -483,8 +483,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A12-Stephen solo",
-		segID: 512,
+		name: "A620-Stephen solo",
+		segID: 620,
 		initProcesses: {
 			\chuckIf.eval(PR(\armsSkidMel), BP, \ssol, nil, (
 				master: topEnvironment[\master],
@@ -520,7 +520,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 513,  // trig id
+				id: 630,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -528,8 +528,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A13-cradling",
-		segID: 513,
+		name: "A630-cradling",
+		segID: 630,
 		initProcesses: {
 			\chuckIf.eval(PR(\rockingChords), BP, \rc);
 			VC(\sp) => BP(\rc);
@@ -549,7 +549,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 514,  // trig id
+				id: 640,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -557,8 +557,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A14-Laura solo",
-		segID: 514,
+		name: "A640-Laura solo",
+		segID: 640,
 		initProcesses: {
 			var p = BP(\acDisp);
 			SynthDef(\rotSpeedAuto2, { |outbus, time = 1, proportion = 0.5, speedMul = 1,
@@ -637,7 +637,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 515,  // trig id
+				id: 650,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -645,8 +645,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A515-Silence before face",
-		segID: 515,
+		name: "A650-Silence before face",
+		segID: 650,
 		seqPattern: {
 			Pn((
 				sequence: [
