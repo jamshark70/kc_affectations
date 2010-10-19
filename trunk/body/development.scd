@@ -1030,3 +1030,14 @@ BP(\bst).amp = 6.dbamp;
 
 
 BP(\sus).ampCtl.value = 2;
+
+
+// steps sound late
+~clock52.gui;
+
+#[1, -0.07] => BP(\bst);
+
+BP(\bst).filtDecay = 0.05;
+BP(\bst).filtAmp = 1;
+BP(\bst).def = \bufGrainPanKlankDist;
+

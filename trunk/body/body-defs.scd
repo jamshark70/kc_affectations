@@ -552,7 +552,7 @@ make: { |name|
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
 		event: (
 			eventKey: \polySynthPlayerData,
-			instrument: \bufGrainPanFiltDist,
+			instrument: \bufGrainPanKlankDist,
 			vizPath: #[perc]
 		),
 		soundID: Pseries(0, 1, inf),
@@ -566,7 +566,7 @@ make: { |name|
 		lcrvbmc: ~lcrvbmc,
 		initAmp: 1,
 
-		def: \bufGrainPanFiltDist,
+		def: \bufGrainPanKlankDist,
 		delta: Pwrand(#[0.5, 1.0], #[0.95, 0.05], inf),
 		time: 0.15,
 		rate: 1,
@@ -585,13 +585,24 @@ make: { |name|
 		ffreq: 14000,
 		ptIndex: Pwhite(0, Pfunc({ ~pt.size - 1 }), inf).clump(3),
 		bufIndex: 0,
+		mode: Pwrand(#[d0, e0], #[0.8, 0.2], inf),
+		filtAmp: 0,
+		filtDegree: Pwhite(39, 49, inf),
+		filtFreq: Pfunc({ |ev| ev[\mode].asMode.cps(ev[\filtDegree]) }),
+		filtDecay: 0.011,
 
 		superPattern: PR(\basicBufferPlayer).v[\asPattern],
 		asPattern: {
 			Pbind(
 				\distance, BPStream(\distance),
 				\pan, BPStream(\pan),
-				\ffreq, BPStream(\ffreq)
+				\ffreq, BPStream(\ffreq),
+				\chorusAmps, #[[0, 0, 0]],
+				\mode, BPStream(\mode),
+				\filtAmp, BPStream(\filtAmp),
+				\filtDegree, BPStream(\filtDegree),
+				\filtFreq, BPStream(\filtFreq),
+				\filtDecay, BPStream(\filtDecay)
 			)
 			<>
 			~superPattern.()
@@ -631,7 +642,8 @@ make: { |name|
 		}
 	));
 	topEnvironment[\clock52] => BP(name);
-	1 => BP(name);
+	// synths need to run just ahead of the beat to sound on time
+	#[1, -0.07] => BP(name);
 }, type: \bp) => Fact(\bodySteps);
 
 

@@ -321,7 +321,7 @@ SynthDef(\bufGrainPanKlShp, { |start, time, bufnum, pan, rate = 1, amp = 1, ampM
 			- Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtAttack),
 		shaped, dly, cfreqRand = chorusFreq * 0.2;
 	sig = sig + (Limiter.ar(filt) * filtAmp);
-	shaped = Shaper.ar(shapebuf, sig);
+	shaped = Shaper.ar(shapebuf, sig.clip(-1.0, 1.0));
 	sig = LeakDC.ar(XFade2.ar(sig, shaped, shapeXf));
 	dly = sig;
 	chorusAmps.do { |amp|

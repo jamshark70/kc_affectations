@@ -4,6 +4,9 @@
 // This is so I can put section defs into separate files
 // instead of having one massive navigation-hell file for the whole piece.
 
+// BP.loadGui;  // <-- this is for James's development work - no need in the performance
+
+
 
 // this block loads everything: cursor on open-paren, then ctrl-alt-x
 (
@@ -19,7 +22,13 @@ s.waitForBoot {
 	});
 	cond.hang;
 
-	if(~master.mcgui.isNil) { MixingBoard(\arms, nil, ~master) };
+	if(~master.mcgui.isNil) {
+		if(MCG.exists(7)) {
+			~master => MCG(7)
+		} {
+			MixingBoard(\arms, nil, ~master)
+		};
+	};
 
 	BP(\segTrig).free;
 	PR(\busTrig).chuck(BP(\segTrig), nil, (message: '/segment'));
@@ -54,6 +63,8 @@ s.waitForBoot {
 // DEBUG SNIPS
 
 ChuckableBrowser.newWindow;
+
+BP.all.stop;
 
 // if you need to clear everything, do this:
 BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } }; VC.all.free;
@@ -116,3 +127,12 @@ BP(\st) => MT(1);
 
 
 BP(\tton).listVars
+
+Error.debug = true;
+Error.debug = false;
+
+BP(\st).v.env.keys.select { |key| key.asString.contains("auto") };
+
+VC(\am).v.portaTime_(0.9)
+
+BP(BP(\acDisp).lastSpawned).amp.postcs

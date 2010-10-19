@@ -247,6 +247,7 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 * Post-premiere
 ** Coding fixes
 *** Refactor snare drum stuff in feet sequence
+*** Proper fix for F20
 
 
 * TODO For premiere
@@ -387,6 +388,15 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 **** Head formants (and LPC?)
 **** Torso sustained pitches (less noise)
 **** Bells and tinkles
+*** Timing
+**** 43:14 --> 0:01+
+**** 41:20ish - start drums
+**** 42:30 - sus1
+**** 43:47 (0:34) - arms
+**** 44:32 (1:19) - walking
+**** 45:08 (1:55) - sus2
+**** 46:23 (3:10-ish) - start fading out beat
+**** 46:43 (3:30) - sus3 - about 15 sec
 *** Sounds/processes [4/9]
 **** DONE Quick cuts
 ***** Arms axial (twice)

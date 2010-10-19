@@ -848,29 +848,55 @@
 		segID: 160,
 		initProcesses: {
 			~cmdPool = [
-				{ BP(\st).runGesture((
-						gest: \lauraslide,
-						notesKey: BP(\st).runningNotes.keys.choose,
-						ampAdjust: 0.15,
-						numEv: rrand(10, 21)
-					));
+				{	var	stream, cmd = currentEnvironment;
+					BP(\st).use {
+						stream = CleanupStream(~makeGesture.((
+							gest: \lauraslide,
+							notesKey: BP(\st).runningNotes.keys.choose,
+							ampAdjust: 0.15,
+							numEv: rrand(7, 10)
+						)).asStream, {
+							{ cmd.activeGest.putEach(#[0, 1], false).debug("clearing active[0]");
+							// cmd.activeGest[0] = false.debug("clearing active[0]")
+							}.defer(2.5);
+						});
+						cmd.activeGest.putEach(#[0, 1], true).debug("setting active[0]");
+						// cmd.activeGest[0] = true.debug("setting activegest[0]");
+						~spawner.par(stream);
+					};
 					0
 				},
-				{
+				{	var	cmd = currentEnvironment;
 					BP(\st).use {
 						var	mspeeds = { ~multiSpeedParmsStream.next(()) } ! 4,
 							mstream;
 						mstream = CleanupStream(
 							Ppar(mspeeds.collect { |parms| ~makeGesture.(parms) }, 1).asStream,
-							e { ~streamsToStop.remove(mstream) }
+							e {
+								~streamsToStop.remove(mstream);
+								cmd.activeGest.putEach(#[0, 1], false).debug("clearing active[1]");
+								// cmd.activeGest[1] = false.debug("clearing active[1]");
+							}
 						);
 						~spawner.par(mstream);
 						~streamsToStop.add(mstream);
+						cmd.activeGest.putEach(#[0, 1], true).debug("setting activegest[1]");
+						// cmd.activeGest[1] = true.debug("setting activegest[1]");
 					};
 					0
 				},
-				{ PR(\bpCmd).copy.putAll((name: \ln, dur: rrand(3.0, 7.0))) },
-				{ PR(\bpCmd).copy.putAll((name: \fc, dur: rrand(3.0, 7.0))) },
+				{	var	cmd = currentEnvironment;
+					cmd.activeGest.putEach(#[2, 3], true);
+					PR(\bpCmd).copy.putAll((name: \ln, dur: rrand(2.0, 4.0).debug("lean dur"),
+						clearDoneSignal: { { cmd.activeGest.putEach(#[2, 3], false) }.defer(7.0) }
+					));
+				},
+				{	var	cmd = currentEnvironment;
+					cmd.activeGest.putEach(#[2, 3], true);
+					PR(\bpCmd).copy.putAll((name: \fc, dur: rrand(2.0, 4.0).debug("chord dur"),
+						clearDoneSignal: { { cmd.activeGest.putEach(#[2, 3], false) }.defer(7.0) }
+					));
+				},
 				{ BP(\st).runGesture((name: \klankHrmSteps, numEv: rrand(4, 7),
 					kdecay: rrand(0.4, 0.9))); 0 }
 			];
@@ -879,13 +905,22 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					bpCmd: (name: \st, shouldSync: false, playWarning: false, prepareBP: { |bp|
+						bp.autoRun = false;
+					}),
 					0.1,
+					{ BP(\st).removeAutoRun; 0 },
 					loopCmd: (
-						dStream: Pexprand(1.4, 4.5, inf).asStream,
+						setDoneSignal: {
+							~activeGest = false ! ~sequencer[\cmdPool].size;
+							~gest = Pwhite(0, ~sequencer[\cmdPool].size - 1, inf)
+								.reject { |i| ~activeGest.debug("THIS IS THE FUCKING BOOLEAN ARRAY")[i.debug("AND THIS IS THE FUCKING INDEX")] }
+								.asStream;
+						},
+						dStream: Pexprand(0.9, 2.2, inf).asStream,
 						cmds: [
-							{ ~sequencer[\cmdPool].choose.value },
-							{ ~dStream.next }
+							{ ~sequencer[\cmdPool][~gest.next].value },
+							{ ~dStream.next.debug("dstream") }
 						]
 					)
 				],

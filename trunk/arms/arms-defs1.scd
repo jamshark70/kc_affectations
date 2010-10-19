@@ -803,7 +803,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, mod_ratio, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, mod_ratio, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer, amp];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time

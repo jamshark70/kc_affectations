@@ -891,6 +891,26 @@ PR(\sectionSequencer).clone({
 	};
 }) => PR(\affSectSeq);
 
+
+// and, another pathetically stupid bug in my library that I have to fix
+// here to avoid an svn update for Lorne
+
+PR(\gcAutoSynthCmd).fire = { |parms|
+	if(~gc.isFunction) { ~gc = ~gc.value };
+	if(~gc.notNil) {
+		~server = ~gc.server;
+		~target = ~target ?? { ~server.asTarget };
+		// NO, DON'T OVERWRITE THE DAMN OUTNAME IF IT'S SUPPLIED!!!
+		~outName ?? { ~outName = parms.tryPerform(\at, \outName) ? \out };
+		~outName.envirPut(~gc.index);
+		~gc.stopAuto.watch;	// should replace existing automation
+		~superFire.(parms);
+		~gc.autoSynth = ~node;
+	};
+};
+
+
+
 (thisProcess.nowExecutingPath.dirname +/+ "transports.scd").loadPath;
 
 };
