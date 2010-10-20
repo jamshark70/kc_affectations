@@ -856,12 +856,10 @@
 							ampAdjust: 0.15,
 							numEv: rrand(7, 10)
 						)).asStream, {
-							{ cmd.activeGest.putEach(#[0, 1], false).debug("clearing active[0]");
-							// cmd.activeGest[0] = false.debug("clearing active[0]")
+							{ cmd.activeGest.putEach(#[0, 1], false);
 							}.defer(2.5);
 						});
-						cmd.activeGest.putEach(#[0, 1], true).debug("setting active[0]");
-						// cmd.activeGest[0] = true.debug("setting activegest[0]");
+						cmd.activeGest.putEach(#[0, 1], true);
 						~spawner.par(stream);
 					};
 					0
@@ -874,26 +872,24 @@
 							Ppar(mspeeds.collect { |parms| ~makeGesture.(parms) }, 1).asStream,
 							e {
 								~streamsToStop.remove(mstream);
-								cmd.activeGest.putEach(#[0, 1], false).debug("clearing active[1]");
-								// cmd.activeGest[1] = false.debug("clearing active[1]");
+								cmd.activeGest.putEach(#[0, 1], false);
 							}
 						);
 						~spawner.par(mstream);
 						~streamsToStop.add(mstream);
-						cmd.activeGest.putEach(#[0, 1], true).debug("setting activegest[1]");
-						// cmd.activeGest[1] = true.debug("setting activegest[1]");
+						cmd.activeGest.putEach(#[0, 1], true);
 					};
 					0
 				},
 				{	var	cmd = currentEnvironment;
 					cmd.activeGest.putEach(#[2, 3], true);
-					PR(\bpCmd).copy.putAll((name: \ln, dur: rrand(2.0, 4.0).debug("lean dur"),
+					PR(\bpCmd).copy.putAll((name: \ln, dur: rrand(2.0, 4.0),
 						clearDoneSignal: { { cmd.activeGest.putEach(#[2, 3], false) }.defer(7.0) }
 					));
 				},
 				{	var	cmd = currentEnvironment;
 					cmd.activeGest.putEach(#[2, 3], true);
-					PR(\bpCmd).copy.putAll((name: \fc, dur: rrand(2.0, 4.0).debug("chord dur"),
+					PR(\bpCmd).copy.putAll((name: \fc, dur: rrand(2.0, 4.0),
 						clearDoneSignal: { { cmd.activeGest.putEach(#[2, 3], false) }.defer(7.0) }
 					));
 				},
@@ -914,13 +910,13 @@
 						setDoneSignal: {
 							~activeGest = false ! ~sequencer[\cmdPool].size;
 							~gest = Pwhite(0, ~sequencer[\cmdPool].size - 1, inf)
-								.reject { |i| ~activeGest.debug("THIS IS THE FUCKING BOOLEAN ARRAY")[i.debug("AND THIS IS THE FUCKING INDEX")] }
+								.reject { |i| ~activeGest[i] }
 								.asStream;
 						},
 						dStream: Pexprand(0.9, 2.2, inf).asStream,
 						cmds: [
 							{ ~sequencer[\cmdPool][~gest.next].value },
-							{ ~dStream.next.debug("dstream") }
+							{ ~dStream.next }
 						]
 					)
 				],

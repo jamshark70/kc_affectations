@@ -195,6 +195,7 @@ t2 = [
 			cmds: [
 				{	var	numAcc = rrand(3, 6), acc = ~acc.next,
 					pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
+["override", ~repeats, pat].postcs;
 					BP(#[drum7, drum8]).do { |bp|
 						bp.override(\gest, pat);
 					};
@@ -205,7 +206,8 @@ t2 = [
 		),
 		\cmdSync,
 		
-		{	BP(\drum8).gest = Pfsm([
+		{	"set drum8 gesture".debug;
+			BP(\drum8).gest = Pfsm([
 			#[4, 5],
 			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
 			Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
@@ -216,7 +218,8 @@ t2 = [
 		], inf);
 			6
 		},
-		{	BP(\drum7).gest = BP(\drum8).gest;
+		{	"set drum7 gesture".debug;
+			BP(\drum7).gest = BP(\drum8).gest;
 			6 //24
 		},
 		
@@ -228,6 +231,7 @@ t2 = [
 						Pif(Ptime() < rrand(8, 11), Pseq([\randsync, ~acc], 1)),
 						\randquant
 					], 1));
+["override", ~repeats, pat].postcs;
 					BP(#[drum7, drum8]).do { |bp|
 						bp.keepGoing = false;
 						bp.override(\gest, pat);
@@ -243,6 +247,11 @@ t2 = [
 			value: 0.736, time: 20, curve: 2),
 		loopCmd: (repeats: 4,
 			cmds: [
+				{
+					if(BP(\drum8).isPlaying.not) {
+						PR(\bpCmd).copy.putAll((name: \drum8, quant: -1, shouldSync: false, playWarning: false))
+					} { 0 };
+				},
 				funcCmd: (
 					doneSignal: true,
 					func: {
@@ -1217,7 +1226,53 @@ t2 = [
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 2000,  // trig id
+				id: 1990, // 2000,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+
+	PR(\tlsAff).copy.putAll((
+		name: "fade and stop",
+		segID: 1990,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			var	headChans = IdentitySet.new;
+			#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8, mstClock, int].do { |key|
+				BP(key)[\chan] !? { headChans.add(BP(key)[\chan]) };
+			};
+			headChans.add(BP(\mstClock).chan2);
+			"channels to fade out".debug;
+			headChans.do { |chan| chan.postln };
+			Pn((
+				sequence: [
+					{ BP(\hsd).stop(0); 0 },
+					TLSequenceIterator(
+						[\mixerAutoSynthCmd, 
+							headChans.asArray.collect { |chan|
+								(mixer: chan, name: \ctlPoint, outName: \outbus,
+									level: 0, time: 18, curve: -2.1)
+							}
+						].flop
+						++
+						[	\sync,
+							{	
+								BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8,
+								mstClock, int]).stop(0);
+								10
+							},
+							{ BP(\fmt).stop(0); 0 }
+						]
+					).shouldSync_(false),
+					// make sure it doesn't stop until I say it stops
+					funcCmd: (doneSignal: true)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 0,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -1226,23 +1281,6 @@ t2 = [
 
 // TEMPLATE
 
-	// PR(\tlsAff).copy.putAll((
-	// 	name: "F1570-sung 5",
-	// 	segID: 1570,
-	// 	// initProcesses: {},
-	// 	// unloadProcesses: {},
-	// 	seqPattern: {
-	// 		Pn((
-	// 			sequence: [
-	// 			],
-	// 			// onStop: {},
-	// 			dur: \sync, // \trigger,  // or \sync
-	// 			id: 0,  // trig id
-	// 			init: Func(\nextThingTrig).v,
-	// 			clear: Func(\clearNextTrig).v
-	// 		), 1)
-	// 	}
-	// )),
 
 	// PR(\tlsAff).copy.putAll((
 	// 	name: "",

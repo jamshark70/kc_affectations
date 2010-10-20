@@ -247,6 +247,13 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 * Post-premiere
 ** Coding fixes
 *** Refactor snare drum stuff in feet sequence
+*** Undo dataIn changes
+**** arms-defs1: startAuto function
+**** 02-arms-seq
+***** test file path?
+***** reactivate di cmds - Library.at(\diparms)
+***** c. line 586, yx auto
+***** stacking - plug data back in
 *** Proper fix for F20
 
 
@@ -416,7 +423,8 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
 *** Data to send to Lorne
 
 
-** Sequencing to-dos [2/4]
+** Sequencing to-dos [2/5]
+*** TODO See post-premiere for data changes - undo if live music is used
 *** TODO Feet [15/16]
 **** DONE Regression test BP(\st) autoRun -- seems OK
 **** DONE Test slinky - degrees --> freq now OK - too prominent?

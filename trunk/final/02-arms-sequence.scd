@@ -8,7 +8,7 @@
 		segID: 500,
 		initProcesses: {
 			\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
-				filename: "arms/NACL_Arms.wav"
+				filename: "arms/hands-1_data2.wav" //"arms/NACL_Arms.wav"
 			));
 			BP(\di).put(\update, { |obj, what|
 				if(what == \stop and: { obj === topEnvironment[\seq] }) {
@@ -30,7 +30,7 @@
 			Pn((
 				sequence: [
 					{ "///// 10:05 -- axial".debug; 0 },
-					bpCmd: (id: \lc_data, name: \di, quant: 0, shouldSync: false),
+					// bpCmd: (id: \lc_data, name: \di, quant: 0, shouldSync: false),
 					loopCmd: (
 						id: \am1,
 						autoSync: false,
@@ -71,6 +71,7 @@
 			p.chord = p[\saveChord] ? p[\chord];
 			p.fullCh.removeAt(\diss1);
 			p.fullCh.removeAt(\diss2);
+			p.amp = -20.dbamp;
 
 			BP(\di).playTestFile = false;
 		},
@@ -145,7 +146,7 @@
 		name: "A530-stacking",
 		segID: 530,
 		initProcesses: {
-			\chuckIf.eval(PR(\stacking), BP, \stack, nil /*, (
+			\chuckIf.eval(PR(\stacking), BP, \stack, nil, (
 				// TEST
 				root: Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
 					Pwhile1({ |inval, next| next < 40 },
@@ -155,7 +156,7 @@
 						Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
 					)
 				]))
-			)*/);
+			));
 			VC(\ac) => BP(\stack);
 			0 => BP(\stack);
 		},
@@ -183,7 +184,7 @@
 				fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
 			).putAll(Library.at(\rvbs)));
 			\chuckIf.eval(PR(\armsInv), BP, \ai);
-			BP(\ai).ampCtl.value = 0.045;
+			BP(\ai).ampCtl.value = 0.115; // 0.045;
 			VC(\sp) => BP(\ai);
 			0 => BP(\ai);
 		},
@@ -354,7 +355,7 @@
 		initProcesses: {
 			\chuckIf.eval(PR(\siDuet), BP, \sid);
 			VC(\sp) => BP(\sid);
-			BP(\sid).finalAmp = 0.037;
+			BP(\sid).finalAmp = 0.05; // 0.037;
 			BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
 				Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 			);
@@ -533,7 +534,7 @@
 		initProcesses: {
 			\chuckIf.eval(PR(\rockingChords), BP, \rc);
 			VC(\sp) => BP(\rc);
-			BP(\rc).finalAmp = 0.025;
+			BP(\rc).finalAmp = 0.05;
 		},
 		unloadProcesses: { BP(\rc).free },
 		seqPattern: {
@@ -582,9 +583,14 @@
 					~angle.automate(\angleAuto,
 						[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 						~rotSpeed.autoSynth, \addAfter);
-					~yxRatio.automate(\yxRatioAuto, 
-						[inbus: BP(\di).bus.index + 7],
+					~yxRatio.automate({
+							EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
+						},
+						nil,
 						~rotSpeed.autoSynth, \addAfter);
+					// ~yxRatio.automate(\yxRatioAuto, 
+					// 	[inbus: BP(\di).bus.index + 7],
+					// 	~rotSpeed.autoSynth, \addAfter);
 				});
 				OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
 					resp.remove;
@@ -652,7 +658,7 @@
 				sequence: [
 					{
 						BP.keys.do { |bpk|
-							if(bpk != \di) { BP(bpk).stop(0) };
+							if(#[di, segTrig, evTrig].includes(bpk).not) { BP(bpk).stop(0) };
 						};
 						0
 					}

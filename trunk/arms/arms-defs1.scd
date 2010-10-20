@@ -831,27 +831,57 @@ PR(\abstractProcess).clone {
 		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
 	};
 
+	// TEMPORARY FOR RECORDING ONLY
 	~startAuto = {
 		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
-		s.makeBundle(nil, {
-			~rotSpeed.automate(\rotSpeedAuto,
-				[inbus: BP(\di).bus.index + 4, time: time, proportion: proportion],
-				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+		fork {
+			~rotSpeed.automate({
+				Line.kr(0, 1, time, doneAction: 2);
+				LFDNoise1.kr(Rand(0.8, 1.5)).range(1.8, 3.0)
+			},
+				[time: time],
+				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
+					.tryPerform(\fadergroup),
 				\addToHead);
+			s.sync;
 			~angle.automate(\angleAuto,
 				[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 				~rotSpeed.autoSynth, \addAfter);
-			~yxRatio.automate(\yxRatioAuto, 
-				[inbus: BP(\di).bus.index + 7],
+			~yxRatio.automate({
+					EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
+				},
+				nil,
 				~rotSpeed.autoSynth, \addAfter);
-		});
-		OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
-			resp.remove;
-			if(BP.exists(~collIndex)) {
-				BP(~collIndex).stop(0);
-			};
-		}).add;
+			OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+				resp.remove;
+				if(BP.exists(~collIndex)) {
+					BP(~collIndex).stop(0);
+				};
+			}).add;
+		};
 	};
+
+	// ~startAuto = {
+	// 	var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+	// 	s.makeBundle(nil, {
+	// 		~rotSpeed.automate(\rotSpeedAuto,
+	// 			[inbus: BP(\di).bus.index + 4, time: time, proportion: proportion],
+	// 			~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+	// 			\addToHead);
+	// 		~angle.automate(\angleAuto,
+	// 			[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
+	// 			~rotSpeed.autoSynth, \addAfter);
+	// 		~yxRatio.automate(\yxRatioAuto, 
+	// 			[inbus: BP(\di).bus.index + 7],
+	// 			~rotSpeed.autoSynth, \addAfter);
+	// 	});
+	// 	OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+	// 		resp.remove;
+	// 		if(BP.exists(~collIndex)) {
+	// 			BP(~collIndex).stop(0);
+	// 		};
+	// 	}).add;
+	// };
 
 	~stopCleanup = {
 		s.makeBundle(0.1, {
@@ -1660,7 +1690,7 @@ PR(\abstractProcess).clone {
 		.clump(3);
 	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
 	~delta = Pwhite(1, 4, inf);
-	~freqlag = Pkey(\delta) * 0.6;
+	~freqlag = min(Pkey(\delta) * 0.6, 1.1); // Pkey(\delta) * 0.6;
 	~finalAmp = -12.dbamp;
 	~protoEvent = Pseq([
 		\polySynthPlayNotify,

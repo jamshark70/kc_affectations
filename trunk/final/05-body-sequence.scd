@@ -15,7 +15,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{	p = BP(\bskid).v.reset;
+					{	BP(\bskid).v.reset;
 						0
 					},
 					loopCmd: (
@@ -52,7 +52,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{	p = BP(\bskid).v.reset;
+					{	BP(\bskid).v.reset;
 						0
 					},
 					loopCmd: (
@@ -127,10 +127,14 @@
 							Pwhite(0.7, 0.9, inf)
 						], Prand(#[0, 1], inf));
 						BP(\acDisp).startAuto = PR(\armsChord).v[\startAuto];
-						BP(\acDisp).amp = -14.dbamp;
-						BP(\acDisp).spawnChild(0);
+						BP(\acDisp).amp = -21.dbamp;
 						0
-					}
+					},
+					loopCmd: (
+						cmds: [
+							{ BP(\acDisp).spawnChild(0); 5.2 }
+						]
+					)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -183,7 +187,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{	p = BP(\bskid).v.reset;
+					{	BP(\bskid).v.reset;
 						0
 					},
 					loopCmd: (
@@ -229,10 +233,15 @@
 							Pwhite(0.1, 0.3, inf),
 							Pwhite(0.7, 0.9, inf)
 						], Prand(#[0, 1], inf));
-						BP(\acDisp).amp = -14.dbamp;
+						BP(\acDisp).amp = -21.dbamp;
 						BP(\acDisp).spawnChild(0);
 						0
-					}
+					},
+					loopCmd: (
+						cmds: [
+							{ BP(\acDisp).spawnChild(0); rrand(2.5, 7.0) }
+						]
+					)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -292,6 +301,7 @@
 						var	slowdown = Env(#[1, 4.5], #[15], 5);
 						bp.noisydelta = Pwhite(0.3, 0.6, inf) * slowdown;
 						bp.noisytime = Pkey(\delta).linlin(0.3, 0.6, 0.4, 0.4);
+						bp.noisynormAmp = 1.5;
 						bp.word = Plazy({ Prand(~pts, inf) });
 						bp.pitcheddelta = Pwhite(0.1, 0.4, inf) * slowdown;
 						bp.pitchedtime = Pkey(\delta) * Pwhite(1.4, 2.1, inf);
@@ -301,6 +311,7 @@
 							.clump(3)
 							.collect { |deg, ev| Mode(ev[\mode]).cps(deg) };
 						bp.pitchProb.value = 0.88;
+						bp.pitchednormAmp = 3;
 						bp.mode = Pseq([
 							Pn(\e0, { rrand(12, 24) }),
 							Pstutter(Pwhite(2, 6, inf), Prand(Mode.keys.asArray.select { |key|
@@ -506,7 +517,7 @@
 								p.pitcheddelta = Pdelta(Pwhite(0, 15, inf) * 0.25, 4);
 								p.pitchedtime = Pexprand(0.4, max(0.4, Pkey(\delta) * 1.2), inf);
 								p.preamp = 9;
-								p.pitchednormAmp = 5.5;
+								p.pitchednormAmp = 3;
 								// later: p.pitcheddelta = Pwhite(3, 10, inf) * 0.25;
 								0
 							},
@@ -689,7 +700,7 @@
 								p.synth = \pitched;
 								p.pitcheddelta = Pdelta(Pwhite(0, 15, inf) * 0.25, 4);
 								p.pitchedtime = Pexprand(0.4, max(0.4, Pkey(\delta) * 1.2), inf);
-								p.pitchednormAmp = 5.5;
+								p.pitchednormAmp = 3;
 								// later: p.pitcheddelta = Pwhite(3, 10, inf) * 0.25;
 								0
 							},
@@ -726,7 +737,7 @@
 
 							// c. 52 beats
 							60,
-							{ BP(\sw).pitchednormAmp = Env(#[5.5, 0], #[20.8], -2.1); 0 },
+							{ BP(\sw).pitchednormAmp = Env(#[3, 0], #[20.8], -2.1); 0 },
 							// work around a stupid oversight in my lib
 							// you can't \cmdSync to a TLSequenceIterator
 							// because the TLSeq never gets set as the last command... BOOOOO!!

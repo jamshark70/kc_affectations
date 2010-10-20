@@ -136,3 +136,77 @@ BP(\st).v.env.keys.select { |key| key.asString.contains("auto") };
 VC(\am).v.portaTime_(0.9)
 
 BP(BP(\acDisp).lastSpawned).amp.postcs
+
+
+
+// for recording
+MIDIPort.init([3]); // linux
+
+// hook MIDI into OSC-trigger synths
+k.free;
+k = BasicMIDISocket(0, { |num|
+	if(num < 60) {
+		BP(\segTrig).bus.set(99999);
+	} {
+		BP(\evTrig).bus.set(1);
+	}
+});
+
+PeakMonitor(~master);
+
+
+// recording:
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet%.aiff".format(UniqueID.next));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "arms%.aiff".format(UniqueID.next));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drums78seq-%.aiff".format(UniqueID.next));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-%.aiff".format(UniqueID.next));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "torso%.aiff".format(UniqueID.next));
+
+/*
+5:10 - B2500 - First Arm Axial Sequence
+5:32 - B2510 - Restart of Axial Sequence
+5:35 - B2520 - Locomotion
+5:43 - B2530 - Moving Up From Triangle (Laura thought this worked better if it was triggered as she started to come up instead of when she stops)
+5:53 - B2540 - 2nd Restart of Axial Sequence
+5:55 - B2550 - Locomotion
+6:18 - B2560 - Wild Arm Motions
+*/
+
+e = (play: { if(~proc != \rest) { BP(~proc).bus.set(99999) } });
+
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "body%.aiff".format(UniqueID.next));
+
+~seq.play;
+p = Pseq([
+	(proc: \rest, delta: 1),
+	Pfindur(22, Pbind(
+		\proc, \evTrig, 
+		\delta, Pwhite(0.8, 1.2, inf) * Env(#[1, 1, 4], #[4, 18])
+	)),
+	Pbind(
+		\proc, \segTrig,
+		\delta, Pseq(#[3, 8, 10, 2, 23, 19, 1], 1)
+	)
+]).trace.play(protoEvent: e);
+
+p.stop
+
+
+~master.stopRecord;
+
+BP(\mstClock).chan
+
+BP.all.stop
+
+BP(\mstClock).clock.tempo = 0.245;
+BP(\hsd).play;
+BP(\hsd).tophCtl.value = 32;
+BP(\fmt).play;
+BP(\mstClock).play;
+
+BP.all.stop
