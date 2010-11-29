@@ -909,7 +909,8 @@
 					loopCmd: (
 						setDoneSignal: {
 							~activeGest = false ! ~sequencer[\cmdPool].size;
-							~gest = Pwhite(0, ~sequencer[\cmdPool].size - 1, inf)
+							// ~gest = Pwhite(0, ~sequencer[\cmdPool].size - 1, inf)
+							~gest = Pwrand((0..4), #[1, 0, 1, 1, 1].normalizeSum, inf)
 								.reject { |i| ~activeGest[i] }
 								.asStream;
 						},

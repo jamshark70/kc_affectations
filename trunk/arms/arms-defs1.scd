@@ -1752,6 +1752,11 @@ make: { |name|
 		hiffreq: Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 28) },
 		lpffreq: Pexprand(1200, 7000, inf)
 	));
+	BP(name).chan.doWhenReady {
+		BP(name).chan.playfx { |outbus|
+			LeakDC.ar(In.ar(outbus, 2));  // combs have BAD dc
+		};
+	};
 	0 => BP(name);
 }, type: \bp) => Fact(\lauraManip);
 

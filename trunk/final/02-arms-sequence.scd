@@ -387,13 +387,14 @@
 				],
 				onStop: {},
 				dur: \trigger,  // or \sync
-				id: 590,  // trig id
+				id: 600,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
 		}
 	)),
 
+/*
 	PR(\tlsAff).copy.putAll((
 		name: "A590-locomotive(short)",
 		segID: 590,
@@ -421,6 +422,7 @@
 			), 1)
 		}
 	)),
+*/
 
 	PR(\tlsAff).copy.putAll((
 		name: "A600-manipulation",

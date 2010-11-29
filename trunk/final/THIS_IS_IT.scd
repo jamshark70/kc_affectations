@@ -8,6 +8,18 @@
 
 
 
+// Reproduced the drum7/drum8 stop issue once. Grrrrrrr.
+// I think keepGoing = false could be the issue.
+// Maybe fixed by adding a tolerance to PnNilSafe.
+
+// Something weird happened. I replayed from F1520 and the master level bus value changed
+// without updating ~master. Something is using bus 0 wrongly.
+
+
+// fade out drone and 'int' toward end of drum section
+// go into torso section earlier, maybe 28:20 something (Laura moves fwd/back)
+
+
 // this block loads everything: cursor on open-paren, then ctrl-alt-x
 (
 var	mypath = thisProcess.nowExecutingPath, indices;
@@ -55,6 +67,13 @@ s.waitForBoot {
 
 	~seq.loadResources(0);
 	PR(\transports).chuck(BP(\transports), nil, (model: ~seq));
+
+	BP(\transports).addDependant { |bp, what|
+		if(what == \free) {
+			bp.releaseDependants;
+			BP(#[segTrig, evTrig]).free;
+		};
+	};
 };
 )
 
@@ -64,6 +83,8 @@ s.waitForBoot {
 
 ChuckableBrowser.newWindow;
 
+MT(1).gui;
+
 BP.all.stop;
 
 // if you need to clear everything, do this:
@@ -71,6 +92,15 @@ BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } }; VC.all.free;
 if(BP.exists(\mstClock)) { BP(\mstClock).free };
 
 ~seq.sections.do(_.prUnload);
+
+
+// debugging drum7/8 problem
+// disable drone/formants
+BP(#[fmt, hsd]).do({ |bp| bp.requiredKeys = bp[\requiredKeys].add(\disableByRequiringAVariableThatWillNeverExist) });
+
+// after "sung 9" plays
+BP(\int).requiredKeys = BP(\int)[\requiredKeys].add(\disableByRequiringAVariableThatWillNeverExist);
+
 
 BP(\st).streamsToStop
 BP(\st).free;
@@ -137,6 +167,55 @@ VC(\am).v.portaTime_(0.9)
 
 BP(BP(\acDisp).lastSpawned).amp.postcs
 
+BP(#[drum7, drum8]).collect(_.isPlaying);
+
+BP.all.do { |bp| [bp.collIndex, bp.isPlaying].postln }; ""
+
+
+~seq.sections[~seq.currentSection].currentIterator.activeCmds.do({ |cmd|
+	if(cmd.class === Proto) {
+	if(cmd[\subIter].notNil) {
+		cmd.listVars;
+		cmd.subIter.activeCmds.do(_.listVars);
+		"\n--------\n".postln;
+	};
+	if(cmd[\name].notNil) {
+		cmd.listVars;
+		"\n--------\n".postln;
+	};
+	};
+}); ""
+
+~seq.sections[~seq.currentSection].savedCmds.do({ |cmd|
+	if(cmd.isKindOf(TLSequenceIterator)) {
+		cmd.activeCmds.do(_.tryPerform(\listVars));
+	} {
+		if(cmd[\subIter].notNil) {
+			cmd.listVars;
+			cmd.subIter.isRunning.debug("subiter running");
+			cmd.subIter.activeCmds.do(_.listVars);
+			"\n--------\n".postln;
+		};
+		if(cmd[\name].notNil) {
+			cmd.listVars;
+			"\n--------\n".postln;
+		};
+	};
+}); ""
+
+
+t = List.new;
+Object.dependantsDictionary.keysValuesDo { |obj, dep|
+	if(obj.class == TLSequenceIterator and: { dep.postln.any { |depn| depn.tryPerform(\id).notNil } }) {
+		t.add(obj);
+	}
+};
+
+t
+
+
+Object.dependantsDictionary.keys.count { |obj| obj.class == TLSequenceIterator };
+
 
 
 // for recording
@@ -154,17 +233,25 @@ k = BasicMIDISocket(0, { |num|
 
 PeakMonitor(~master);
 
+~master.stopRecord;
 
 // recording:
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "feet%.aiff".format(Date.getDate.stamp));
 
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "arms%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "arms%.aiff".format(Date.getDate.stamp));
 
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "drums78seq-%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "head%.aiff".format(Date.getDate.stamp));
 
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drums78seq-%.aiff".format(Date.getDate.stamp));
 
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "torso%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "drone-%.aiff".format(Date.getDate.stamp));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "torso-ssolo%.aiff".format(Date.getDate.stamp));
+
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "body%.aiff".format(Date.getDate.stamp));
+
+~master.stopRecord;
+
 
 /*
 5:10 - B2500 - First Arm Axial Sequence
@@ -179,7 +266,7 @@ PeakMonitor(~master);
 e = (play: { if(~proc != \rest) { BP(~proc).bus.set(99999) } });
 
 
-~master.startRecord(thisProcess.platform.recordingsDir +/+ "body%.aiff".format(UniqueID.next));
+~master.startRecord(thisProcess.platform.recordingsDir +/+ "body%.aiff".format(Date.getDate.stamp));
 
 ~seq.play;
 p = Pseq([

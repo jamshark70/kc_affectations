@@ -22,8 +22,10 @@ PR(\bpCmd).clone {
 PR(\funcCmd).copy.putAll((
 	setDoneSignal: {
 		~doneSignal = Updater(~subIter, e { |obj, what, cmds|
+			// "subIterCmd '%' got update: %".format(~id, [what, cmds]).debug;
 			if(what == \done) {
 				~doneSignal.remove;
+				// "Updater calling ~stop".debug;
 				~stop.()
 			};
 		});
@@ -33,12 +35,21 @@ PR(\funcCmd).copy.putAll((
 		~subIter.play(argClock: ~clock108 ? TempoClock.default);
 	},
 	done: {
-		~subIter.stop;
+// "subIterCmd '%' done func".format(~id).debug;
+		// oh, this is REALLY f*ked up
+		// if the subiterator stops, the Updater fires FROM WITHIN THE ROUTINE
+		// then this forcibly stops the routine early
+		// causing this func never to return
+		// that interrupts the subIterCmd's cleanup process
+		// how many gray hairs from trying to find THAT one?
+		// I tried to fix it in TLSequenceIterator but maybe it didn't take, so...
+		if(~subIter.isRunning) { ~subIter.stop };
 	},
 	clearDoneSignal: {
 		~doneSignal.remove;
 		~doneSignal = nil;
-	}
+	},
+	collIndex: \subIterCmd  // chuck => PR doesn't automatically set this
 )) => PR(\subIterCmd);
 
 
@@ -56,7 +67,8 @@ t2 = [
 					bp[\chan].tryPerform(\level_, drumLevel);
 				};
 			};
-			0
+			// 0
+			rrand(5.0, 8.0) * 108/60
 		},
 		// waitForNotesCmd, \cmdSync,
 		Quant(3, -0.5),
@@ -88,6 +100,7 @@ t2 = [
 		]) //.shouldSync_(false)
 	]).shouldSync_(false),
 	TLSequenceIterator([
+		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
 		gcAutoSynthCmd: (gc: { BP(\drum1).ffRangeCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus, 
 			env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
@@ -121,6 +134,7 @@ t2 = [
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
+		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
 		{ BP(#[drum1, drum2, drum3]).stop; 0 },
 		bpCmd: (name: #[drum4, drum5], quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
@@ -152,6 +166,7 @@ t2 = [
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
+		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
 		{	BP(#[drum4, drum5, drum6]).stop;
 			BP(\drum7).pan = -1;
@@ -195,7 +210,6 @@ t2 = [
 			cmds: [
 				{	var	numAcc = rrand(3, 6), acc = ~acc.next,
 					pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
-["override", ~repeats, pat].postcs;
 					BP(#[drum7, drum8]).do { |bp|
 						bp.override(\gest, pat);
 					};
@@ -206,8 +220,7 @@ t2 = [
 		),
 		\cmdSync,
 		
-		{	"set drum8 gesture".debug;
-			BP(\drum8).gest = Pfsm([
+		{	BP(\drum8).gest = Pfsm([
 			#[4, 5],
 			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
 			Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
@@ -218,8 +231,7 @@ t2 = [
 		], inf);
 			6
 		},
-		{	"set drum7 gesture".debug;
-			BP(\drum7).gest = BP(\drum8).gest;
+		{	BP(\drum7).gest = BP(\drum8).gest;
 			6 //24
 		},
 		
@@ -231,12 +243,12 @@ t2 = [
 						Pif(Ptime() < rrand(8, 11), Pseq([\randsync, ~acc], 1)),
 						\randquant
 					], 1));
-["override", ~repeats, pat].postcs;
 					BP(#[drum7, drum8]).do { |bp|
-						bp.keepGoing = false;
+						bp.keepGoing = false.debug("set % keepGoing".format(bp.collIndex));
 						bp.override(\gest, pat);
 					};
 					BP(\drum8).quant = -1;
+					// override is guaranteed to end first because it's at most 11 beats
 					rrand(2, 4) * 6
 				}
 			]
@@ -247,11 +259,6 @@ t2 = [
 			value: 0.736, time: 20, curve: 2),
 		loopCmd: (repeats: 4,
 			cmds: [
-				{
-					if(BP(\drum8).isPlaying.not) {
-						PR(\bpCmd).copy.putAll((name: \drum8, quant: -1, shouldSync: false, playWarning: false))
-					} { 0 };
-				},
 				funcCmd: (
 					doneSignal: true,
 					func: {
@@ -582,6 +589,7 @@ t2 = [
 					},
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
+/*
 					funcCmd: (func: {
 						var	bp = BP(\sw), cmd;
 						bp.word = Plazy({ Prand(~pts, inf) });
@@ -597,6 +605,7 @@ t2 = [
 					}),
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
+*/
 					funcCmd: (func: {
 						var	manualStop = (manualStop: true);
 						~iterator.activeCmds.copy.do { |cmd|
@@ -858,10 +867,10 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					TLSequenceIterator([
-						{ rrand(5.0, 8.0) },
-						subIterCmd: (id: \drumIterator, subIter: t2[0], shouldSync: false)
-					]).shouldSync_(false),
+					// TLSequenceIterator([
+					// 	{ rrand(5.0, 8.0) },
+						subIterCmd: (id: \drumIterator0, subIter: t2[0], shouldSync: false),
+					// ]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.oneNote_(false);
 						p.dur = Pwhite(0.7, 0.9, inf) *.x Pwhite(12.0, 16.0, { |num| num });
@@ -918,10 +927,10 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					TLSequenceIterator([
-						{ rrand(5.0, 8.0) },
-						subIterCmd: (subIter: t2[1], shouldSync: false)
-					]).shouldSync_(false),
+					// TLSequenceIterator([
+					// 	{ rrand(5.0, 8.0) },
+						subIterCmd: (id: \drumIterator1, subIter: t2[1], shouldSync: false),
+					// ]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 						p.p5_(1).shortFirst_(true);
@@ -1033,10 +1042,10 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					TLSequenceIterator([
-						{ rrand(5.0, 8.0) },
-						subIterCmd: (subIter: t2[2], shouldSync: false)
-					]).shouldSync_(false),
+					// TLSequenceIterator([
+					// 	{ rrand(5.0, 8.0) },
+						subIterCmd: (id: \drumIterator2, subIter: t2[2], shouldSync: false),
+					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 						p.seqKeys = #[t3, a31, a32];
@@ -1081,16 +1090,17 @@ t2 = [
 	PR(\tlsAff).copy.putAll((
 		name: "F1620-sung 10+lpc",
 		segID: 1620,
-		initProcesses: {
-			\chuckIf.eval(Fact(\int), BP, \int, nil, Library.at(\rvbs));
-			topEnvironment[\clock108] => BP(\int);
-		},
-		unloadProcesses: { BP(\int).free },
+		// initProcesses: {
+		// 	\chuckIf.eval(Fact(\int), BP, \int, nil, Library.at(\rvbs));
+		// 	topEnvironment[\clock108] => BP(\int);
+		// },
+		// unloadProcesses: { BP(\int).free },
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
+/*
 					TLSequenceIterator([
 						{ rrand(4.0, 8.0) },
 						loopCmd: (
@@ -1122,7 +1132,7 @@ t2 = [
 							value: -8.5.dbamp, time: 3.5, curve: 2.1
 						)
 					]).shouldSync_(false),
-					
+*/					
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.seqKeys = #[t2, a2d1, a2d2];
 					}),
@@ -1208,71 +1218,42 @@ t2 = [
 			BP(#[drum7, drum8]).free;
 		},
 		seqPattern: {
+			// var	headChans = IdentitySet.new;
+			// #[mstClock, int].do { |key|
+			// 	BP(key)[\chan] !? { headChans.add(BP(key)[\chan]) };
+			// };
+			// headChans.add(BP(\mstClock).chan2);
 			Pn((
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					TLSequenceIterator([
-						{ rrand(5.0, 8.0) },
-						subIterCmd: (subIter: t2[3], shouldSync: false)
-					]).shouldSync_(false),
+					// TLSequenceIterator([
+					// 	{ rrand(5.0, 8.0) },
+						subIterCmd: (id: \drumIterator3, subIter: t2[3], shouldSync: false),
+					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = 1.2;
 						p.filterNotePat = { |pat|
 							pat.drop(pat.estimateLength - 1)
 						};
 					}),
+					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
+					TLSequenceIterator([
+						gcAutoSynthCmd: (gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
+							value: BP(\hsd).minTop, time: 18),
+						// gcAutoSynthCmd: (gc: BP(\int).ampCtl, name: \ctlPoint, outName: \outbus,
+						// 	value: 0, time: 18, curve: -2.1),
+						\cmdSync,
+						{
+							BP(#[hsd, fmt, mstClock/*, int*/]).stop(0);
+							0
+						}
+					]).shouldSync_(false)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 1990, // 2000,  // trig id
-				init: Func(\nextThingTrig).v,
-				clear: Func(\clearNextTrig).v
-			), 1)
-		}
-	)),
-
-
-	PR(\tlsAff).copy.putAll((
-		name: "fade and stop",
-		segID: 1990,
-		// initProcesses: {},
-		// unloadProcesses: {},
-		seqPattern: {
-			var	headChans = IdentitySet.new;
-			#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8, mstClock, int].do { |key|
-				BP(key)[\chan] !? { headChans.add(BP(key)[\chan]) };
-			};
-			headChans.add(BP(\mstClock).chan2);
-			"channels to fade out".debug;
-			headChans.do { |chan| chan.postln };
-			Pn((
-				sequence: [
-					{ BP(\hsd).stop(0); 0 },
-					TLSequenceIterator(
-						[\mixerAutoSynthCmd, 
-							headChans.asArray.collect { |chan|
-								(mixer: chan, name: \ctlPoint, outName: \outbus,
-									level: 0, time: 18, curve: -2.1)
-							}
-						].flop
-						++
-						[	\sync,
-							{	
-								BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8,
-								mstClock, int]).stop(0);
-								10
-							},
-							{ BP(\fmt).stop(0); 0 }
-						]
-					).shouldSync_(false),
-					// make sure it doesn't stop until I say it stops
-					funcCmd: (doneSignal: true)
-				],
-				// onStop: {},
-				dur: \trigger,  // or \sync
-				id: 0,  // trig id
+				id: 2000,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -1281,6 +1262,23 @@ t2 = [
 
 // TEMPLATE
 
+	// PR(\tlsAff).copy.putAll((
+	// 	name: "F1570-sung 5",
+	// 	segID: 1570,
+	// 	// initProcesses: {},
+	// 	// unloadProcesses: {},
+	// 	seqPattern: {
+	// 		Pn((
+	// 			sequence: [
+	// 			],
+	// 			// onStop: {},
+	// 			dur: \sync, // \trigger,  // or \sync
+	// 			id: 0,  // trig id
+	// 			init: Func(\nextThingTrig).v,
+	// 			clear: Func(\clearNextTrig).v
+	// 		), 1)
+	// 	}
+	// )),
 
 	// PR(\tlsAff).copy.putAll((
 	// 	name: "",

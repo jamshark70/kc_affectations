@@ -1471,7 +1471,10 @@ makeBP: { |name|
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPanDist);
+	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPanDist //,
+		// printStoppedStream: true,    // debugging
+		// printAllStreamsOnStop: false
+	);
 	~source = #[drum1, drum3];
 	~alwaysReset = true;
 
@@ -1487,6 +1490,7 @@ PR(\abstractProcess).clone {
 		~gest_.(~gest);
 
 		~other = if(~collIndex == \drum7) { \drum8 } { \drum7 };
+		// ~n is a pattern
 		~n = ~n.select { |n|
 //[n, BP(~other)[\lastSubdiv], ~lastSubdivTime, BP(~other)[\lastSubdivTime]].debug("test" + ~collIndex);
 			n != BP(~other)[\lastSubdiv] or: { ~lastSubdivTime == BP(~other)[\lastSubdivTime] }
@@ -1909,16 +1913,17 @@ PR(\abstractProcess).clone {
 		<>
 		PnNilSafe(
 			Plazy {
+				thisThread.clock.beats.debug("% beats".format(~collIndex));
 				~keepGoing = true;
 				Pwhile1({ |proto, ev|
-					~keepGoing or: { ev.delta == 0 }
-// 					if(~keepGoing) { true }
-// 						{ ev.delta.debug("~keepGoing = false; delta"); ev.debug; ev.delta == 0 }
+					// ~keepGoing or: { ev.delta == 0 }
+					if(~keepGoing) { true }
+						{ ev.delta.debug("~keepGoing = false; delta"); ev.debug; ev.delta == 0 }
 				},
 					~gestures[~gestStream.next]
 				)
 			},
-			inf
+			inf, 3  // 3 == don't force a stop on the first empty embed
 		);
 	}
 } => PR(\drumSubdiv);
@@ -1955,8 +1960,10 @@ make: { |name|
 			~pt = TabFileReader.read(~dir +/+ ~labelPath);
 			~pt = ~pt.do { |pt| #[0, 1, 3, 4].do { |i| pt[i] = pt[i].asFloat } };
 			SoundFile.use(~dir +/+ ~audioPath, { |file| ~voxdur = file.duration });
+
+			~ampCtl = GenericGlobalControl(\amp, nil, 1, \amp);
 		},
-		userfree: { [~wt, ~lpcb].free },
+		userfree: { [~wt, ~lpcb, ~ampCtl].free },
 	
 		degree: Pwhite(36, 44, inf) -.x Pseries(0, Pwhite(1, 7, 2), inf).clump(2),
 		mode: \ab,
@@ -2002,7 +2009,7 @@ make: { |name|
 				\start, BPStream(\lpcStart),
 				\end, BPStream(\lpcEnd),
 				// \time should be populated by sanitizeEvent
-				\amp, 1,
+				\amp, ~ampCtl.asMap,
 				\pan, BPStream(\lpcPan),
 				\distance, BPStream(\lpcDist),
 				\attack, BPStream(\lpcAtt),

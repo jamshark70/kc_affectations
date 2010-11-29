@@ -790,7 +790,11 @@
 					\cmdSync,
 					{ BP.all.stop; VC(\sp).releaseAll; 0 }
 				],
-				onStop: { BP.all.stop },
+				onStop: {
+					BP.keys.do { |key|
+						if(#[segTrig, evTrig].includes(key).not) { BP(key).stop };
+					};
+				},
 				dur: \sync,
 				id: 2620,  // trig id
 				init: Func(\nextThingTrig).v,
