@@ -8,561 +8,164 @@
 * Schedules
 
 
-* DONE For showing
-  DEADLINE: <2010-08-31 Tue>
-** Misc [3/3]
-*** DONE Email Lorne re: Linux setup, video times
-*** DONE Email ateam re: my schedule
-
-*** DONE drum8 stopped in a test? why?
-** Feet [1/1]
-*** DONE [#A] more "oomph" at beginning ('st' limiter helped a lot)
-*** Optional [0/3]
-**** TODO [#B] improve sound for axial chords
-***** use ffreq, rq (and fenv_sens) and pitch registers to hit different timbres
-***** connect filter properties with pitch
-***** interject footstep processing for variety (avoid monochromatic fail)
-***** DONE different wavetable sets
-**** TODO [#B] [1/3] better chords
-***** DONE simpler chords - recent choreography has more trigger points
-***** TODO simulate arpeggiation - start with low pitches, rise
-****** lower notes should favor cleaner intervals
-****** at bottom, choose a root note and calculate 'top' accordingly
-***** TODO chromaticism (other modes)
-****** whole chords
-****** color notes within a chord
-**** TODO [#C] Differentiate locomotive themes
-
-** Arms
-*** Axial
-*** Locomotive [1/3]
-**** TODO tweak rotSpeed parms to have an audible effect
-***** position?
-***** note density
-***** close...
-**** TODO x/y ranges for timbre, pitch
-**** DONE Clean up loose tests
-**** armsCh process notes
-***** ./arms/sounds.scd
-***** don't play directly! use spawnChild to start a new chord
-***** wrote startAuto function to read rotation speed from lorne's data
-
-
-** Head [1/2]
-*** DONE [#A] [6/6] combine harmonics, vocalization and drums
-**** DONE [4/4] Reverb
-***** DONE [3/3] drones - esp. hswp
-****** DONE Play out amplitude curves (use Sensitivity!)
-****** DONE Redo hsd synths to use amp curves
-****** DONE Recheck levels
-***** DONE harmonies
-***** DONE drums (bring drums forward from back of space?)
-****** Spatialization makes drums quieter - fix
-***** DONE Spatialize: push \int to back of space
-**** DONE Tighten drone pacing - tentatively done
-**** DONE [3/3] When/how to add drums?
-***** DONE Doublecheck drum pacing
-***** DONE Send signals between the two iterators
-****** (drums' start position is fine but it hits the climax before choral stuff is done)
-***** DONE Drum mixer levels
-**** DONE Pull all the init stuff together
-***** DONE what clock should int use?
-**** DONE Why are notes so quiet compared to drone?
-**** DONE Merge formants into drone
-*** TODO [#C] LPC for face/section start
-
-
-* Residency <2010-09-27 Mon>--<2010-10-02 Sat>
-** Conflab with Lorne: <2010-09-29 Wed 08:00>
-** Dress: Friday <2010-10-01 Fri>
-** Dress: Saturday <2010-10-02 Sat>
-** Show: Sunday morning [6/6] <2010-10-03 Sun 08:00>
-*** DONE Handle segment IDs
-*** DONE Segment 7
-*** DONE Laura solo
-*** DONE Stacking y-pos
-*** DONE Feet section play out
-*** DONE 99999 n/a
-** TODO Place to put in IP address/port
-** TODO [#A] Fragments of torso sounds
-** Data for Lorne:
+* For March shows
+** Management [1/1]
+*** DONE Tech deadlines with Lorne
+**** Gestural recognition POC <2010-12-15 Wed>
+**** Musical revisions completed <2011-01-07 Fri>
+**** Gestural recognition driving the whole cue list <2011-02-04 Fri>
+**** Shows start <2011-03-10 Thu>
+** Musical edits [0/5]
+*** TODO Feet [0/2] <2010-12-05 Sun>
+**** TODO Distinguish locomotive themes?
+**** TODO Phrasing!!!
+*** TODO Arms [0/2] <2010-12-15 Sun>
+**** TODO Revisit thin sections
+**** TODO Rewrite Laura's solo
+*** TODO Head [0/2] <2010-12-23 Thu>
+**** TODO Face: Less squeaky
+**** TODO New material for slower movements toward end
+*** TODO Torso [0/1] <2010-12-26 Sun>
+**** TODO Redo Laura's solo pre-body
+*** TODO Body [0/1] <2011-01-04 Tue>
+**** TODO Recall more cues
+** Programming [0/4]
+*** TODO Place to put in IP address/port
 *** TODO Voicer events need different arg handling
-*** DONE Check in chucklib event updates
-*** DONE Check in idiot GC fix
-*** TODO [#A] Check in WeighBag fix
+    - GCs look to control bus - right? (no, if it's not a key) - needed?
+*** TODO Fixes to check in [2/3]
+**** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
+**** DONE Check in voicer releaseNode fix, tell Lorne
+**** TODO Nil:asBus numChannels fix - pending cmake/scons discussion
+*** TODO Coding fixes [2/6]
+**** TODO Refactor snare drum stuff in feet sequence
+**** TODO Undo dataIn changes
+***** arms-defs1: startAuto function
+***** 02-arms-seq
+****** test file path?
+****** reactivate di cmds - Library.at(\diparms)
+****** c. line 586, yx auto
+****** stacking - plug data back in
+**** TODO Proper fix for F20
+**** DONE Don't stop segment trigger BPs at end
+**** TODO Check whether trig BPs are properly freed & dependency removed
+**** DONE LeakDC for arms-manipulation
+** Data transmission to Lorne
 *** Position data
 *** Other CC data
 *** Note data per instrument
-** TODO [2/5] Data extraction notes
-*** DONE Feet
-    0:17 -- Stephen walking
-    0:49 -- Ilana joins
-    1:16 -- Laura joins
-    1:27 -- three poses
-    1:47 -- hop, pause
-    2:21 -- slinky
-    2:37 -- resume walking
-    3:04 -- staggered pauses, then staggered poses
-    3:24 -- multiple speeds
-    3:46 -- hop
-    4:25 -- axial work
-    4:56 -- on backs
-    5:31 -- walking, arms swinging
-    5:46 -- three inversion gestures!
-    6:16 -- hop, lean
-    6:30 -- conflict section (military turns)
-    7:16 -- Ilana falls
-    7:28 -- Stephen falls
-    7:44 -- trade falling down
-    8:06 -- military turns
-    8:20 -- kneeling in places
-    8:33 -- Stephen jump
-    8:40 -- multiple speeds -- Laura slow
-    8:57 -- others enter, faster
-    9:15 -- walk together, then partnering
-    9:50 -- very fast walk
-    10:04 -- all in place, starting arms section
-
-    How many feet are moving?
-    Together or separate?
-    Pauses (and triggers for the three poses in Laura's theme).
-    Hop.
-    Direction? Their 90 degree turns will be awfully hard to read, but very useful.
-    We talked about animated circles or ovals appearing on screen in sync with the footsteps. I could use triggers for those.
-    1:51 -- slinky -- maybe measure their distribution by averaging the X positions? (mean - xmin) / (xmax - xmin) will be lower when Stephen is further to the left
-    I'm having trouble imagining distinguishing characteristics for the walking. I know there are three locomotive themes that the dancers do sometimes together and sometimes in counterpoint. Distinguishing them musically is a "nice to have" for me but only if I have time left over after working on the sections where I don't have any material. We might have to navigate through the different walking constructions based on the segment-to-segment cues that Lorne will do by hand.
-    Pause at 2:00 -- and hop to start moving again
-    2:30 -- a musically useful pause, but how to read their movement toward backstage?
-    2:35 -- movement in canon, going into Laura's three poses
-    2:50 -- multiple speeds -- speed shouldn't be too hard to read
-    3:36 -- slower movements, adding arms -- for the music, here I have a sketch of building harmony by overlapping two-note chords, would be nice to trigger these based on their movements, or if not trigger directly, then control pacing by their level of activity
-    4:02 -- I don't know how much you can get when they are lying on their backs -- some parameters for their degree of leaning? If technically feasible
-    4:34 -- walking again -- can we get any of the arm swinging?
-    4:49 -- I really love that gesture -- I know it's hard to read. All three parts -- Laura's slide, the inversion, and the other inversion -- have some higher-speed movement followed by a pause. Maybe some continuous data going higher when they are in transition between poses? (I'm writing more about this because it's such great movement, and I want to do something special musically for it.)
-    5:19 -- stop walking, and lean -- another musically suggestive gesture! They're moving horizontally before the lean -- I'd watch for the feet to separate and the neck marker to move to the right of the feet.
-    5:35 -- "conflict" -- important musically but not sure how to read in video.
-    5:46 -- from camera distance, I can't make out what's happening here.
-    6:10 -- "falling" section -- also important to represent musically -- one figure's markers will have a very low y spread during the fall
-    6:28 -- height variation
-    6:52 -- multiple speeds (something comic here?)
-    7:20 -- partnering work -- new to me. Unclear what's readable here.
-    7:35 -- lifts and twirls. Would like to have some musical activity when they spin, maybe a variation of the measurement in the arms interaction demo.
-*** DONE Arms
-    8:09 -- axial theme -- ideally I would get triggers for each gesture. Whether they come from video analysis or manual intervention doesn't matter to me.
-    8:35 -- locomotive theme -- we already have the arms-interaction demo. In a couple of places, the dancers stop and move hands up together. The demo doesn't currently respond to that, but I'd like to make it do so. In those places, is it possible to read most of the points being relatively still while some in the middle move upward, and track the upward motion?
-    9:09 -- "sunrise" -- would be very nice to have data about where they are in the arc
-    9:15 -- hand stacking -- I hear little arpeggios in the music, not sure if each arpeggio needs to be triggered individually from video. It's probably enough to get a signal saying "stacking now" and then another saying "they're going down now," then "that bit's over."
-    9:28 -- intricate sequence -- a pause with hands clasped behind backs, then the partnering bit flipping Ilana upside down, a repeat of Laura's slide from the feet section (I like recurring motives like this!), leading right into 9:40. I would love to know when the slide is happening, to echo the earlier musical gesture.
-    9:40 -- "Shiva" -- locomotive theme in canon.
-    10:10 -- swaying --> partnering. Still thinking what to do here. Probably some punctuation sound, instead of trying to compose to every movement. I'll need to decide where the triggers should be, or maybe the triggers don't have to be in the same place every time.
-    10:36 -- axial theme, three levels
-    11:10 -- duet partnering -- Before, I read this as Stephen teaching Ilana the axial sequence -- curiously, that relationship disappears with a smoother performance.
-    11:43 -- manipulating Laura -- triggers similar to the regular axial presentation would be useful. Music and visuals should give the audience permission to laugh here!
-    12:00 -- Laura becomes more active in the partnering, leading into the locomotive theme (short)
-    12:06 -- Stephen's solo, wild movements -- arm positions relative to the rest of the body might be the most useful thing
-    12:17 -- new material, interesting juxtaposition of cradling next to something that looks like drawing a bow. Fragments of the axial and locomotive themes -- for my stuff, it would be nice to know when which one or the other is happening.
-    12:47 -- all three to the ground, then up
-    13:01 -- Laura solo, mostly locomotive material, probably can reuse the arms-interaction code, but I think it should be more sparse there
-    14:14 -- hand play, should start with the bleeps and bloops for the face dance
-
-**** New video
-     10:05 -- axial
-     10:37 -- locomotive
-     10:52 -- lifting from center (again a few seconds later)
-     11:17 -- sunrise
-     11:24 -- hand stacking
-     11:57 -- intricate partnering sequence
-     12:10 -- Shiva
-     12:45 -- swaying, into another partnering sequence
-     13:20 -- axial theme in three levels
-     (restarted that at 13:54)
-     14:37 -- Stephen/Ilana partnering
-     15:08 -- picking up Laura, then manipulating her through the axial theme
-     15:42 -- locomotive
-     15:49 -- short solo from Stephen
-     15:55 -- cradling, drawing bow sequence
-     16:34 -- all three to the ground, then up
-     16:50 -- Laura solo, mostly locomotive material
-     18:08 -- screen in, Laura goes behind shortly after
-     18:38 -- face dance
-
-*** TODO Head
-**** Face dance
-     Can't see a lot of specifics in the run-through videos, but I remember
-basically from the earlier close-up video. Mainly I'll need trigger
-messages when something happens on Ilana's face. Later in the face
-dance, the event density will increase (maybe a lot) and that should
-be synced with video. Whether I'm driving (sending note data to Lorne)
-or Lorne sends me data about the desired activity level doesn't matter
-much to me. Probably it will be both.
-
-**** Rest of the section
-     I'd like to cue some changes in the music based on movement. Possible
-parameters are the height of the additive synthesis structures,
-triggers to initiate the sweeps up (maybe including data about how
-fast), when to introduce new pieces of the drum rhythms, brightness or
-dullness of the drum sounds... just brainstorming.
-
-Since this section is basically written from my side, for me it's a
-matter of adding movement responsiveness to something that is already
-working. At this late date, it would be worth doing this only if it
-will be a big improvement on what I have already -- changes introduce
-risk and the payoff needs to be good to justify it.
-
-Sorry this is not very specific. I have yet to watch the video while
-playing the music so that the drums end right around 29:30. Then I
-might notice some correspondences that would be worth picking up.
-
-*** DONE Torso
-    Drums can dwindle away toward 30:10, when Laura appears above the screen. Then silence. Well, I'd like to have some silence in this part before Stephen's solo begins. The silence could be interrupted by some sounds.
-
-Mostly for Lorne -- for a lot of these places, I'm hearing more or less steady state sounds that develop some "internal modulation" as the dancers twist and bend and otherwise move away from center. That's probably a challenge to read, but I would love to have some measurement of how far away they are from "center" (at the beginning of this section, "center" is upright with head and torso squarely forward). It probably gets easier to read when their hands come out around 30:50, but it might be impossible in those first 30-40 seconds when the only visible markers will be the head and neck. (Bowing might be readable from changes in the vertical distance between forehead and neckline.)
-
-31:45 -- Stephen solo (amazing work by the way) -- should be pretty easy to tell the difference between axial and locomotive moments. One thing I specifically want to catch is the hopping movement at 32:31. Also the arm raising. Standing still and initiating shoulder movement from the torso is probably going to be invisible to the video, but I feel like the sound should still reflect it.
-
-33:10 -- Ilana enters, then Laura at 33:40. Same challenges.
-
-c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to track the energy ball as it moves from person to person.
-
-34:35 -- Locomotion again, then arm movements like throwing energy into space.
-
-34:55 -- An inversion, similar to previous sections. I'd like to echo that musically.
-
-35:05 -- some poses, and exchanging places behind the screen. Probably motion versus stillness is more useful than anything else.
-
-35:35 -- echoing Stephen's solo material in unison (not completely unison)
-
-(36:10 -- Short repeat of energy exchange)
-
-37:00 -- Remove props, then Ilana's solo. Lots to read here: center versus off-center, axial versus locomotive, L-R pan position.
-
-38:14 -- Stephen and Laura duet. Amount of movement is interesting, as is body orientation (standing versus lying down or in the middle of a lift). I'll leave this for a detailed reading later, since this seems to belong more to the whole body section. By the time Laura comes back in at 40:28, we are definitely blending material from other sections.
-
-*** TODO Body
-
-** Debugging
-*** TODO drum8 stopped in a test? why?
 
 
-* Post-premiere
-** Coding fixes
-*** Refactor snare drum stuff in feet sequence
-*** Undo dataIn changes
-**** arms-defs1: startAuto function
-**** 02-arms-seq
-***** test file path?
-***** reactivate di cmds - Library.at(\diparms)
-***** c. line 586, yx auto
-***** stacking - plug data back in
-*** Proper fix for F20
-
-
-* TODO For premiere
-  DEADLINE: <2010-10-21 Thu>
+* Cue list
+  Segments are in 3rd-level headings (***)
+  Event cues in a segment are numbered
 ** Feet
-*** Notes
-**** Silence when Laura walks in slowly (multispeed part toward end)
-*** Sounds/processes [6/7]
-**** DONE Harmony w/ arms - refine
-**** DONE Slide/inversion gesture    
-**** DONE [#A] Multiple speeds
-     Coming... want to modulate between no pitch, normal pitch and "crispy" pitch
-**** DONE Leaning - sketched, come back to this after doing multiple speeds
-**** DONE Falling - reuse leaning, and extend clicky things
-**** DONE Conflict - prototyped, stomping and snare-drumming
-**** TODO [#C] Distinguish locomotive themes
-*** Data needed from Lorne
-**** The entire opening sequence, up to about 3:30, there isn't much to read except stepping speed (foot markers going up and down) and the horizontal spread between the dancers. Their speeds may be different -- that's useful for me to know.
-**** c. 3:30 -- slower, more harmony -- movement velocity
-**** lying on backs -- another buildup leading to this, then hold (a) chord(s)
-***** the more they swing their legs, the more activity
-**** slide and inversions -- three triggers
-**** leaning -- they're stationary -- I'd like to know when they stop moving
-**** conflict -- can we tell when they change direction (attack/retreat)?
-**** Falling -- trigger when somebody goes down (y spread becomes small and they stop moving)
-**** Partnering at 7:20 -- I'll do a variation on the slide/inversion gestures, but I've no idea what you can read. It seems to go from set pose to set pose, so I guess (relative) pauses versus activity would be the most feasible/helpful.
-
-*** Data to send to Lorne
-
+*** F1-Bang!
+*** F10-3 poses + hop
+    1. Second of 3 poses
+    2. Third of 3
+    3. Hop
+*** F20-slinky (backstage, moving closer and further apart)
+    1. Three or four event cues as desired
+*** F30-normal walking
+*** F40-3 poses
+    1. Second of 3 poses
+    2. Third of 3
+*** F50-changing speeds
+*** F55-hop!
+*** F60-stop(short) when they come to a line and all stop moving
+*** F70-axial -- head bowing or just before is a good spot
+*** F80-walking(swinging)
+*** F90-3 inversions -- first is Laura's slide between Stephen and Ilana
+    1. Second of 3 moves
+    2. Third of 3
+*** F100-hop/lean -- segment cue on the hop
+    1. (Quickly!) Event cue when they stop and lean
+*** F110-Conflict -- segment cue on the first military turn
+    Note, this advanced automatically in the first version but is now
+    cued
+    1. Event cue on second turn
+*** F115-small leans back and forth (see 7:26 in residency video)
+*** F116-military turns
+*** F120-falling - start with Ilana's fall
+    This is a more complicated cue.
+    1. (Quickly!) Once during the 3 poses after Ilana falls
+    2. When Stephen falls
+    3. When they start trading places falling down
+    4. When Stephen goes into a handstand with just the feet illuminated
+*** F130-military turns
+*** F140-normal+inversions - when they start walking normally
+    1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
+    2. When they scatter to the three corners - next segment cue
+       comes quickly!
+*** F150-multispeed - when Laura starts walking VERY slowly
+    1. Event cue when Stephen and Ilana come in
+*** F160-Partnering - runs by itself
 
 ** Arms
-*** Sounds/processes [8/9]
-**** DONE Sunrise
-**** DONE [0/1] Hand stacking - MUCH SLOWER NOW
-***** TODO Ask Lorne for hand height
-**** DONE 9:28 sequence [2/2]
-***** DONE Apply inversions note sequences to another sound
-***** DONE What else?
-**** DONE Axial variations [3/3]
-***** DONE Shiva: use 3 am's
-***** DONE ^^ Needs quiet chords in background - useful elsewhere
-***** Between these 2, use axial sound with sparse notes - extended now, needs some sweepy gestures too
-***** DONE Three levels
-**** DONE Duet partnering (S & I) - can I reuse 9:28 code?
-***** Continue 3 levels until they open up side by side
-***** Lifting, tilting, bending - intermix some portamento chords with 3 levels
-****** Stagger slides? Yes!
-****** Let this run for a bit, then hold a chord about the time they pick up Laura
-***** Locomotive before they pick up Laura
-**** DONE Manipulating Laura: Axial theme but with robotic edge (comb filter maybe?)
-***** Almost there - what does it need?
-**** DONE Stephen solo (short!)
-***** Starts locomotive, then quickly into axial - *harmonize* axial!
-**** DONE Cradling - drawing bow
-***** Rocking gesture? Yes.
-***** Couple of axial moves - harmonize, but not with airskid sound
-***** An echo of S&I duet - sliding chords - differentiate from rocking gesture
-**** TODO Laura solo
-***** Mostly locomotive - make more sparse
-***** What sound when she's on the ground?
-***** Continue locomotive swoops w/o gesture control when the screen comes in, but winding down
-*** Data needed from Lorne
-*** Data to send to Lorne
-
+*** A500 -- first statement of axial theme
+    1. One event cue per arm gesture = one melody note
+*** A510 -- first statement of locomotive theme
+    1. each event cue makes an arpeggio -- I can automate these if it will be easier
+*** A520 -- sunrise
+*** A530 -- hand stacking
+*** A540 -- partnering
+*** A550 -- Shiva (axial)
+    1. As before, one event cue for each arm gesture
+*** A560 -- more partnering
+*** A570 -- axial theme, three levels
+    1. As before, one event cue for each arm gesture
+*** A580 -- Stephen and Ilana duet
+    1. Event cues trigger sequences of one or more chords -- these could be automated too
+*** A590 -- locomotive (short)
+    1. event cue = arpeggio (also open to automation)
+*** A600 -- manipulating Laura
+    1. As before, one event cue for each arm gesture
+*** A610 -- another short locomotive section
+    1. event cue = arpeggio (also open to automation)
+*** A620 -- Stephen solo
+    1. Like the earlier axial music, one event cue for each arm gesture
+*** A630 -- cradling gesture
+*** A640 -- Laura solo
+*** A650 -- fade out to make silence before the face dance
 
 ** Head
-*** Notes
-**** Transition from arms needs more thought
-**** Cue some specifics - "filter sweeps" - off their activity
-**** Nice to have: special fx for some gestures like head shaking
-**** How does this flow with the existing music?
-*** Sounds/processes [0/0]
-*** Data needed from Lorne
-*** Data to send to Lorne
-*** Face dance
-**** Sounds [7/7]
-***** DONE Volume tuning
-***** DONE Bloops
-***** DONE Creaking (eye rolls) [1/1]
-****** DONE Creaks are too slow
-***** DONE Low buzzes, analog-y (tongue rolls in mouth)
-***** DONE Wet, slurpy (tongue popping out -- muffle for tongue-in-mouth also)
-***** DONE Tongue comes out, open mouth: start vocalization
-      What should I do?
-      Where should I go?
-      Why is it this way, and not that?
-      Who is listening?
-      Who is watching?
-****** DONE Fatten pitched synth
-***** DONE Smile and other emotions: vocal chatter
-
+*** H1000-Start of face dance
+    1. 1 event trigger for creaking --> door sound
+*** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
+*** H1020-Mouth opens, tongue starts peeking out a bit
+*** H1030-Ilana starts smiling and showing other emotions
+    1. Event trigger to raise the chaos level
+    2. Event trigger for silence
+*** H1500-Drones start (currently plays automatically)
 
 ** Torso
-*** DONE Watch video!
-**** Silence to open this section would be nice after drums
-**** Pauses on the box
-*** Sounds [7/11]
-**** Silences!
-**** DONE Bells
-**** DONE Washes
-     Reuse waterpad - move feet process to here!
-     Keep/throw out tinkly combs?
-     --- would really like to have wash fade in/out, then tinkles follow -- separate from VC
-**** DONE Melody
-     Reuse melody PR from arms, new notes, slower rhythms, shorter phrases
-     Sound? Maybe inharmonic at first, becoming clearly pitched
-**** DONE Tinkly things
-     Raise pitch and speed up rhythm of low bells - nice
-     Nice for Stephen's solo, with melodic fragments
-     Faster movement = more tinkles (don't speed up melody too much) -- pitch contours
-     Later, integrate tinkles with chords(?) -- rework Klank as effect
-**** DONE Steady pitches with modulation based on movement
-**** DONE Stephen's solo [2/2]
-***** DONE Hopping movement
-***** DONE Arm raising
-**** TODO Energy exchanges -- TOO LOUD!
-**** TODO Rework past inversion material
-**** DONE Poses/changing places
-**** TODO Ilana's solo - probably mostly inner-modulation sounds
-**** TODO S&L duet - maybe tinkly things growing into inner-mods
-*** Data needed from Lorne
-*** Data to send to Lorne
-
+*** T2000 - getting set for the first torso theme (right around 28:30 in the residency video)
+*** T2010 - as Laura and Ilana leave before Stephen's solo (30:20)
+    1. Event cue as Stephen speeds up for the hopping gesture -- hit this as he starts to speed up (31:20), so the musical gesture reaches full steam when he's moving fastest
+    2. A second event cue a little later (same action) (31:53)
+*** T2020 - Ilana enters (32:06)
+    1. Event cue for the same motion (32:32) - *before* Laura comes in
+*** T2030 - energy exchanges (32:53)
+*** T2040 - ensemble work when they all rise to stand (33:22)
+*** T2050 - as Ilana is starting to go down to the floor (33:53)
+*** T2060 - when they start moving quickly as an ensemble (34:45)
+*** T2070 - when they start to slow down (35:04)
+*** T2080 - when Ilana goes up onto the platform (OK to hit this as she is heading for the platform) -- let this run through Stephen's shorter solo (35:31)
+*** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
+*** T2100 - Stephen and Laura's duet (37:20-ish)
 
 ** Body
-*** Notes
-**** Laura's solo: lpc chaos toward end, then bells/space from torso
-**** How to work in hints of drums?
-**** Stephen's feet on Ilana's back - fantastic!
-**** Foreshadowing
-***** 42:30
-***** 
-*** Materials to bring back
-**** Footsteps, but more processed
-**** Drums, but less rhythmic and more processed
-**** Arms axial
-**** Arms locomotive
-**** Head formants (and LPC?)
-**** Torso sustained pitches (less noise)
-**** Bells and tinkles
-*** Timing
-**** 43:14 --> 0:01+
-**** 41:20ish - start drums
-**** 42:30 - sus1
-**** 43:47 (0:34) - arms
-**** 44:32 (1:19) - walking
-**** 45:08 (1:55) - sus2
-**** 46:23 (3:10-ish) - start fading out beat
-**** 46:43 (3:30) - sus3 - about 15 sec
-*** Sounds/processes [4/9]
-**** DONE Quick cuts
-***** Arms axial (twice)
-***** Bit of locomotive -> stop
-***** Waving arms overhead - formants
-***** Axial -> locomotive
-***** Wild arm movements - formants + drums
-**** TODO Three-as-one - when Stephen touches Laura's arm
-**** TODO Couple of locomotive cues
-**** TODO Head leaning
-**** DONE Foreshadow suspension
-**** TODO Arms (axial, then locomotive)
-**** TODO Walking
-**** DONE Foreshadow again
-**** DONE Final suspension
-*** Data needed from Lorne
-*** Data to send to Lorne
-
-
-** Sequencing to-dos [2/5]
-*** TODO See post-premiere for data changes - undo if live music is used
-*** TODO Feet [15/16]
-**** DONE Regression test BP(\st) autoRun -- seems OK
-**** DONE Test slinky - degrees --> freq now OK - too prominent?
-**** DONE Why does it stop bpCmd for \st but the BP doesn't stop? fixed!
-**** DONE Inversions too quiet?
-**** DONE Steps activity level after axial
-**** DONE Really stop normal activity during multispeed?
-**** DONE Hops - bigger (ok from start)
-**** DONE leaning - 1 iteration at first, then reuse in conflict sect
-**** DONE Cue conflict section (not timed)
-**** DONE Big confused steps: shorter leaning bursts
-**** DONE Fall: cue laura poses too
-**** DONE Stephen fall: regular walking
-**** DONE Inversion for stephen feet up
-**** DONE Drop drums, regular walking @ 8:53
-**** DONE Inversions right before multispeed
-**** TODO Make little leans (115) much softer, further back
-*** DONE Arms [2/2]
-**** DONE Make sure test pattern is removed for stacking root (around line 149)
-**** DONE Add unloadResources funcs
-*** DONE Head [1/1]
-**** DONE Drums don't stop with the parent sequencer
-
-*** TODO Torso [1/3]
-**** DONE 34:47 fast stuff
-**** TODO 35:04 Slow down
-**** TODO 35:32 Reuse sweep up, but switch to noisy drone, higher register
-
-** Cue list
-   Segments are in 4th-level headings (****)
-   Event cues in a segment are numbered
-*** Feet
-**** F1-Bang!
-**** F10-3 poses + hop
-     1. Second of 3 poses
-     2. Third of 3
-     3. Hop
-**** F20-slinky (backstage, moving closer and further apart)
-     1. Three or four event cues as desired
-**** F30-normal walking
-**** F40-3 poses
-     1. Second of 3 poses
-     2. Third of 3
-**** F50-changing speeds
-**** F55-hop!
-**** F60-stop(short) when they come to a line and all stop moving
-**** F70-axial -- head bowing or just before is a good spot
-**** F80-walking(swinging)
-**** F90-3 inversions -- first is Laura's slide between Stephen and Ilana
-     1. Second of 3 moves
-     2. Third of 3
-**** F100-hop/lean -- segment cue on the hop
-     1. (Quickly!) Event cue when they stop and lean
-**** F110-Conflict -- segment cue on the first military turn
-     Note, this advanced automatically in the first version but is now
-     cued
-     1. Event cue on second turn
-**** F115-small leans back and forth (see 7:26 in residency video)
-**** F116-military turns
-**** F120-falling - start with Ilana's fall
-     This is a more complicated cue.
-     1. (Quickly!) Once during the 3 poses after Ilana falls
-     2. When Stephen falls
-     3. When they start trading places falling down
-     4. When Stephen goes into a handstand with just the feet illuminated
-**** F130-military turns
-**** F140-normal+inversions - when they start walking normally
-     1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
-     2. When they scatter to the three corners - next segment cue
-        comes quickly!
-**** F150-multispeed - when Laura starts walking VERY slowly
-     1. Event cue when Stephen and Ilana come in
-**** F160-Partnering - runs by itself
-
-*** Arms
-**** A500 -- first statement of axial theme
-     1. One event cue per arm gesture = one melody note
-**** A510 -- first statement of locomotive theme
-     1. each event cue makes an arpeggio -- I can automate these if it will be easier
-**** A520 -- sunrise
-**** A530 -- hand stacking
-**** A540 -- partnering
-**** A550 -- Shiva (axial)
-     1. As before, one event cue for each arm gesture
-**** A560 -- more partnering
-**** A570 -- axial theme, three levels
-     1. As before, one event cue for each arm gesture
-**** A580 -- Stephen and Ilana duet
-     1. Event cues trigger sequences of one or more chords -- these could be automated too
-**** A590 -- locomotive (short)
-     1. event cue = arpeggio (also open to automation)
-**** A600 -- manipulating Laura
-     1. As before, one event cue for each arm gesture
-**** A610 -- another short locomotive section
-     1. event cue = arpeggio (also open to automation)
-**** A620 -- Stephen solo
-     1. Like the earlier axial music, one event cue for each arm gesture
-**** A630 -- cradling gesture
-**** A640 -- Laura solo
-**** A650 -- fade out to make silence before the face dance
-
-*** Head
-**** H1000-Start of face dance
-     1. 1 event trigger for creaking --> door sound
-**** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
-**** H1020-Mouth opens, tongue starts peeking out a bit
-**** H1030-Ilana starts smiling and showing other emotions
-     1. Event trigger to raise the chaos level
-     2. Event trigger for silence
-**** H1500-Drones start (currently plays automatically)
-
-*** Torso
-**** T2000 - getting set for the first torso theme (right around 28:30 in the residency video)
-**** T2010 - as Laura and Ilana leave before Stephen's solo (30:20)
-     1. Event cue as Stephen speeds up for the hopping gesture -- hit this as he starts to speed up (31:20), so the musical gesture reaches full steam when he's moving fastest
-     2. A second event cue a little later (same action) (31:53)
-**** T2020 - Ilana enters (32:06)
-     1. Event cue for the same motion (32:32) - *before* Laura comes in
-**** T2030 - energy exchanges (32:53)
-**** T2040 - ensemble work when they all rise to stand (33:22)
-**** T2050 - as Ilana is starting to go down to the floor (33:53)
-**** T2060 - when they start moving quickly as an ensemble (34:45)
-**** T2070 - when they start to slow down (35:04)
-**** T2080 - when Ilana goes up onto the platform (OK to hit this as she is heading for the platform) -- let this run through Stephen's shorter solo (35:31)
-**** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
-**** T2100 - Stephen and Laura's duet (37:20-ish)
-
-*** Body
-**** B2500 - Segment trigger on the first arms axial move.
-     1. Event triggers for successive axial moves (like arm section).
+*** B2500 - Segment trigger on the first arms axial move.
+    1. Event triggers for successive axial moves (like arm section).
 	When she starts moving arms and torso, slow down the triggers.
-**** B2510 - At the restart of the axial sequence -- very short cue!
-**** B2520 - Locomotive theme, in place. Another very short cue.
-**** B2530 - Hit this when she stops in the triangle shape.
-**** B2540 - Restart axial sequence -- very short, as in 2510.
-**** B2550 - Locomotive in place, short like 2520.
-**** B2560 - Wild arm movements.
-**** B2570 - Coming...
+*** B2510 - At the restart of the axial sequence -- very short cue!
+*** B2520 - Locomotive theme, in place. Another very short cue.
+*** B2530 - Hit this when she stops in the triangle shape.
+*** B2540 - Restart axial sequence -- very short, as in 2510.
+*** B2550 - Locomotive in place, short like 2520.
+*** B2560 - Wild arm movements.
+*** B2570 - Coming...
 
 
 * Sample attributions
@@ -656,24 +259,3 @@ c. 34:00 -- Energy exchanges. Maybe a lot to ask, but I'd love to be able to tra
   8. Restart sc interpreter.
 ** DONE Check all private-extensions into git.
 
-
-* Environment update notes
-** TODO Check in voicer releaseNode fix, tell Lorne
-
-
-* TODO Email re: premiere
-  SCHEDULED: <2010-10-14 Thu>
-  (Note, I'm not dumb enough to put real email addresses here since this is checked into github!)
-  Family, Aunt Kathy, all Kohuts
-  DCMAT
-  MSTR
-  dctz
-  electro-music.com forum
-  Tao, HJY, Bang, Anthony, other faculty?
-  K. Fields
-  Mungo
-  Facebook
-  Penka, Chris, Syd, Joanne, Mark, Scott L., Steve J., Eric P.
-  Schelle, Contino
-  Sam
-  
