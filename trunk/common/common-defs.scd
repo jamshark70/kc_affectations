@@ -6,14 +6,14 @@ var screenBounds = Window.screenBounds;
 s.waitForBoot {
 
 	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
-	
+
 	// don't want reverb on netbook
 	if(screenBounds.height > 600) {
 		// global reverb
 		~glrvbmc ?? {
 			~glrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
 		};
-	
+
 		~glrvbmc.doWhenReady {
 			if(~glrvb.isNil or: { ~glrvb.isPlaying.not }) {
 	// 			~glrvb = ~glrvbmc.playfx(Instr("busfx.freeverb2"), #[0] ++
@@ -23,12 +23,12 @@ s.waitForBoot {
 				);
 			};
 		};
-	
+
 		// local reverb should be more stereo-separated
 		~lcrvbmc ?? {
 			~lcrvbmc = MixerChannel(\rvb, s, 2, 2, level: 1, outbus: ~master);
 		};
-	
+
 		~lcrvbmc.doWhenReady {
 			if(~lcrvb.isNil or: { ~lcrvb.isPlaying.not }) {
 				~lcrvb = ~lcrvbmc.playfx(Instr("busfx.rvb_allpass2"), [ 20, 2, KrNumberEditor(0.25, ControlSpec(0.25, 2, 'linear', 0.0, 0.25, "")), KrNumberEditor(0.014025612063518, ControlSpec(0.001, 1.5, 'exp', 0, 0.05, "")), KrNumberEditor(0.17782792880092, ControlSpec(0.01, 10, 'exp', 0, 0.25, "")), 4, KrNumberEditor(0.019573417367152, NoLagControlSpec(0.001, 1, 'exp', 0, 0.03, "")) ]);
@@ -38,7 +38,7 @@ s.waitForBoot {
 			};
 		};
 	};
-	
+
 	SynthDef(\returnPeak, { |bufnum, start, frames, trigid|
 		var	term = Line.ar(0, 1, frames / BufSampleRate.ir(bufnum)),
 			sig = PlayBuf.ar(1, bufnum, rate: BufRateScale.ir(bufnum), startPos: start),
@@ -61,7 +61,7 @@ s.waitForBoot {
 		lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
 		distFar: 20
 	));
-	
+
 };
 
 
@@ -75,21 +75,21 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		Mode(\default).v.copy.root_(i) => Mode(key);
 		Mode(key).v.transposeRoot(0) => Mode((key ++ "0").asSymbol);
 	};
-	
+
 	// lsys pattern
 	Proto {
 		~rules = [];
 		~defaultRule = (nil -> { |in| in });
 		~autoStreamArrays = true;
 		~keepLowerLevels = false;
-		
+
 		~prep = { |pattern, levelPat, rules|
 			~pattern = pattern;
 			~levelPat = levelPat;
 			rules !? { ~rules = rules };
 			currentEnvironment
 		};
-	
+
 		~embedInStream = { |inval|
 			var	levelStream = ~levelPat.asStream,
 				level, outputs = List.new;
@@ -98,7 +98,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			};
 			inval
 		};
-	
+
 		~recurse = { |inval, inStream, level, outputs|
 			var	rule;
 			if(~keepLowerLevels and: { outputs[level].notNil }) {
@@ -126,7 +126,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			};
 			inval
 		};
-	
+
 		~rewrite = { |item, rule, inval, level, outputs|
 			var	result = rule.value.value(item, level, inval);
 			if(~autoStreamArrays and: { result.isSequenceableCollection }) {
@@ -139,7 +139,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			r { ~embedInStream.(inval) }
 		};
 	} => PR(\rewriter);
-	
+
 	{ |name, ugenFunc, metadata, rates|
 		var	findCtl = { |cname|
 			block { |break|
@@ -178,11 +178,11 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 					Error("Result of UGen func is not audio rate and has no Out unit").throw;
 				};
 			};
-	
+
 			distance = distance.clip(distNear, distFar);
 			result = result * distNear;
 			Out.ar(outctl, result / distance);
-	
+
 	//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
 			result = BHiShelf.ar(result,
 				distance.linexp(distNear, distFar, attNearFreq, attFarFreq),
@@ -206,11 +206,11 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			currentEnvironment.env.use { ~makeStuff.valueEnvir };
 			currentEnvironment
 		};
-	
+
 		~numCh = 1;
 		~rate = \audio;
 		~server = { Server.default };
-	
+
 		// user overrides
 		~makeStuff = { |numCh, rate, server|
 			~server = server.value;
@@ -219,12 +219,12 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			};
 			~bus //.debug("made");
 		};
-	
+
 		~freeStuff = {
 			~bus /*.debug("freed")*/ .free;
 			~killNodes.do(_.free);
 		};
-	
+
 		~addNode = { |node|
 			var	endFunc = e { |obj, what|
 				if(what == \n_end) {
@@ -236,7 +236,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			NodeWatcher.register(node);
 			node.addDependant(endFunc);
 		};
-	
+
 		~removeLock = { |obj|
 			~locks.remove(obj);
 			if(~locks.isEmpty) {
@@ -244,7 +244,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			};
 		};
 	} => PR(\busLock);
-	
+
 	PR(\busLock).clone {
 		~busFreeDelay = 1;
 		~freeStuff = {
@@ -253,7 +253,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			AppClock.sched(~busFreeDelay, e { ~bus.free });
 		};
 	} => PR(\busFxPatLock);
-	
+
  	(parent: ProtoEvent(\polySynthPlayer).v.parent.copy.putAll((
 		lockKey: \busLock,
 		superPlay: ProtoEvent(\polySynthPlayer).v[\play],
@@ -267,7 +267,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			~target = ~chan.synthgroup;
 			~chan = nil;
 			~superPlay.();
-	
+
 			if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
 				~playExtraProcess.(chan);
 				~node.do { |node| ~lock.addNode(node) };
@@ -313,7 +313,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 	// 		~node.do { |node| ~lock.addNode(node) };
 	// 	}
 	))) => ProtoEvent(\polySynthBusLock);
-	
+
 	(parent: ProtoEvent(\polySynthBusLock).v.parent.copy.putAll((
 		play: {
 			var	chan = ~chan;
@@ -325,7 +325,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			// ~target = ~chan.synthgroup;
 			// ~chan = nil;
 			~superPlay.();
-	
+
 			if(~node.notNil and: { (~node.tryPerform(\isEmpty) ? false).not }) {
 				~playExtraProcess.(chan);
 				~node.do { |node| ~lock.addNode(node) };
@@ -388,7 +388,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			};
 		}
 	))) => ProtoEvent(\polySynthFxPatLock);
-	
+
 	// trajectories for cheap-ass spatialization
 	Proto {
 		~numSynths = 10;
@@ -396,7 +396,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		~synthArgs = [];
 		~prep = {
 			~group = Group.before(s.asTarget);
-	
+
 			SynthDef("xy1", { |distNear = 5, distFar = 20, mul = 0.25, send = 0, out = 0,
 				lowDur = 0.25, hiDur = 0.9, lowRDur = 0.6, hiRDur = 2.0|
 				var	theta, r, x, y;
@@ -417,16 +417,16 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				SendReply.kr(send * Impulse.kr(10), "/xy", [x, y]);
 				Out.kr(out, [x, y]);
 			}, #[\ir, \ir]).add;
-	
+
 			~xys = { Bus.control(s, 2) } ! ~numSynths;
 			~xymaps = ~xys.collect({ |bus| [bus.asMap, ("c" ++ (bus.index+1)).asSymbol] });
 			~clients = IdentitySet.new;
 		};
-	
+
 		~freeCleanup = {
 			[~group, ~xys].free;
 		};
-	
+
 		~makeSynths = {
 			~xysynths ?? {
 				~xysynths = ~xys.collect { |xybus|
@@ -434,14 +434,14 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				}
 			};
 		};
-	
+
 		~removeSynths = {
 			~xysynths !? {
 				~xysynths.do(_.free);
 				~xysynths = nil;
 			};
 		};
-	
+
 		~isUsedBy = { |name|
 			if(~clients.includes(name)) {
 				"% is already used by %.".format(~collIndex.asCompileString, name.asCompileString).warn
@@ -450,7 +450,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 				~makeSynths.();
 			};
 		};
-	
+
 		~notUsedBy = { |name|
 			~clients.remove(name);
 			if(~clients.isEmpty) {
@@ -462,55 +462,20 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 	topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
 	if(MBM.exists(0).not) { MIDIBufManager(nil, nil) => MBM.prNew(0) };
 
-();
+
+
+// events transmit data to Lorne
+
 Event.addEventType(\dataWrap, {
 	~type = ~evType;
 	~play.value;  // do real action
 	\eventDataToViz.eval;
 });
 
-// original version, may be useful later
-// {	var	path, parms, addr, server;
-// 	if(~dataToViz ? true and: {
-// 		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
-// 	}) {
-// 		if(~vizKeys.notNil) {
-// 			if(~vizKeys.isKindOf(Dictionary)) {
-// 				parms = Array(~vizKeys.size * 2);
-// 				~vizKeys.keysValuesDo { |key, val|
-// 					parms.add(key);
-// 					if(val.isSymbol) { parms.add(val.envirGet) }
-// 					{ parms.add(val.value(key.envirGet, key)) }
-// 				};
-// 			} {
-// 				// asArray b/c envirPairs is stupidly defined only for Array
-// 				parms = ~vizKeys.asArray.envirPairs;
-// 			};
-// 		} {
-// 			parms = ~evArgs ?? { ~getMsgFunc.valueEnvir.valueEnvir };
-// 		};
-// 		if(parms.notNil) {
-// 			if(parms.includes(\latency).not) {
-// 				parms = parms.add(\latency).add(~latency ?? {
-// 					if(~server.size > 0) {
-// 						server = ~server.first;
-// 					} {
-// 						server = ~server ?? { Server.default };
-// 					};
-// 					server.latency
-// 				});
-// 			};
-// 			path = (~vizPath.collect(_.valueEnvir) ?? { ~collIndex ?? { #[note] } }).asArray;
-// 			addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
-// 			// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
-// 		};
-// 	};
-// } => Func(\eventDataToViz);
-
 
 Library.put(\defaultVizKeys, [
 	{ ~collIndex.hash },
-	\soundID, 
+	\soundID,
 	{	var	server;
 		~latency ?? {
 			if(~server.size > 0) {
@@ -520,13 +485,23 @@ Library.put(\defaultVizKeys, [
 			};
 			server.latency
 		}
-	}, 
-	{ ~freq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) }, 
-	{ ~sustain ?? { ~time } }, 
-	\amp, 
-	\pan, 
+	},
+	{ ~freq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) },
+	{ ~sustain ?? { ~time } },
+	\amp,
+	\pan,
 	\distance
 ]);
+
+Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
+	#[2, 3, 4, 5],
+	[
+		{ ~latency ?? { ~voicer.target.server.latency } },
+		{ ~newFreq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) },
+		{ ~length },
+		\gate
+	]
+));
 
 {	var	path, parms, val, addr, server, mapped, getmapped = false;
 	if(~dataToViz ? true and: {
@@ -579,6 +554,67 @@ Library.put(\defaultVizKeys, [
 	};
 } => Func(\eventDataToViz);
 
+// copy-and-paste for voicer events: "avoid early optimization!"
+{	var	path, parms, val, addr, server, mapped, getmapped = false;
+	if(~dataToViz ? true and: {
+		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
+	}) {
+		~vizKeys ?? { ~vizKeys = Library.at(\defaultVoicerVizKeys) };
+		// don't need string parm names
+		// array: [value | lookup symbol | func]
+		// Lorne should interpret -inf as 'not populated'
+		parms = ~vizKeys.collect { |item|
+			val = (
+				if(item.isSymbol) {
+					// a symbolic item is either in the event as a key,
+					// or it could be a voicer global control
+					// if it isn't a GC, the inner func will be nil.value --> nil
+					// which then falls back to -inf below
+					item.envirGet ?? {
+						~voicer.globalControls[item].value
+					}
+				} { item.value }
+			) ? -inf;
+			if(val.size > 0) { val[0] } { val };  // NO ARRAYS
+		};
+		mapped = parms.collect { |val|
+			// only symbols will be converted to strings
+			if(val.isSymbol and: { (val = val.asString)[0].toLower == $c }) {
+				getmapped = true;
+				val
+			} // { nil }
+		};
+		if(parms.notNil) {
+			fork {
+				var cond, getbuses;
+				if(getmapped) {
+					cond = Condition.new;
+					getbuses = mapped.select(_.notNil).collect { |str| str[1..].asInteger };
+					OSCresponderNode(s.addr, '/c_set', { |time, resp, msg|
+						var j = 2;
+						if(msg[1, 3..] == getbuses) {
+							mapped.do { |map, i|
+								if(map.notNil) { parms[i] = msg[j]; j = j + 2 };
+							};
+							resp.remove;
+							cond.unhang;
+						};
+					}).add;
+					s.sendMsg(\c_get, *getbuses);
+					cond.hang;
+				};
+
+				path = (~vizPath.collect(_.valueEnvir) ?? { #[note] }).asArray;
+				if(path.size > 1 and: { path[1].isInteger.not}) {
+					path[1] = path[1].hash  // Lorne wants numbers
+				};
+				addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
+				// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
+			};
+		};
+	};
+} => Func(\voicerDataToViz);
+
 
 // wrapper for custom events
 {	|key, newKey|
@@ -607,6 +643,19 @@ Library.put(\defaultVizKeys, [
 #[polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger].do { |key|
 	\dataWrapProtoEvent.eval(key);
 };
+
+
+ProtoEvent(\voicerNote).copy.putAll((
+	originalPlayFunction: ProtoEvent(\voicerNote).v[\play],
+	play: { |server|
+		~originalPlayFunction.(server);
+		\voicerDataToViz.eval;
+	}
+)) => ProtoEvent(\voicerNoteData);
+
+
+
+// triggers from remote c_set messages
 
 Proto {
 	~event = (eventKey: \dummy);
@@ -789,7 +838,7 @@ PR(\sectionSequencer).clone({
 			};
 			// startAt.debug("loadResources auto-chose startAt");
 		};
-				
+
 		// section.debug(">> loadResources");
 		(startAt .. section).do({ |sect|
 			if((~sections[sect].tryPerform(\isLoaded) ? true).not
