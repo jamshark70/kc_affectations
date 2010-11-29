@@ -68,11 +68,8 @@ s.waitForBoot {
 	~seq.loadResources(0);
 	PR(\transports).chuck(BP(\transports), nil, (model: ~seq));
 
-	BP(\transports).addDependant { |bp, what|
-		if(what == \free) {
-			bp.releaseDependants;
-			BP(#[segTrig, evTrig]).free;
-		};
+	BP(\transports).userfree = { |bp, what|
+		BP(#[segTrig, evTrig]).debug("freeing").free;
 	};
 };
 )
