@@ -1,8 +1,6 @@
 #+STARTUP: hidestars
 
 * Essentials
-** DONE [#A] Check in bindVC changes! NOW!!!
-   DEADLINE: <2010-08-25 Wed 10:00>
 
 
 * Schedules
@@ -16,12 +14,53 @@
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
 ** Musical edits [0/5]
-*** TODO Feet [0/2] <2010-12-05 Sun>
-**** TODO Distinguish locomotive themes?
+*** TODO Feet [1/2] <2010-12-05 Sun>
+**** DONE Distinguish locomotive themes?
+***** Stephen: S-curve
+***** Ilana: Quick direction changes - basicSynthChooser; parm groups
+***** Laura: Long arc, interruptions - add pitch right away, but big ones on the poses
+****** TODO Different chords
+****** TODO Map SynthDef probabilities into patterns
+***** Sequence:
+      1. 0:00 - 1:53 - S, I(2), L(3)
+	 Mini-bangs?
+	 S --> I, fade out S and sudden burst from I
+	 I --> L, pause then build energy to L's entrance
+	 Catch brief stop toward end as anacrusis to #2
+      2. 1:53 -  :   - S3, I3, L3 (internal variations)
+	 BANG to start this!
+      3. Multispeed (part of L3 actually)
+      4. S+I+L counterpoint - quite short, just play all sounds together
+	 Another bang?
+***** New sequence
+      1. S - pause with I
+      2. I - stop! (low density, then higher when Stephen starts)
+      3. L - pause, then go, low pitch prob, 3 poses, little pause before...
+      4. S - denser, slinky
+      5. I - basically straight thru
+      6. L - pause, poses, multispeed
+      7. To corners, all 3 together
 **** TODO Phrasing!!!
 *** TODO Arms [0/2] <2010-12-15 Sun>
+**** Notes
+***** First locomotive: too long, no differentiation (data) - now has melody!
+***** Are chords too generic?
+***** Make sure canon is heard @ Shiva
+***** Prepare 3 levels better
+***** Interludes between axial sections: variations of something with identity (not like now)
+***** Explode activity after manipulation
+***** Whole arms section lacks rhythm
+****** Locomotive: Coordinate some notes into rhythm
+****** Rhythm 4 stacking?
+****** Rocking
+**** Work on Laura's solo, then foreshadow
 **** TODO Revisit thin sections
 **** TODO Rewrite Laura's solo
+***** Extend axial notes into locomotive texture - big sweeps going way up!
+****** Reuse melody, but faster
+***** Design gestures to follow movement
+***** Rhythm?
+***** As she leaves, push sounds into distance
 *** TODO Head [0/2] <2010-12-23 Thu>
 **** TODO Face: Less squeaky
 **** TODO New material for slower movements toward end
@@ -29,15 +68,15 @@
 **** TODO Redo Laura's solo pre-body
 *** TODO Body [0/1] <2011-01-04 Tue>
 **** TODO Recall more cues
-** Programming [0/4]
+** Programming [1/4]
 *** TODO Place to put in IP address/port
-*** TODO Voicer events need different arg handling
+*** DONE Voicer events need different arg handling
     - GCs look to control bus - right? (no, if it's not a key) - needed?
-*** TODO Fixes to check in [2/3]
+*** Fixes to check in [3/3]
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
-**** TODO Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [2/6]
+**** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
+*** TODO Coding fixes [3/6]
 **** TODO Refactor snare drum stuff in feet sequence
 **** TODO Undo dataIn changes
 ***** arms-defs1: startAuto function
@@ -48,7 +87,7 @@
 ****** stacking - plug data back in
 **** TODO Proper fix for F20
 **** DONE Don't stop segment trigger BPs at end
-**** TODO Check whether trig BPs are properly freed & dependency removed
+**** DONE Check whether trig BPs are properly freed & dependency removed
 **** DONE LeakDC for arms-manipulation
 ** Data transmission to Lorne
 *** Position data
