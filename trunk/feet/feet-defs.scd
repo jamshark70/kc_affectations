@@ -338,6 +338,32 @@ SynthDef(\bufGrainPanKlShp, { |start, time, bufnum, pan, rate = 1, amp = 1, ampM
 	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
 }).add;
 
+SynthDef(\bufGrainPanKlRing, { |start, time, bufnum, pan, rate = 1, amp = 1, ampMap = 1,
+		attack = 0.001, decay = 0.02, outbus, filtFreq = 2000, filtAttack = 0.1, filtDecay = 1.0,
+		filtAmp = 1,
+		fShiftWidth = 0.05, mixProb = 0.5, movingProb = 0.22,
+		ffreq = 2000, lprq = 1|
+	var harm = \harm.kr((1..5)),
+		amps = \amps.kr((1..5).reciprocal),
+		decays = \decays.kr(1 ! 5),
+		sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0)
+			* EnvGen.kr(Env.linen(attack, time, decay)),
+		// Klank(decay) - Klank(attack) is like a bank of Formlets
+		filt = Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtDecay)
+			- Klank.ar(`[harm, amps, decays], sig, freqscale: filtFreq, decayscale: filtAttack);
+	sig = sig + (Limiter.ar(filt) * filtAmp);
+	sig = (sig * (Rand(0, 1) < mixProb)) + FreqShift.ar(sig,
+		Select.ar(Rand(0, 1) < movingProb, [
+			Line.ar(*([({ Rand(-0.2, 0.2) } ! 2) * filtFreq] ++ filtDecay)),
+			TExpRand.ar(-0.2, 0.2, 1) * filtFreq
+		])
+	);
+	sig = RLPF.ar(sig, ffreq, lprq);
+	DetectSilence.ar(sig, 0.001, doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, amp * ampMap));
+}).add;
+
+
 SynthDef(\pvplayPan, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 1, ampMap = 1, pan,
 	attack = 0.01, decay = 0.05, shiftS = 0, shiftE = 0|
 	var	fft = PV_PlayBuf(LocalBuf(Index.kr(pvbuf, 0), 1), pvbuf, rate, startFrame, loop: 0),
@@ -375,6 +401,22 @@ SynthDef(\pvplayStereo, { |outbus, pvbuf, startFrame, time = 1, rate = 1, amp = 
 	sig = Limiter.ar(IFFT([even, odd], 1) * amp * ampMap)
 		* EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 	Out.ar(outbus, Balance2.ar(sig[0], sig[1], pan));
+}).add;
+
+SynthDef(\bufGrainPanPhaser, { |start, time, bufnum, pan, amp = 1, ampMap = 1,
+		rate1 = 1, rate2 = 1, proportion = 0.5,
+		attack = 0.001, decay = 0.02, outbus, rgate = 1,  // gate just for quick release
+		filtDelay = 0.005, filtSpeed = 0.1, filtWidth = 0.003, filtDecay = 0.1, filtAmp = 1|
+	var sig, ffreq,
+		rate = EnvGen.kr(Env([rate1, rate2, rate1], [proportion, 1-proportion], \lin),
+			timeScale: time);
+	sig = PlayBuf.ar(1, bufnum, rate * BufRateScale.kr(bufnum), 1, start, 0);
+	sig = Limiter.ar(sig * amp, 0.99) * EnvGen.kr(Env.linen(attack, time, decay), rgate);
+	ffreq = SinOsc.kr(filtSpeed, 0, filtWidth, filtDelay);
+	// 0.06 ~= 16 Hz, likely as low a freq as you'll need
+	sig = sig + AllpassL.ar(LeakDC.ar(sig), 0.06, ffreq, filtDecay, filtAmp);
+	DetectSilence.ar(sig, 0.001, 0.3, doneAction: 2);
+	Out.ar(outbus, Pan2.ar(sig, pan, ampMap));
 }).add;
 
 SynthDef(\krwobble, { |outbus, sustain = 1|
@@ -429,7 +471,7 @@ SynthDef(\krwobble, { |outbus, sustain = 1|
 } => Func(\makeWateryFx);
 
 
-#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayPanEnvShift, pvplayStereo, bufGrainPanKlShp].do { |name|
+#[bufGrainPanFilt, bufGrainPanComb, bufGrainPanKlank, pvplayPan, pvplayPanEnvShift, pvplayStereo, bufGrainPanKlShp, bufGrainPanPhaser, bufGrainPanKlRing].do { |name|
 	\addRvbOut.eval((name ++ "Dist").asSymbol, SynthDescLib.at(name).def.func).add;
 };
 
@@ -1848,6 +1890,7 @@ make: { |name|
 			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
 			~kAmpCtl = GenericGlobalControl(\kAmp, nil, 1, \amp);
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 18000, \freq);
+			~pitchProbCtl = GenericGlobalControl(\pitchProb, nil, 0.15);
 			~event.putAll((
 				// just in case reverb channels don't exist,
 				// push them to hw input buses (to suppress output)
@@ -1873,10 +1916,10 @@ make: { |name|
 				.as(Signal).asWavetable, wait: 0.05
 			);
 		},
-		useGui: { |vpi| [~ampCtl, ~kAmpCtl, ~ffreqCtl].do { |gc| gc => VP(vpi) } },
+		useGui: { |vpi| [~ampCtl, ~kAmpCtl, ~ffreqCtl, ~pitchProbCtl].do { |gc| gc => VP(vpi) } },
 		free: {
 			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
-			[~ampCtl, ~kAmpCtl, ~ffreqCtl, ~shapebuf].free;
+			[~ampCtl, ~kAmpCtl, ~ffreqCtl, ~shapebuf, ~pitchProbCtl].free;
 		},
 		stopCleanup: {
 			~spawner = nil;
@@ -2074,10 +2117,12 @@ make: { |name|
 				Pseq(#[oneKlankSteps, decay].collect { |key| ~gestures[key].(parms) }, 1)
 			},
 			klankMachine: { |parms|
-				var	instr = if(parms[\shapebuf].notNil) { \bufGrainPanKlShpDist }
-						{ \bufGrainPanKlankDist },
+				var	instr = parms[\instr] ?? {
+						if(parms[\shapebuf].notNil) { \bufGrainPanKlShpDist }
+							{ \bufGrainPanKlankDist }
+					},
 					list = [
-						#[pan, distance], ~xyPat.(parms),
+						#[pan, distance], parms[\xyPat] ?? { ~xyPat.(parms) },
 						\instrument, Pif((parms[\prob] ? 1).asPattern.coin, instr, \rest),
 						\delta, parms[\newDelta] ? 0.5,
 						// exciter time only - note dur is from filtDecay
@@ -2085,7 +2130,7 @@ make: { |name|
 						\rate, parms[\rate] ? 1,
 						\filtFreq, parms[\freq] ? Plazy { |ev| Pn(~kfreqStream.next(ev), inf) },
 						\filtDecay, Pkey(\delta) * (parms[\timeMul] ? 1),
-						\filtAttack, Pkey(\filtDecay) * 0.05,
+						\filtAttack, Pkey(\filtDecay) * (parms[\filtAttackRatio] ? 0.05),
 						\filtAmp, parms[\kAmp] ?? { ~kAmpCtl.asMap },
 						\ffreq, ~ffreqCtl.asMap,
 						\lprq, 0.32, //~rqCtl.asMap,
@@ -2114,6 +2159,18 @@ make: { |name|
 					]
 				};
 				Pbind(*list)
+			},
+			klankMachineLWp: { |parms|
+				var	pat = ~gestures[\klankMachine].value(parms),
+				ppairs = pat.patternpairs,
+				filtFreqI = ppairs.indexOf(\filtFreq),
+				filtDecayI = ppairs.indexOf(\filtDecay);
+				if(filtFreqI.notNil and: { filtDecayI.notNil }) {
+					#[0, 1].do { |i|
+						ppairs.swap(filtFreqI + i, filtDecayI + i);
+					};
+					Pbind(*ppairs) // .pairsDo { |key, val| (key -> val).postcs }
+				} { nil };
 			},
 			lauraslide: { |parms|
 				Pbind(
@@ -2311,6 +2368,41 @@ make: { |name|
 				glrvbamt: 0.25,
 				lcrvbamt: 0.14
 			)
+		},
+		setLauraWps: { |noteArray|
+			5.do { |i|
+				("laurawp" ++ i).asSymbol.envirPut(Pser(noteArray, { rrand(3, 6) }) ++ Pn(Pshuf(noteArray, 1), inf));
+			};
+		},
+		lauraWpPitchPool: Pn(Pseries(0, 1, 5), inf),
+		runLauraWp: { |parms( () ), holdForStop = true|
+			~runGesture.((
+				instr: parms[\instr],
+				gest: parms[\gest] ? \klankMachine,
+				newDelta: parms[\newDelta] ?? {
+					Pexprand(0.24, 0.48, { parms[\numEv] ?? { rrand(3, 7) } })
+				},
+				excTime: 0.15,
+				timeMul: parms[\timeMul] ?? { Env(#[0.01, 0.3], #[20], 4.5).asStream / Pkey(\delta) },
+				filtAttackRatio: parms[\filtAttackRatio] ?? { 0.01 / Pkey(\filtDecay) },
+				freq: parms[\freq] ?? {
+					BPStream(("laurawp" ++ ~lauraWpPitchPoolStream.next).asSymbol)
+				},
+				mainAmp: parms[\mainAmp] ?? { Env(#[1, 0.1, 1], #[2.5, 9.5], \exp) },
+				kAmp: parms[\kAmp] ? 1,
+				harm: parms[\harm],  // if nil, remains nil in the parms dict passed thru
+				// default xyPat uses \numEv, but we don't know how long newDelta pat will run
+				xyPat: Ptuple([
+					Pseg(
+						Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+						Pexprand(0.5, 2.0, inf)
+					),
+					Pseg(
+						Pwhite(5.0, 20.0, inf),
+						Pexprand(0.5, 2.0, inf)
+					)
+				], 1)
+			), holdForStop);
 		}
 	));
 	0 => BP(name);
@@ -2564,3 +2656,150 @@ SynthDef(\krfall, { |outbus, low = 0.5, sustain = 1, proportion = 0.5, halfWidth
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\fallingBP);
+
+
+(
+keys: #[master, glrvbmc, lcrvbmc],
+make: { |name|
+	BP(name).free;
+	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayNotify),
+		inChannels: 2,
+		master: ~master,
+		glrvbmc: ~glrvbmc,
+		lcrvbmc: ~lcrvbmc,
+		trajectoryKey: \traj,
+		alwaysReset: true,
+
+		userprep: {
+			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
+			if(BP.exists(\st) and: { BP(\st)[\buffers].tryPerform(\at, 0).notNil }) {
+				~buf = BP(\st)[\buffers][0]
+			} {
+				~buf = Buffer.readAndQuery(s, topEnvironment[\sampleDir] +/+ "feet/58454_sinatra314_footsteps_wooden_floor_loop.wav");
+				~iLoadedBuf = true;
+			};
+			~decayCtl = GenericGlobalControl(\decayIndex, nil, 0, #[0, 2, \lin]);
+			~ampCtl = GenericGlobalControl(\amp, nil, 1, \amp);
+			~deltaDistribCtl = GenericGlobalControl(\deltaD, nil, 6, #[1.2, 6, \exp]);
+			~maxSynthsCtl = GenericGlobalControl(\maxSynths, nil, 1, #[1, 12, \lin, 1]);
+			~synths = IdentitySet.new;
+			~xymaps = Pseq(BP(~trajectoryKey).xymaps, inf);
+			~event.proto = topEnvironment[\rvbEvent].proto;
+			~commonArgs = ~commonArgs.value;
+		},
+		useGui: { |vpi|
+			[~decayCtl, ~ampCtl, ~deltaDistribCtl, ~maxSynthsCtl].do { |gc| gc => VP(vpi) };
+		},
+		userfree: {
+			if(~iLoadedBuf == true) { ~buf.free };
+			BP(~trajectoryKey).notUsedBy(~collIndex);
+			[~decayCtl, ~ampCtl, ~deltaDistribCtl, ~maxSynthsCtl].free;
+		},
+
+		preparePlay: { BP(~trajectoryKey).isUsedBy(~collIndex) },
+
+		recvEventNotify: { |synth|
+			if(synth.notNil) {
+				~synths = ~synths.add(synth);
+				OSCpathResponder(s.addr, ['/n_end', synth.nodeID], e { |time, resp, msg|
+					resp.remove;
+					~synths.remove(synth);
+					if(~synths.size <= 0 and: { ~isPlaying.not }) {
+						BP(~trajectoryKey).notUsedBy(~collIndex);
+					}
+				}).add;
+			};
+		},
+		stopCleanup: {
+			if(~synths.size <= 0) { BP(~trajectoryKey).notUsedBy(~collIndex) };
+		},
+		// do NOT fold this into stopCleanup because maybe I don't want it automatically
+		stopNodes: { |releaseTime = 0.5|
+			releaseTime = -1 - releaseTime;
+			~synths.do(_.set(\rgate, releaseTime));
+		},
+
+		cosEnv: Env(#[0, 1, 0], #[1, 1], \sin),
+		synth: Pif(
+			Pfunc({ ~synths.size < ~maxSynthsCtl.value }),
+			Pwrand(#[lessPh, midPh, morePh],
+				Pfunc({
+					((#[0, 1, 2] - ~decayCtl.value) * 0.6 + 1)
+					.collect { |i| ~cosEnv.at(i.clip(0, 2)) }
+					.normalizeSum
+				}),
+				inf
+			),
+			\rest
+		),
+
+		// delta: (1.5+3.4) - Pexprand(1.5, 3.4, inf), // Pwhite(0.8, 1.6, inf),
+		delta: Plazy({ Pbeta(1, 4.8, ~deltaDistribCtl, 1, inf) }),
+
+		// // Beta distrib. with a & b < 1.0 is u-shaped, tends toward extremes
+		// // but I didn't like it
+		// rate1: Pbeta(2.0, 5.0, 0.8, 0.8, inf),
+		// rate2: Pbeta(2.0, 5.0, 0.8, 0.8, inf),
+		// proportion: Pwhite(0.02, 0.98, inf),
+		rate1: Pwhite(0.87, 1.2, inf),
+		rate2: Pkey(\rate1) * Pwhite(1.6, 2.5, inf),
+		proportion: Pwhite(0.3, 0.7, inf),
+		// derived algebraically from
+		// factor * rate1 + (1/2 * factor * (r2-r1)) = bufdur
+		factor: Pkey(\bufdur) * 2 / (Pkey(\rate1) + Pkey(\rate2)),
+		// factor: Pkey(\bufdur) / Pkey(\rate),
+		attack: 0.3,
+		decay: 0.3,
+		time: Pkey(\factor) - Pkey(\attack) - Pkey(\decay),
+		amp: 2,
+		pan: Pwhite(0.6, 1.0, inf) * Prand(#[-1, 1], inf),
+
+		commonArgs: { [
+			#[pan, distance], BPStream(\xymaps),
+			\bufnum, ~buf,
+			\bufdur, Pfunc({ ~buf.duration }),
+			\rate1, BPStream(\rate1),
+			\rate2, BPStream(\rate2),
+			\factor, BPStream(\factor),
+			\proportion, BPStream(\proportion),
+			\amp, BPStream(\amp),
+			\ampMap, ~ampCtl.asMap,
+			\attack, BPStream(\attack) * Pkey(\factor),
+			\decay, BPStream(\decay) * Pkey(\factor),
+			\time, BPStream(\time)
+		] },
+
+		// filtDecay low, not much effect; 0.2, buzzy; 0.9, really wobbly
+		objects: { (
+			lessPh: (
+				def: \bufGrainPanPhaserDist,
+				args: ~commonArgs ++ [
+					\filtDelay, Pwhite(0.005, 0.02, inf),
+					\filtSpeed, Pwhite(3.0, 10.0, inf),
+					\filtWidth, Pkey(\filtDelay) * Pwhite(0.7, 0.95, inf),
+					\filtDecay, Pwhite(0.02, 0.09, inf)
+				]
+			),
+			midPh: (
+				def: \bufGrainPanPhaserDist,
+				args: ~commonArgs ++ [
+					\filtDelay, Pwhite(0.005, 0.02, inf) + 0.01,
+					\filtSpeed, Pwhite(3.0, 10.0, inf),
+					\filtWidth, Pkey(\filtDelay) * Pwhite(0.7, 0.95, inf),
+					\filtDecay, Pwhite(0.18, 0.3, inf)
+				]
+			),
+			morePh: (
+				def: \bufGrainPanPhaserDist,
+				args: ~commonArgs ++ [
+					\filtDelay, Pwhite(0.005, 0.02, inf) + 0.02,
+					\filtSpeed, Pwhite(3.0, 10.0, inf),
+					\filtWidth, Pkey(\filtDelay) * Pwhite(0.7, 0.95, inf),
+					\filtDecay, Pwhite(0.7, 0.95, inf)
+				]
+			)			
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\ilanaSteps);
