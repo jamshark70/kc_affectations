@@ -131,14 +131,14 @@ v = WrapInstr("analog.pwmlead").miditest(0, [detune: `1.004, vsens: `0, /*pwcent
 v = WrapInstr("analog.pwmlead").miditest(0, [detune: `1.004, vsens: `0, fenvsens: `0, \pwcenter, 0.039370078740157, \pwrange, 0.015748031496063, \pwrate, 0.45583083694134, \xover, 6738.9006044243, \pitchratio, 1.8190411331788, \zc, 2, \ffreq, 5134.271312622, \rq, 1], target: m);
 
 // got some grit to it
-\pwcenter, 0.50393700787402, 
-\pwrange, 0.05511811023622, 
-\pwrate, 0.58218681211427, 
-\xover, 3146.8815005712, 
-\pitchratio, 4.3430544633167, 
-\zc, 1, 
-\ffreq, 4361.2669750127, 
-\rq, 1, 
+\pwcenter, 0.50393700787402,
+\pwrange, 0.05511811023622,
+\pwrate, 0.58218681211427,
+\xover, 3146.8815005712,
+\pitchratio, 4.3430544633167,
+\zc, 1,
+\ffreq, 4361.2669750127,
+\rq, 1,
 
 
 
@@ -285,7 +285,7 @@ make: { |name|
 		detune, plusdetune,
 		basefreq, keyscale,
 		car_buf, car_vs, mod_vs,
-		envTimeScale = 1, blipDensity = 1, blipProb = 0.05, blipDur = 0.8|
+		envTimeScale = 1 /*, blipDensity = 1, blipProb = 0.05, blipDur = 0.8 */|
 		var sig, mod, car_amp, mod_amp, mod_freqs, mod_masks, blipTrig, blipTrigs, mod_blips;
 		var	cbChanged = (HPZ1.kr(car_buf).abs > 0) + Impulse.kr(0),
 			lastCb = Latch.kr(Delay1.kr(car_buf), cbChanged),
@@ -301,29 +301,28 @@ make: { |name|
 		// b/c of *.t, mod is a 2D array: [[normal pitch harmonic, detuned harmonic], ...]
 		mod_freqs = (freq * mod_ratio + plusdetune) * (1..10) *.t [1, detune];
 		mod_masks = mod_freqs.flop[0] < 20000;
-		blipTrig = Dust.kr(blipDensity);
-		blipTrigs = (TRand.kr(0, 1, blipTrig ! 10) <= blipProb) * blipTrig;
-		// blipTrigs.do { |trig, i| trig.poll(trig, i.asString) };
-		mod_blips = Decay2.kr(
-			blipTrigs,
-			blipDur * 0.2, blipDur * 0.8, 0.9, 0.1);
+		// blipTrig = Dust.kr(blipDensity);
+		// blipTrigs = (TRand.kr(0, 1, blipTrig ! 10) <= blipProb) * blipTrig;
+		// mod_blips = Decay2.kr(
+		// 	blipTrigs,
+		// 	blipDur * 0.2, blipDur * 0.8, 0.9, 0.1);
 		mod = SinOsc.ar(mod_freqs, 0,
 			mod_masks * mod_amp * mod_lev
-			* mod_blips
-			// * LFDNoise1.kr({ ExpRand(0.5, 5) } ! 10).range(0, 1)
+			* LFDNoise1.kr(LFNoise1.kr({ ExpRand(0.1, 0.5) } ! 10).range(0.5, 5)).range(0, 1)
+			// * mod_blips
 		).sum;
 		sig = bufnums.collect { |bufnum|
 			Osc.ar(bufnum, (freq * [1, detune]) * (mod + 1), 0, car_amp).sum
 		};
 		XFade2.ar(sig[0], sig[1], xfade)
 			* EnvGen.kr(car_env, gate, timeScale: envTimeScale, doneAction:2)
-	}, [\freq, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), #[0.01, 300, \exponential], #[0.25, 20, \linear, 0.5, 1], \mydetune, #[-5, 5, \linear, 0, 0], \freq, #[0.001, 1.0, \exp], NoLagControlSpec(0, 128, \lin, 1), nil, nil, #[0.1, 10, \exp, 0, 1], #[0.1, 20, \exp], nil, #[0.05, 2.0, \exp]]);
+	}, [\freq, \amp, EnvSpec(Env.adsr(0.01, 1, 1, 0.05)), EnvSpec(Env.adsr(0.01, 1, 1, 1)), #[0.01, 300, \exponential], #[0.25, 20, \linear, 0.5, 1], \mydetune, #[-5, 5, \linear, 0, 0], \freq, #[0.001, 1.0, \exp], NoLagControlSpec(0, 128, \lin, 1), nil, nil, #[0.1, 10, \exp, 0, 1] /*, #[0.1, 20, \exp], nil, #[0.05, 2.0, \exp]*/]);
 
 	~def = \addRvbOut.eval(name ++ "def", { |freq, freqlag = 0.1, gate = 1,
 		mod_lev = 20, mod_ratio = 1, detune = 1.006, car_buf,
 		car_vs = 0.55, mod_vs = 0.8, envTimeScale = 1,
-		pan = 0, mainAmp = 1,
-		blipDensity = 1, blipProb = 0.05, blipDur = 0.8|
+		pan = 0, mainAmp = 1 //,
+		/*blipDensity = 1, blipProb = 0.05, blipDur = 0.8*/|
 		// WrapInstr("osc2.fm10mod").listArgs
 		var sig = WrapInstr("osc2.fm10mod").valueArray([
 				Lag.kr(freq, freqlag), gate,
@@ -336,8 +335,8 @@ make: { |name|
 				-1.456, // plusdetune
 				48.midicps, // basefreq
 				0.319, // keyscale
-				car_buf, car_vs, mod_vs, envTimeScale,
-				blipDensity, blipProb, blipDur
+				car_buf, car_vs, mod_vs, envTimeScale //,
+				// blipDensity, blipProb, blipDur
 			]);
 		Pan2.ar(sig, pan, mainAmp)
 	}).add;
@@ -386,7 +385,7 @@ VC(\lm).v.setArgDefaults([mod_lev: 20]);
 k.noteOnArgsPat = Pbind(
 	\car_buf, Prand(VC(\lm).env.cb, inf),
 	\mod_ratio, Pwhite(2, 7, inf) * 0.5,
-	\mod_lev, Pkey(\velocity).linexp(0, 127, 45, 80)
+	\mod_lev, Pkey(\velocity).linexp(0, 127, 7, 25)
 );
 
 VC(\lm).v.trace;
@@ -397,6 +396,136 @@ z = VC(\lm).trigger(440, 0.1);
 
 VC(\lm).globalControls[\blipDensity]
 
-  unit 8 Control
-    in 
-    out 261.626 0.12 0.15748 5 1 1.006 0 0.55 0.8 4.34 0 1
+
+p = Pseq([
+	Pbind(
+		\voicer, VC(\lm).v,
+		\mode, \g,
+		\freq, Pseq([
+			Pwhile1({ |inevent, next| next < 45 },  // 45 == 84.mapMode(\g)
+				Pscratch(
+					Pseries({ rrand(24, 28) }, Pwrand(#[-1, 1, 2, 3], #[0.7, 4, 3, 1].normalizeSum, inf), inf),
+					Penvir((prev: -1, sideEffect: { |x| x }),  // sideEffect ignores args
+						Pseq([
+							Pn(1, { rrand(3, 5) }),
+							Pwrand(#[-2, -1, 1], #[0.03, 0.07, 0.9], inf).reject { |val|
+								~sideEffect.(val.isNegative and: { ~prev.isNegative },
+									~prev = val);
+							}
+						])
+					)
+				)
+			),
+			45  // always end with C
+		], 1),
+		\dur, Pswitch([Pn(0.25, 2), 0.5, 0.75, 1],
+			Penvir((prev: -1, count: 0, countLimits: #[2, 3, 2, 1], sideEffect: { |x| x }),
+				Pwrand([0, 1, 2, 3], #[1.4, 4, 2, 1].normalizeSum, inf).select { |val|
+					~sideEffect.(~prev != val or: { ~count < ~countLimits[val] }, (
+						if(~prev != val) {
+							~prev = val;
+							~count = 1;
+						} {
+							~count = ~count + 1
+						};
+					))
+				}
+			)
+		),
+		\length, Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf),
+		\gate, Pexprand(0.1, 0.65, inf),
+		\car_buf, Prand(VC(\lm).env.cb, inf),
+		\mod_ratio, Pwhite(2, 7, inf) * 0.5,
+		\mod_lev, Pkey(\gate).linexp(0, 1, 7, 25)
+	), (note: #[[], 1, 1, 0.1].asSequenceNote)
+], inf).play(protoEvent: ProtoEvent(\voicerNote).copy);
+
+p.stop;
+
+VC(\lm).v.globalControls.do { |gc| [gc.name, gc.bus].postln }; ""
+
+// hack, only works if distance and pan have consecutive bus #'s
+VC(\lm).v.globalControls[\distance].automate {
+	var	angle = Phasor.kr(0, LFDNoise1.kr(0.5).range(0.8, 1.4), 0, 2pi * ControlRate.ir)
+	* (ControlDur.ir.neg);
+	[angle.sin.linlin(-1, 1, 5, 20), angle.cos]
+};
+
+VC(\lm).v.globalControls.do(_.watch);
+
+VC(\lm).v.globalControls[\distance].stopAuto;
+VC(\lm).v.globalControls.do(_.stopWatching);
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~mode = \g;
+	~alwaysReset = true;
+	// ~printStopMsg = false;
+
+	~freq = Pseq([
+		Plazy({ ~ascent }),
+		Plazy({ ~topDegree })
+	], 1);
+	~topDegree = 45;
+	~ascent = Pwhile1({ |inevent, next| next < ~topDegree },  // 45 == 84.mapMode(\g)
+		Pscratch(
+			Pseries({ rrand(24, 28) }, Pwrand(#[-1, 1, 2, 3], #[0.7, 4, 3, 1].normalizeSum, inf), inf),
+			Penvir((prev: -1, sideEffect: { |x| x }),  // sideEffect ignores args
+				Pseq([
+					Pn(1, { rrand(3, 5) }),
+					Pwrand(#[-2, -1, 1], #[0.03, 0.07, 0.9], inf).reject { |val|
+						~sideEffect.(val.isNegative and: { ~prev.isNegative },
+							~prev = val);
+					}
+				])
+			)
+		)
+	);
+
+	~dur = Pswitch([Pn(0.25, 2), 0.5, 0.75, 1],
+		Penvir((prev: -1, count: 0, countLimits: #[2, 3, 2, 1], sideEffect: { |x| x }),
+			Pwrand([0, 1, 2, 3], #[1.4, 4, 2, 1].normalizeSum, inf).select { |val|
+				~sideEffect.(~prev != val or: { ~count < ~countLimits[val] }, (
+					if(~prev != val) {
+						~prev = val;
+						~count = 1;
+					} {
+						~count = ~count + 1
+					};
+				))
+			}
+		)
+	);
+
+	~length = Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf);
+	~gate = Pexprand(0.1, 0.65, inf);
+	~car_buf = Prand(VC(\lm).env.cb, inf);
+	~mod_ratio = Pwhite(2, 7, inf) * 0.5;
+	~mod_lev = Pkey(\gate).linexp(0, 1, 7, 25);
+
+	~bpsKeys = #[mode, freq, dur, length, gate, car_buf, mod_ratio, mod_lev];
+	~reset = {
+		~bpsKeys.do { |key| ~makeStreamForKey.(key) };
+	};
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\car_buf, BPStream(\car_buf),
+			\mod_ratio, BPStream(\mod_ratio),
+			\mod_lev, BPStream(\mod_lev)
+		)
+	};
+} => PR(\locoMel);
+)
+
+BP(\lm).free;
+PR(\locoMel) => BP(\lm);
+VC(\lm) => BP(\lm);
+1 => BP(\lm);
