@@ -443,12 +443,12 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		};
 
 		~isUsedBy = { |name|
-			if(~clients.includes(name)) {
-				"% is already used by %.".format(~collIndex.asCompileString, name.asCompileString).warn
-			} {
+			// if(~clients.includes(name)) {
+			// 	"% is already used by %.".format(~collIndex.asCompileString, name.asCompileString).warn
+			// } {
 				~clients.add(name);
 				~makeSynths.();
-			};
+			// };
 		};
 
 		~notUsedBy = { |name|

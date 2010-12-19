@@ -552,6 +552,7 @@ Proto({
 		~model.removeDependant(currentEnvironment);
 		BP(~collIndex).releaseDependants;	// clear from global dependants dict
 		~window.onClose_(nil).close;
+		~userfree.();
 	};
 	
 	~showPlaying = { |bool|
