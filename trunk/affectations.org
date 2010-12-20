@@ -45,6 +45,8 @@
 **** Notes
 ***** First locomotive: too long, no differentiation (data) - now has melody!
 ***** Are chords too generic?
+****** mimic accel/ritard rhythm from locomotive, but melodically and more space between phrases
+****** I hear a more bell-like sound for it, maybe spectrum like Shiva but other envelope
 ***** Make sure canon is heard @ Shiva
 ***** Prepare 3 levels better
 ***** Interludes between axial sections: variations of something with identity (not like now)

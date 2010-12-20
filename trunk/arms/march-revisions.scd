@@ -529,3 +529,25 @@ BP(\lm).free;
 PR(\locoMel) => BP(\lm);
 VC(\lm) => BP(\lm);
 1 => BP(\lm);
+
+
+// bell-ish melody sounds?
+VC(\bmel).free;
+Fact(\armsmelVC).chuck(VC(\bmel), nil, (
+	env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	isMono: false
+));
+VC(\bmel).v.setArgDefaults([ffreq: 12258]);
+
+VC(\bmel).env.target.inspect
+
+k = VoicerMIDISocket(0, VC(\bmel).v);
+
+VP(0).v.voicer = nil;
+VC(\bmel) => VP(0);
+
+k.addControl(\mw, \ffreq, 2423, \freq);
+k.removeControl(\ffreq);
+VC(\bmel).unmapGlobal(\ffreq);
+
+// just need the pattern now... stepwise up, angular down?
