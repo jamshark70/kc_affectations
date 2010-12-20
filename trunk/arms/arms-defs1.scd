@@ -2035,7 +2035,17 @@ PR(\abstractProcess).clone {
 
 	~length = Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf);
 	~gate = Pexprand(0.1, 0.65, inf);
-	~car_buf = Prand(VC(\lm).env.cb, inf);
+	// Plazy: you have time to chuck a voicer in before resolving this pattern
+	~car_buf = Plazy({
+		var vc = VC.collection.detect { |vc| vc.value === ~event.voicer };
+		if(vc.notNil and: { vc.env[\cb].notNil }) {
+			Prand(vc.env.cb, inf)
+		} {
+			"BP(%).car_buf expects an array of buffers in the VC's ~cb variable. It's not there."
+				.format(~collIndex.asCompileString).warn;
+			nil
+		};
+	});
 	~mod_ratio = Pwhite(2, 7, inf) * 0.5;
 	~mod_lev = Pkey(\gate).linexp(0, 1, 7, 25);
 
