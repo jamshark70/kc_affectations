@@ -135,12 +135,59 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			inval = result.asStream.collect { |item| outputs[level].add(item); item }.embedInStream(inval);
 		};
 		~canEmbed = true;  // allow the Proto to act as a pattern
+		~isPattern = true;
 		~asStream = { |inval|
 			r { ~embedInStream.(inval) }
 		};
 	} => PR(\rewriter);
 
-	{ |name, ugenFunc, metadata, rates|
+	// Pxrand is not quite what I want: not (n) embeds, but (n) durations per weight
+	Proto {
+		~prep = { |list, weights, repeats = 1|
+			~list = list;
+			~weights = weights;
+			~repeats = repeats;
+			currentEnvironment
+		};
+		~embedInStream = { |inval|
+			var item, itemStream,
+			weightStream = ~weights.asStream,
+			currentWeights,
+			index = weightStream.next(inval).windex,
+			totalweight, rnd, runningsum;
+	
+			block { |break|
+				~repeats.value(inval).do({ |i|
+					item = ~list.at(index);
+					if(item.isNil) { break.(inval) };
+					// Pn is redundant for patterns
+					// but necessary for numbers or other non-streams
+					itemStream = Pn(item, 1).asStream;
+					// don't need 'item' var anymore, can reuse for outputs
+					while { (item = itemStream.next(inval)).notNil } {
+						inval = item.yield;
+						currentWeights = weightStream.next(inval);
+						if(currentWeights.isNil) { break.(inval) };
+					};
+	
+					totalweight = 1.0 - currentWeights[index];
+					rnd = totalweight.rand;
+					runningsum = 0;
+					while {
+						index = (index + 1) % currentWeights.size;
+						runningsum = runningsum + currentWeights[index];
+						runningsum < rnd
+					};
+				});
+				inval
+			};
+		};
+		~asStream = { Routine({ |inval| ~embedInStream.(inval) }) };
+		~canEmbed = true;
+		~isPattern = true;
+	} => PR(\pwxrandn);
+
+	{ |name, ugenFunc, metadata, rates, lagDistance(false)|
 		var	findCtl = { |cname|
 			block { |break|
 				UGen.buildSynthDef.children.do { |unit|
@@ -192,7 +239,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 			distance = distance.sqrt;
 			Out.ar(glrvbout, result * glrvbamt / distance);
 			Out.ar(lcrvbout, result * lcrvbamt * (1 - distance.reciprocal));
-		}, /*#[0.1],*/ metadata: metadata);  // 0.1 == lag on 'distance'
+		}, if(lagDistance) { #[0.1] } { nil }, metadata: metadata);  // 0.1 == lag on 'distance'
 	} => Func(\addRvbOut);
 
 	Proto {
