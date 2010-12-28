@@ -57,6 +57,7 @@
 ****** Rocking
 **** Work on Laura's solo, then foreshadow
 **** TODO Revisit thin sections
+***** Need bass
 **** TODO Rewrite Laura's solo
 ***** Extend axial notes into locomotive texture - big sweeps going way up!
 ****** Reuse melody, but faster
@@ -78,7 +79,7 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [3/6]
+*** TODO Coding fixes [3/7]
 **** TODO Refactor snare drum stuff in feet sequence
 **** TODO Undo dataIn changes
 ***** arms-defs1: startAuto function
@@ -88,6 +89,7 @@
 ****** c. line 586, yx auto
 ****** stacking - plug data back in
 **** TODO Proper fix for F20
+**** TODO Fix leak warning in bellMel (arms)
 **** DONE Don't stop segment trigger BPs at end
 **** DONE Check whether trig BPs are properly freed & dependency removed
 **** DONE LeakDC for arms-manipulation
