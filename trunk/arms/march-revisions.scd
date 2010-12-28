@@ -7,7 +7,7 @@ MT(1).gui;
 ChuckableBrowser.newWindow;
 \makeEmptyMixer8.eval;
 
-(Document.current.path.dirname.dirname +/+ "common/common-defs.scd").loadPath;
+// (Document.current.path.dirname.dirname +/+ "common/common-defs.scd").loadPath;
 (Document.current.path.dirname +/+ "arms-defs1.scd").loadPath;
 
 ~master.doWhenReady { PeakMonitor(~master) };
@@ -36,6 +36,14 @@ PeakMonitor(~lcrvbmc);
 
 [~glrvb, ~lcrvb].do(_.run(false)); [~glrvbmc, ~lcrvbmc].do(_.mute(true));
 [~glrvb, ~lcrvb].do(_.run(true)); [~glrvbmc, ~lcrvbmc].do(_.mute(false));
+
+
+[~glrvb/*, ~lcrvb*/].do(_.run(false)); [~glrvbmc/*, ~lcrvbmc*/].do(_.mute(true));
+[~glrvb/*, ~lcrvb*/].do(_.run(true)); [~glrvbmc/*, ~lcrvbmc*/].do(_.mute(false));
+
+[/*~glrvb,*/ ~lcrvb].do(_.run(false)); [/*~glrvbmc,*/ ~lcrvbmc].do(_.mute(true));
+[/*~glrvb,*/ ~lcrvb].do(_.run(true)); [/*~glrvbmc,*/ ~lcrvbmc].do(_.mute(false));
+
 
 
 VoicerProxy.new => VP.prNew(0);
@@ -534,7 +542,8 @@ VC(\lm) => BP(\lm);
 // bell-ish melody sounds?
 VC(\bmel).free;
 Fact(\armsmelVC).chuck(VC(\bmel), nil, (
-	env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
 	isMono: false
 ));
 VC(\bmel).v.setArgDefaults([ffreq: 12258]);
@@ -550,4 +559,416 @@ k.addControl(\mw, \ffreq, 2423, \freq);
 k.removeControl(\ffreq);
 VC(\bmel).unmapGlobal(\ffreq);
 
+TempoClock.tempo = 84/60;
+
 // just need the pattern now... stepwise up, angular down?
+// maybe close - need a tail pattern after +.x +.x
+(
+p = Pbind(
+	\voicer, VC(\bmel).v,
+	\mode, \g,
+	\freq, ((Pseries(46, Pwhite(-4, -2, 7)).trace(prefix: "top: ") +.x Pseries(0, 1, { rrand(2, 5) }).trace(prefix: "scale: "))
+		+.x Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.9, 0.1], 1).trace(prefix: "add: ")).trace(prefix: "\tfinal: "),
+	\dur, Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf),
+	\length, Pkey(\dur) * 2.5,
+	\gate, Pif(Pkey(\dur) > 0.25, 0.8, Pexprand(0.1, 0.35, inf))
+)/*.trace(\freq)*/.play(protoEvent: ProtoEvent(\voicerNote).copy);
+)
+
+(
+p = Penvir((),
+	Pbind(
+		\voicer, VC(\bmel).v,
+		\mode, \g,
+		\freq, Pseq([
+			(
+				Pseries(46, Pwhite(-4, -2, 7)).collect { |bot| ~bot = bot }
+				+.x
+				Pseries(0, 1, { ~scaleSize = rrand(2, 5) }).collect { |scale| ~scale = scale }
+			)
+			+.x
+			Pif(
+				Pfunc({ ~scale < (~scaleSize - 1) }),
+				Pn(0, 1),
+				Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+			),
+			Plazy({
+				var	num = rrand(5, 12);
+				~decay = num * 2;
+				(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 2.rand)
+			})
+		], 1),
+		\dur, Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf),
+		\length, Pkey(\dur) * 2.5,
+		\gate, Pif(Pkey(\dur) > 0.25, 0.8, Pexprand(0.1, 0.35, inf)),
+
+		\distFar, 100,
+		\lcrvbamt, 0.01,
+		\angle, Ptime() * (2pi/5) - 0.5pi,
+		\decayCurve, Pseq([
+			Pwhile1({ ~decay.isNil }, 1),
+			Plazy({ Pgeom.fromEndpoints(1, 0.05, ~decay) })
+		], 1),
+		\pan, Pkey(\angle).sin * Pkey(\decayCurve),
+		\distance, (Pkey(\angle).cos * Pkey(\decayCurve))
+			.linlin(-1, 1,
+				Pkey(\decayCurve).explin(0.05, 1, 100, 14),
+				Pkey(\decayCurve).explin(0.05, 1, 100, 5)
+			).trace
+	)
+).play(protoEvent: ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto));
+)
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+p.stop;
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote, distFar: 100, lcrvbamt: 0.01);
+	~printStopMsg = false;
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;
+		#[scaleLen, numDescents, numDecays, startDeg].do { |key| ~makeStreamForKey.(key) };
+		~ampMul = GenericGlobalControl(\ampMul, nil, 6.dbamp, [0, 12.dbamp, \amp]);
+		~event.ampMul = ~ampMul.asMap;
+		~addedWavetables = IdentitySet.new;
+	};
+	~freeCleanup = {
+		~removeWavetables.();
+		~ampMul.free;
+	};
+
+	~addWtToVoicer = { |key, ampFunc|
+		if(ampFunc.notNil and: { ~vc.notNil }) {
+			if(~vc.env[key].notNil) { ~vc.env[key].free };  // remove old buffers
+			~vc.env[key] = \makeWavetables.eval(8, s, 2048, 48, ampFunc);
+			~addedWavetables.add(key);
+		} {
+			"BP(%).addWtToVoicer: Either you didn't give an ampFunc or this BP has no voicer"
+			.format(~collIndex.asCompileString).warn;
+		};
+	};
+	~removeWavetables = {
+		if(~addedWavetables.notNil and: { ~vc.exists }) {
+			~addedWavetables.do { |key| ~vc.env[key].free; ~vc.env[key] = nil };
+			~addedWavetables.clear;
+		} {
+			"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
+			.format(~collIndex.asCompileString).warn;
+		};
+	};
+	~bindVoicer = { |voicer|
+		var	vc = VC.collection.detect { |vc| vc.v === voicer };
+		if(vc.notNil) {
+			~removeWavetables.();
+			~vc = vc;
+		} {
+			~event.voicer = ~vc.v;
+			"Voicer % isn't in the VC collection - can't chuck in!".format(voicer).warn;
+		};
+		currentEnvironment
+	};
+
+	~numDescents = 7;
+	~scaleLen = Pwhite(2, 5, inf);
+	~numDecays = Pwhite(5, 12, inf);
+	~startDeg = Pwhite(47, 51, inf);
+	~wtKey = \wt;
+
+	~bufbase = Pfunc({ |ev|
+		if(~vc.env[ev[\wtKey]].notNil) { ~vc.env[ev[\wtKey]].first.bufnum } { -1 }
+	});
+
+	~mode = \g0;
+	~freq = Pseq([
+		(
+			Pseries({ |ev| ~startDegStream.next(ev) }, 
+				Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+				.collect { |bot| ~bot = bot }
+			+.x
+			Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+				.collect { |scale| ~scale = scale }
+		)
+		+.x
+		Pif(
+			Pfunc({ ~scale < (~scaleSize - 1) }),
+			Pn(0, 1),
+			Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+		),
+		Plazy({ |ev|
+			var	num = ~numDecaysStream.next(ev);
+			~decay = num * 2;
+			(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 2.rand)
+		})
+	], 1);
+
+	// ~dur = Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf);
+	~dur = PR(\pwxrandn).copy.prep([
+		0.5, 0.75, 1,
+		Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+	], Pstutter((Pwhite(6, 12, 3) * Pseq(#[1, 2, 20], 1)), Pseq([
+		// #[0.45, 0.45, 0.1],
+		// #[0.3, 0.3, 0.4]
+		#[5, 5, 3, 1].normalizeSum,
+		#[2, 1, 0.2, 4].normalizeSum
+	], inf)), inf);
+	~length = Pkey(\dur) * 2.5;
+	~gate = Pif(Pkey(\dur) > 0.25, Pexprand(0.6, 0.9, inf), Pexprand(0.1, 0.35, inf));
+	~angle = Plazy({ (Ptime() * (2pi/rrand(2.5, 7.5))) * #[-1, 1].choose });
+	~decayCurve = Pseq([
+		Pwhile1({ ~decay.isNil }, 1),
+		Plazy({ Pgeom.fromEndpoints(1, 0.05, ~decay) })
+	], 1);
+	~pan = Pkey(\angle).sin * Pkey(\decayCurve);
+	~distance = (Pkey(\angle).cos * Pkey(\decayCurve))
+		.linlin(-1, 1,
+			Pkey(\decayCurve).explin(0.05, 1, 100, 14),
+			Pkey(\decayCurve).explin(0.05, 1, 100, 5)
+		);
+
+	~ffreq = Pnsym1(Pkey(\wtKey), (
+		wt: 12258,
+		wt2: Pexprand(1000, 5000, inf),
+		wt3: Pexprand(1000, 5000, inf)
+	));
+	~rq = Pif(Pbinop('==', Pkey(\wtKey), \wt), 1, Pexprand(0.25, 0.9, inf));
+	// ~ffreq = 12258;
+	// ~rq = 1;
+
+	// see ~decayCurve for why
+	~preparePlay = {
+		~decay = nil;
+		~resetStreams.do { |key| ~makeStreamForKey.(key) };
+	};
+	~resetStreams = #[freq, dur, length, gate, distFar, angle, decayCurve, pan, distance, mode];
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\angle, BPStream(\angle/*, resetSource: true*/),
+			\decayCurve, BPStream(\decayCurve),
+			\pan, BPStream(\pan),
+			\distance, BPStream(\distance),
+			\wtKey, BPStream(\wtKey),
+			\bufbase, BPStream(\bufbase),
+			\ffreq, BPStream(\ffreq),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\bellMel);
+)
+
+VC(\bmel).free;
+Fact(\armsmelVC).chuck(VC(\bmel), nil, (
+	env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	isMono: false
+));
+VC(\bmel).v.setArgDefaults([ffreq: 12258]);
+
+TempoClock.tempo = 84/60;
+
+BP(\bmel).free;
+PR(\bellMel) => BP(\bmel);
+VC(\bmel) => BP(\bmel);
+0 => BP(\bmel);
+
+BP(\bmel).printStopMsg = true;
+BP(\bmel).printStopMsg = false;
+
+BP(\bmel).event.ampMul = 6.dbamp;
+
+// scaleLen, numDescents, numDecays
+
+BP(\bmel).numDescents = Pwhite(4, 8, inf);
+BP(\bmel).numDecays = Pwhite(4, 10, inf);
+BP(\bmel).scaleLen = Pwhite(2, 4, inf);
+
+BP(\bmel).numDescents = 5;  // 1 to start; reduce scaleLen when increasing this
+BP(\bmel).numDecays = 2;  // 0 is ok, 2+ is ok
+BP(\bmel).scaleLen = Pwhite(3, 5, inf);
+
+// original
+BP(\bmel).dur = Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf);
+BP(\bmel).gate = Pif(Pkey(\dur) > 0.25, 0.8, Pexprand(0.1, 0.35, inf));
+BP(\bmel).length = Pkey(\dur) * 2.5;
+
+// not quite what I want: not (n) embeds, but (n) durations per weight
+BP(\bmel).dur = Pwxrand([
+	0.5, 0.75,
+	Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+], Pstutter(Pwhite(8, 16, 3).trace(prefix: "n: "), Pseq([
+	#[0.425, 0.425, 0.15],
+	#[0.3, 0.3, 0.4]
+], inf).trace(prefix: "seq: ")), inf);
+
+
+BP(\bmel).dur = Pwxrand([0.5, 0.75, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], #[0.4, 0.2, 0.4], inf);
+BP(\bmel).gate = Pif(Pkey(\dur) > 0.25, Pexprand(0.6, 0.9, inf), Pexprand(0.1, 0.35, inf));
+
+BP(\bmel).dur = Pwxrand([0.5, 0.75, Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })], #[0.425, 0.425, 0.15], inf);
+
+BP(\bmel).angle = Plazy({ (Ptime() * (2pi/rrand(2.5, 7.5))) * #[-1, 1].choose });
+
+BP(\bmel).origPat = BP(\bmel).v[\asPattern];
+BP(\bmel).v[\asPattern] = { ~origPat.().trace(#[angle, pan, distance]) };
+BP(\bmel).asPattern = BP(\bmel).v[\origPat];
+
+BP(\bmel).mode = \g0;
+\convertMode.eval(0, \g, \g0);  // == 4
+BP(\bmel).startDeg = BP(\bmel).startDeg + 4;
+
+// BP(\bmel).resetStreams = BP(\bmel).resetStreams ++ [\mode];
+
+// actually I really hate this
+BP(\bmel).mode = Pseq([
+	Pn(\g0, { rrand(8, 14).debug("g") }),
+	Pstutter(Pwhite(5, 9, 1).trace(prefix: "other: "), Prand(Mode.keys.asArray.select { |key|
+		(key != \g0) and: { key.asString.last == $0 }
+	}, 1))
+], inf);
+
+BP(\bmel).mode = Pstutter(1e6, Prand(Mode.keys.asArray.select { |key| key.asString.last == $0 }, 1));
+
+VC(\bmel).env.wt2 = \makeWavetables.eval(8, s, 2048, 48, { |numharm| Array.sawtoothAmps(numharm) });
+VC(\bmel).env.wt3 = \makeWavetables.eval(8, s, 2048, 48, { |numharm| Array.squareAmps(numharm) });
+
+VC(\bmel).v.unmapGlobal(\ffreq);
+VC(\bmel).v.mapGlobal(\ffreq, nil, 12000, \freq);
+
+c.free;
+c = VoicerMIDIController(\omni, \mw, VC(\bmel).v.globalControls[\ffreq]);
+
+VC(\bmel).v.globalControls[\ffreq].inspect
+
+BP(\bmel).wtKey = \wt2;
+BP(\bmel).wtKey = Prand(#[wt, wt2, wt3], inf);
+
+BP(\bmel).ffreq = Pnsym1(Pkey(\wtKey), (
+	wt: 12258,
+	wt2: Pexprand(1000, 5000, inf),
+	wt3: Pexprand(1000, 5000, inf)
+));
+
+BP(\bmel).rq = Pif(Pbinop('==', Pkey(\wtKey), \wt), 1, Pexprand(0.25, 0.9, inf));
+
+
+// if I'm going to do this, I need lags on most of the args
+// boring sound, forget it
+VC(\cmel).free;
+Fact(\armsmelVC).chuck(VC(\cmel), nil, (
+	// env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	harmonicAmps: { |numharm| Array.sawtoothAmps(numharm) },
+	env: Env.adsr(0.1, 0.3, 0.6, 0.3),
+	isMono: true
+));
+VC(\cmel).v.setArgDefaults([ffreq: 3000]);
+
+VC(\cmel) => BP(\bmel);
+BP(\bmel).length = Pkey(\dur) * Pwrand(#[0.8, 1.01], #[0.1, 0.9], inf);
+
+BP(\bmel).ffreq = Pexprand(1000, 5000, inf);
+BP(\bmel).rq = Pexprand(0.25, 0.9, inf);
+
+s.bufferAllocator.debug;
+
+
+
+// Pxrand is not quite what I want: not (n) embeds, but (n) durations per weight
+Proto {
+	~prep = { |list, weights, repeats = 1|
+		~list = list;
+		~weights = weights;
+		~repeats = repeats;
+		currentEnvironment
+	};
+	~embedInStream = { |inval|
+		var item, itemStream,
+			weightStream = ~weights.asStream,
+			currentWeights,
+			index = weightStream.next(inval).windex,
+			totalweight, rnd, runningsum;
+
+		block { |break|
+			~repeats.value(inval).do({ |i|
+				item = ~list.at(index.debug("index"));
+				if(item.isNil) { break.(inval) };
+				// Pn is redundant for patterns
+				// but necessary for numbers or other non-streams
+				itemStream = Pn(item, 1).asStream;
+				// don't need 'item' var anymore, can reuse for outputs
+				while { (item = itemStream.next(inval)).notNil } {
+					inval = item.yield;
+					currentWeights = weightStream.next(inval);
+					if(currentWeights.isNil) { break.(inval) };
+				};
+
+				totalweight = 1.0 - currentWeights[index];
+				rnd = totalweight.rand;
+				runningsum = 0;
+				while {
+					index = (index + 1) % currentWeights.size;
+					runningsum = runningsum + currentWeights[index];
+					runningsum < rnd
+				};
+			});
+			inval
+		};
+	};
+	~asStream = { Routine { |inval| ~embedInStream.(inval) } };
+	~canEmbed = true;
+	~isPattern = true;
+} => PR(\pwxrandn);
+
+
+x = PR(\pwxrandn).copy;
+x.env[\isPattern]
+
+x.isPattern
+
+PR(\pwxrandn).inspect
+
+Proto.findRespondingMethodFor(\isPattern)
+
+// BP(\bmel).durStream.instVarAt(1).def.dumpByteCodes
+
+BP(\bmel).dur = PR(\pwxrandn).copy.prep([
+	0.5, 0.75, 1,
+	Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+], Pstutter((Pwhite(6, 12, 3) * Pseq(#[1, 2, 20], 1)), Pseq([
+	// #[0.45, 0.45, 0.1],
+	// #[0.3, 0.3, 0.4]
+	#[5, 5, 3, 1].normalizeSum,
+	#[2, 1, 0.2, 4].normalizeSum
+], inf)), inf);
+
+q = p.asStream;
+r = q.all;
+
+r.plot
+
+
+// test move to defs
+BP(\bmel).free;
+VC(\bmel).free;
+
+VC(\bmel).free;
+Fact(\armsmelVC).chuck(VC(\bmel), nil, (
+	env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	isMono: false
+));
+VC(\bmel).v.setArgDefaults([ffreq: 12258]);
+
+Error.debug = true;
+Error.debug = false;
+
+Fact(\bmelBP) => BP(\bmel);

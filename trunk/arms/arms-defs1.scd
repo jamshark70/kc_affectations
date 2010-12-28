@@ -12,19 +12,20 @@
 env: Env.adsr(0.4, 0, 1, 1.2),
 bufenv: Env.zero,
 isMono: true,
+harmonicAmps: { |numharm|
+	var	array = Array.triangleAmps(numharm),
+	tweak = ((numharm div: 5) + 1 .. (numharm-1)), i;
+	min(10, numharm div: 5).do {
+		i = tweak.takeAt(tweak.size.rand);
+		if(i.notNil) {
+			array[i] = array[i] * exprand(2.5, 6.0) * (i+1);
+		};
+	};
+	array
+},
 make: { |name|
 	var	out, initArgs;
-	~wt = \makeWavetables.eval(8, s, 2048, 48, { |numharm|
-		var	array = Array.triangleAmps(numharm),
-			tweak = ((numharm div: 5) + 1 .. (numharm-1)), i;
-		min(10, numharm div: 5).do {
-			i = tweak.takeAt(tweak.size.rand);
-			if(i.notNil) {
-				array[i] = array[i] * exprand(2.5, 6.0) * (i+1);
-			};
-		};
-		array
-	});
+	~wt = \makeWavetables.eval(8, s, 2048, 48, ~harmonicAmps);
 	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
 		// eq?
 		~chorus = chan.playfx(WrapInstr("busfx.chorus2"), [0, 2, 2, 3, 0.01285261232269, 0.077426358822457, 0.00860870962377, 0.87266466760906, 0.15647481535888]);
@@ -32,10 +33,10 @@ make: { |name|
 	[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\receivesSignalFrom, ~target) };
 
 	out = \addRvbOut.eval(name ++ "Def", { |freq, freqlag = 0.1,
-		vsens = 0.84722220897675, detune = 1.003,// bufmod = 0,
+		vsens = 0.84722220897675, detune = 1.003, bufbase = 0,
 		ffreq = 2423, rq = 1, pan, gate = 1, ampMul = 1|
 		var	laggedfreq = Lag.kr(freq, freqlag),
-			bufbase = ~wt.first.bufnum,
+			// bufbase = ~wt.first.bufnum,
 			numbufs = ~wt.size,
 			basefreq = 48.midicps,
 			topfreq = 132.midicps,
@@ -45,13 +46,14 @@ make: { |name|
 			amp = Latch.kr(Sensitivity.kr(1, gate, vsens), gate),
 			buf = bufbase + freqmap + EnvGen.kr(~bufenv, gate),
 			sig = VOsc3.ar(buf, laggedfreq/detune, laggedfreq, laggedfreq*detune, amp)
-				* EnvGen.kr(~env, gate, doneAction:2);
+				* EnvGen.kr(~env.value, gate, doneAction:2);
 		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan, ampMul)
-	}).add;
+	}, nil, if(~isMono) { (nil ! 5) ++ #[0.1, 0.1] }, ~isMono).add;
 	SynthDescLib.at(out.name.asSymbol).msgFuncKeepGate = true;
 
 // 	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
-	initArgs = [ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003];
+	initArgs = [ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003,
+		bufbase: ~wt.first.bufnum];
 	if(~isMono) {
 		out = MonoPortaVoicer(1, out.name, initArgs, target: ~target);
 	} {
@@ -63,7 +65,7 @@ make: { |name|
 },
 free: {
 	[~glrvbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\stopsReceivingFrom, ~target) };
-	~target.free
+	[~target, ~wt].free
 },
 maps: { |self| self[\value].globalControls.collectAs({ |gc| if(gc.name != \detune) { [gc.name, gc.asMap] } }, Array).select(_.notNil).flat },
 type: \voicer) => Fact(\armsmelVC);
@@ -2068,3 +2070,159 @@ PR(\abstractProcess).clone {
 	};
 } => PR(\locoMel);
 
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote, distFar: 100, lcrvbamt: 0.01);
+	~printStopMsg = false;
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;
+		#[scaleLen, numDescents, numDecays, startDeg].do { |key| ~makeStreamForKey.(key) };
+		~ampMul = GenericGlobalControl(\ampMul, nil, 6.dbamp, [0, 12.dbamp, \amp]);
+		~event.ampMul = ~ampMul.asMap;
+		~addedWavetables = IdentitySet.new;
+	};
+	~freeCleanup = {
+		~removeWavetables.();
+		~ampMul.free;
+	};
+
+	~addWtToVoicer = { |key, ampFunc|
+		if(ampFunc.notNil and: { ~vc.notNil }) {
+			if(~vc.env[key].notNil) { ~vc.env[key].free };  // remove old buffers
+			~vc.env[key] = \makeWavetables.eval(8, s, 2048, 48, ampFunc);
+			~addedWavetables.add(key);
+		} {
+			"BP(%).addWtToVoicer: Either you didn't give an ampFunc or this BP has no voicer"
+			.format(~collIndex.asCompileString).warn;
+		};
+	};
+	~removeWavetables = {
+		if(~addedWavetables.notEmpty and: { ~vc.exists }) {
+			~addedWavetables.do { |key| ~vc.env[key].free; ~vc.env[key] = nil };
+			~addedWavetables.clear;
+		} {
+			"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
+			.format(~collIndex.asCompileString).warn;
+		};
+	};
+	~bindVoicer = { |voicer|
+		var	vc = VC.collection.detect { |vc| vc.v === voicer };
+		if(vc.notNil) {
+			~removeWavetables.();
+			~vc = vc;
+		} {
+			~event.voicer = ~vc.v;
+			"Voicer % isn't in the VC collection - can't chuck in!".format(voicer).warn;
+		};
+		currentEnvironment
+	};
+
+	~numDescents = 7;
+	~scaleLen = Pwhite(2, 5, inf);
+	~numDecays = Pwhite(5, 12, inf);
+	~startDeg = Pwhite(47, 51, inf);
+	~wtKey = \wt;
+
+	~bufbase = Pfunc({ |ev|
+		if(~vc.env[ev[\wtKey]].notNil) { ~vc.env[ev[\wtKey]].first.bufnum } { -1 }
+	});
+
+	~mode = \g0;
+	~freq = Pseq([
+		(
+			Pseries({ |ev| ~startDegStream.next(ev) }, 
+				Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+				.collect { |bot| ~bot = bot }
+			+.x
+			Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+				.collect { |scale| ~scale = scale }
+		)
+		+.x
+		Pif(
+			Pfunc({ ~scale < (~scaleSize - 1) }),
+			Pn(0, 1),
+			Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+		),
+		Plazy({ |ev|
+			var	num = ~numDecaysStream.next(ev);
+			~decay = num * 2;
+			(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 2.rand)
+		})
+	], 1);
+
+	// ~dur = Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf);
+	~dur = PR(\pwxrandn).copy.prep([
+		0.5, 0.75, 1,
+		Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+	], Pstutter((Pwhite(6, 12, 3) * Pseq(#[1, 2, 20], 1)), Pseq([
+		// #[0.45, 0.45, 0.1],
+		// #[0.3, 0.3, 0.4]
+		#[5, 5, 3, 1].normalizeSum,
+		#[2, 1, 0.2, 4].normalizeSum
+	], inf)), inf);
+	~length = Pkey(\dur) * 2.5;
+	~gate = Pif(Pkey(\dur) > 0.25, Pexprand(0.6, 0.9, inf), Pexprand(0.1, 0.35, inf));
+	~angle = Plazy({ (Ptime() * (2pi/rrand(2.5, 7.5))) * #[-1, 1].choose });
+	~decayCurve = Pseq([
+		Pwhile1({ ~decay.isNil }, 1),
+		Plazy({ Pgeom.fromEndpoints(1, 0.05, ~decay) })
+	], 1);
+	~pan = Pkey(\angle).sin * Pkey(\decayCurve);
+	~distance = (Pkey(\angle).cos * Pkey(\decayCurve))
+		.linlin(-1, 1,
+			Pkey(\decayCurve).explin(0.05, 1, 100, 14),
+			Pkey(\decayCurve).explin(0.05, 1, 100, 5)
+		);
+
+	~ffreq = Pnsym1(Pkey(\wtKey), (
+		wt: 12258,
+		wt2: Pexprand(1000, 5000, inf),
+		wt3: Pexprand(1000, 5000, inf)
+	));
+	~rq = Pif(Pbinop('==', Pkey(\wtKey), \wt), 1, Pexprand(0.25, 0.9, inf));
+	// ~ffreq = 12258;
+	// ~rq = 1;
+
+	// see ~decayCurve for why
+	~preparePlay = {
+		~decay = nil;
+		~resetStreams.do { |key| ~makeStreamForKey.(key) };
+	};
+	~resetStreams = #[freq, dur, length, gate, distFar, angle, decayCurve, pan, distance, mode];
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\angle, BPStream(\angle/*, resetSource: true*/),
+			\decayCurve, BPStream(\decayCurve),
+			\pan, BPStream(\pan),
+			\distance, BPStream(\distance),
+			\wtKey, BPStream(\wtKey),
+			\bufbase, BPStream(\bufbase),
+			\ffreq, BPStream(\ffreq),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\bellMel);
+
+(make: { |name|
+	BP(name).free;
+	BP(name).free;
+	PR(\bellMel) => BP(name);
+	if(VC.exists(\bmel)) {
+		VC(\bmel) => BP(name);
+		BP(name).addWtToVoicer(\wt2, { |numharm| Array.sawtoothAmps(numharm) });
+		BP(name).addWtToVoicer(\wt3, { |numharm| Array.squareAmps(numharm) });
+		BP(name).wtKey = Prand(#[wt, wt2, wt3], inf);
+	} {
+		"BP(%): VC(\\bmel) doesn't exist - didn't add extra wavetables."
+		.format(name.asCompileString).warn;
+	};
+	0 => BP(name);
+}, type: \bp) => Fact(\bmelBP);
