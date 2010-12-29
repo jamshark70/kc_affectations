@@ -972,3 +972,93 @@ Error.debug = true;
 Error.debug = false;
 
 Fact(\bmelBP) => BP(\bmel);
+
+
+// bass - try sliding both freq and ratio
+~cb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1]) });
+~mb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1]) });
+
+~cb.sine1(#[1, 0.5]);
+~cb.sine1((1..4).reciprocal);
+~mb.sine1(#[1]);
+
+// no no no!
+// ~cb.sine1(#[1]);
+// ~mb.sine1((1..4).reciprocal);
+
+
+
+WrapInstr("osc2.slidefm1", { |freq, gate, freqlag, mod_ratio, mrlag|
+	WrapInstr("osc2.fm2car").wrap([Lag.kr(freq, freqlag), gate, nil, nil, nil,
+		Lag.kr(mod_ratio, mrlag)])
+}, [\freq, NoLagControlSpec(0, 1, \lin, 0, 1), #[0, 2], #[0.5, 10.5, \lin, 0.5, 1], #[0, 2]]);
+
+WrapInstr("osc2.slidefm1").listArgs;
+
+MIDIPort.at(0).init;
+v = WrapInstr("osc2.slidefm1").miditestMono(0, [car_buf: ~cb, mod_buf: ~mb ?? { ~cb }, basefreq: `440, keyscale: `0, freqlag: 0.8503937007874, mrlag: 0.283, mod_lev: 3.4531104925503 / 0.4, detune: 0.35433070866142, car_detune: 1.0044526098252, car_env: Env.adsr(0.01, 0.25, 0.6, 0.2), mod_env: Env.adsr(0.01, 0.04, 0.4, 0.35)], target: m);
+
+k = MIDIPort.search(v);
+v.unmapGlobal(\mod_ratio);
+k.removeControl(\mod_ratio);
+
+k.noteOnArgsPat = Pbind(\mod_ratio, Pwhite(0, 4, inf) + 0.5).trace(\mod_ratio);
+
+k.noteOnArgsPat = Pbind(\mod_ratio, Pwhite(2, 7, inf));
+k.noteOnArgsPat = Pbind(\mod_ratio, Pwhite(4, 14, inf) * 0.5);
+
+Library.at(WrapInstr, \osc2).keys
+WrapInstr("osc2.fm2car").openFile;
+
+[WrapInstr("osc2.fm2car").argNames, WrapInstr("osc2.fm2car").specs].flop.inspect
+
+v.trace
+
+
+\freqlag, 0.8503937007874, 
+\mrlag, 0.283, 
+\mod_lev, 8.6327762313757, 
+\detune, 0.35433070866142, 
+\car_detune, 1.0044526098252, 
+\car_vs, 0.26771653543307, 
+\mod_vs, 0.5748031496063, 
+
+
+Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
+		ph_diff, /*width,*/ crossover, xfade;
+	var in, lo, hi;
+	in = In.ar(bus, 1);
+	lo = LPF.ar(in, crossover);
+	hi = HPF.ar(in, crossover);
+	hi = Array.fill(numChan, { |i|
+		predelay = predelay + depth;
+		DelayC.ar(hi, 0.5, SinOsc.kr(speed, ph_diff * i,
+		depth, predelay));
+	}).scramble;
+	lo = lo + hi;
+	XFade2.ar(in, lo, xfade * 2 - 1)
+}, #[\audiobus, \numChannels, [0.0001, 0.2, \exponential, 0, 0.001], [0.001, 10, \exponential], [0.0001, 0.25, \exponential], [0, 2pi], /*[0, 1],*/ \freq, [0, 1]]);
+
+p = m.playfx(Instr("busfx.chorus2band"), [0, 1]); p.gui;
+
+FxPatch(
+	[ 'busfx', 'chorus2band' ], [ 22, 1, 0.010549016482685, 0.13459606816896, 0.0082830816073226, 0.0, 290.0, 0.5 ]
+)
+
+
+p.run(false);
+p.run(true);
+
+g = GenericGlobalControl(\x, nil, 200, \freq); g.gui;
+
+a.free;
+a = m.playfx { |outbus| HPF.ar(In.ar(outbus, 1), g) };
+
+a.run(false);
+a.run(true);
+
+WrapInstr("osc2.slidefm1", { |freq, gate, freqlag, mod_ratio, mrlag|
+	WrapInstr("osc2.fm2car").wrap([Lag.kr(freq, freqlag), gate, nil, nil, nil,
+		Lag.kr(mod_ratio, mrlag)])
+}, [\freq, NoLagControlSpec(0, 1, \lin, 0, 1), #[0, 2], #[0.5, 10.5, \lin, 0.5, 1], #[0, 2]]);
+
