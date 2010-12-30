@@ -1029,7 +1029,7 @@ Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
 	var in, lo, hi;
 	in = In.ar(bus, 1);
 	lo = LPF.ar(in, crossover);
-	hi = HPF.ar(in, crossover);
+	hi = in - lo; // HPF.ar(in, crossover);
 	hi = Array.fill(numChan, { |i|
 		predelay = predelay + depth;
 		DelayC.ar(hi, 0.5, SinOsc.kr(speed, ph_diff * i,
@@ -1037,7 +1037,7 @@ Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
 	}).scramble;
 	lo = lo + hi;
 	XFade2.ar(in, lo, xfade * 2 - 1)
-}, #[\audiobus, \numChannels, [0.0001, 0.2, \exponential, 0, 0.001], [0.001, 10, \exponential], [0.0001, 0.25, \exponential], [0, 2pi], /*[0, 1],*/ \freq, [0, 1]]);
+}, [\audiobus, StaticSpec(1, 8, \lin, 1, 1), [0.0001, 0.2, \exponential, 0, 0.001], [0.001, 10, \exponential], [0.0001, 0.25, \exponential], [0, 2pi], /*[0, 1],*/ \freq, [0, 1]]);
 
 p = m.playfx(Instr("busfx.chorus2band"), [0, 1]); p.gui;
 
@@ -1057,8 +1057,119 @@ a = m.playfx { |outbus| HPF.ar(In.ar(outbus, 1), g) };
 a.run(false);
 a.run(true);
 
-WrapInstr("osc2.slidefm1", { |freq, gate, freqlag, mod_ratio, mrlag|
-	WrapInstr("osc2.fm2car").wrap([Lag.kr(freq, freqlag), gate, nil, nil, nil,
-		Lag.kr(mod_ratio, mrlag)])
-}, [\freq, NoLagControlSpec(0, 1, \lin, 0, 1), #[0, 2], #[0.5, 10.5, \lin, 0.5, 1], #[0, 2]]);
 
+(keys: #[master, glrvbmc],
+make: { |name|
+	var	v;
+	WrapInstr("osc2.slidefm2", { |freq, gate, freqlag, mod_ratio, mrlag, pan = 0|
+		var	sig = WrapInstr("osc2.fm2car").wrap([Lag.kr(freq, freqlag), gate, nil, nil, nil,
+			Lag.kr(mod_ratio, mrlag)]);
+		Pan2.ar(sig, pan)
+	}, [\freq, NoLagControlSpec(0, 1, \lin, 0, 1), #[0, 2], #[0.5, 10.5, \lin, 0.5, 1], #[0, 2], \bipolar]);
+
+	SynthDef(\hpfxfer, { |xferbus, outbus, ffreq = 300, level = 1|
+		var	sig = In.ar(outbus, 2);
+		Out.ar(xferbus, HPF.ar(sig, ffreq, level))
+	}).add;
+
+	~cb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1, 0.5]) });
+	~mb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1]) });
+
+	// ~cb.sine1(#[1, 0.5]);
+	// ~cb.sine1((1..4).reciprocal);
+	// ~mb.sine1(#[1]);
+
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
+		// post-fader custom send
+		~xfer = Synth(\hpfxfer, [xferbus: ~glrvbmc.inbus, ffreq: 290, level: 0.337],
+			chan.synth, \addAfter);
+		~chorus = chan.playfx(Instr("busfx.chorus2band"), [0, 2, 0.010549016482685, 0.13459606816896, 0.0082830816073226, 0.0, 290.0, 0.5]);
+		chan.sendsSignalTo(~glrvbmc);
+	});
+	
+	v = MonoPortaVoicer(1, WrapInstr("osc2.slidefm2"), [car_buf: ~cb, mod_buf: ~mb ?? { ~cb }, basefreq: `440, keyscale: `0, freqlag: 0.8503937007874, mrlag: 0.283, mod_lev: 3.4531104925503 / 0.4, detune: 0.35433070866142, car_detune: 1.0044526098252, car_env: Env.adsr(0.01, 0.25, 0.6, 1.2), mod_env: Env.adsr(0.01, 0.04, 0.4, 1.5), car_vs: 0.26771653543307, mod_vs: 0.5748031496063], target: ~target);
+	// gc's?
+
+	v
+},
+free: { [~target, ~cb, ~mb].free }, type: \voicer) => Fact(\armsBass);
+
+VC(\abs).free;
+Fact(\armsBass) => VC(\abs);
+
+/*
+k = VoicerMIDISocket(0, VC(\abs).v);
+
+VC(\abs).v.setArgDefaults([car_vs: 0.26771653543307, mod_vs: 0.5748031496063]);
+
+// tuning, don't need now
+g = GenericGlobalControl(\level, nil, 0.1, \amp); g.gui;
+VC(\abs).env.xfer.set(\level, g.asMap);
+*/
+
+36.mapMode(\g0);  // == 21
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~printStopMsg = false;
+
+	// ~prep = {};
+
+	~mode = \g0;
+	~freq = Pseries({ rrand(21, 28) }, Prand(#[5, 6, 8, 9, 10, 11].neg, 2), 2);
+	~dur = Plazy({
+		Pseq([rrand(2, 4), rrand(8, 12)], 1) * 0.5
+	});
+	~length = Pkey(\dur) * 1.01;  // ensure slide
+	~gate = 0.5;
+	~freqlag = 0.9;
+	~mrlag = Pkey(\freqlag) * 0.4;
+	~mod_ratio = Pwhite(2, 7, inf);
+
+	~preparePlay = {
+		~decay = nil;
+		~resetStreams.do { |key| ~makeStreamForKey.(key) };
+	};
+	~resetStreams = #[freq, dur, length, gate, mode/*, distFar, angle, decayCurve, pan, distance*/];
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\freqlag, BPStream(\freqlag),
+			\mrlag, BPStream(\mrlag),
+			\mod_ratio, BPStream(\mod_ratio)
+		)
+	};
+} => PR(\armsbass);
+)
+
+BP(\abs).free;
+PR(\armsbass) => BP(\abs);
+VC(\abs) => BP(\abs);
+0 => BP(\abs);
+BP(\abs) => MT(1);
+
+p = BP(\abs);
+
+p.freqlag = 1.8;
+p.mrlag = Pkey(\freqlag) * 0.75;
+
+\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
+).putAll(Library.at(\rvbs)));
+
+\chuckIf.eval(PR(\siDuet), BP, \sid);
+VC(\sp) => BP(\sid);
+BP(\sid).finalAmp = 0.05; // 0.037;
+BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
+	Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
+);
+
+BP(\sid).finalAmp = 0.1;
