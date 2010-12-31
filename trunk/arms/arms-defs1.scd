@@ -1726,10 +1726,13 @@ PR(\abstractProcess).clone {
 			\lag, BPStream(\lag)
 		).collect { |ev|
 			var	sustain;
-			if((sustain = ev[\sustain]).notNil and: { ev[\sustain] != inf }) {
-				thisThread.clock.sched(sustain, {
-					Func(\schedEventBundleArray).doAction(s.latency, 0, s,
-						[\n_set, ~node.asArray.asOSCArgArray, \gate, 0].flop, true);
+			if((sustain = ev[\sustain]).notNil and: { sustain != inf }) {
+				thisThread.clock.sched(sustain, e {
+					// ~node may have been cleared before getting here
+					if(~node.size > 0 or: { ~node.isKindOf(Node) }) {
+						Func(\schedEventBundleArray).doAction(s.latency, 0, s,
+							[\n_set, ~node.asArray.asOSCArgArray, \gate, 0].flop, true);
+					};
 					nil
 				});
 			};
