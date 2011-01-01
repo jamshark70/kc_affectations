@@ -1119,13 +1119,17 @@ PR(\abstractProcess).clone {
 
 	~mode = \g0;
 	~freq = Pseries({ rrand(21, 28) }, Prand(#[5, 6, 8, 9, 10, 11].neg, 2), 2);
+	~freq = Plazy({
+		var	top = rrand(21, 28);
+		Pseq([top, top - (#[5, 6, 8, 9, 10, 11].select { |x| (top-x) > 12 }).choose], 1)
+	});
 	~dur = Plazy({
 		Pseq([rrand(2, 4), rrand(8, 12)], 1) * 0.5
 	});
 	~length = Pkey(\dur) * 1.01;  // ensure slide
 	~gate = 0.5;
-	~freqlag = 0.9;
-	~mrlag = Pkey(\freqlag) * 0.4;
+	~freqlag = 1.8;
+	~mrlag = Pkey(\freqlag) * 0.75;
 	~mod_ratio = Pwhite(2, 7, inf);
 
 	~preparePlay = {
@@ -1152,7 +1156,7 @@ PR(\abstractProcess).clone {
 BP(\abs).free;
 PR(\armsbass) => BP(\abs);
 VC(\abs) => BP(\abs);
-0 => BP(\abs);
+1 => BP(\abs);
 BP(\abs) => MT(1);
 
 p = BP(\abs);
@@ -1171,5 +1175,45 @@ BP(\sid).finalAmp = 0.05; // 0.037;
 BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
 	Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 );
+1 => BP(\sid);
 
 BP(\sid).finalAmp = 0.1;
+
+p.freq = Plazy({
+	var	top = rrand(21, 28);
+	Pseq([top, top - (#[5, 6, 8, 9, 10, 11].select { |x| (top-x) > 12 }).choose], 1)
+});
+
+32.7032.cpsmidi.round.mapMode(p.mode);
+
+p.origPattern = p[\asPattern];
+p.asPattern = { ~origPattern.().trace(#[dur, length]) };
+
+p.event.adjustLengthToRealDelta = false;
+
+~saveAddr = s.addr;
+~debugAddr = DebugNetAddr("127.0.0.1", 57110);
+
+s.addr = ~debugAddr;
+s.addr = ~saveAddr;
+
+BP(\sid).mode = Pclutch(
+	Pseq([
+		\g,
+		Pxrand(Mode.keys.asArray.select { |key|
+			key.asString.last.inclusivelyBetween($a, $g)
+		}, inf)
+	], 1),
+	Pif(Pkey(\prevHigh) > 0, max(0, Pwhite(-0.8, 0.2, inf)) > 0, false)
+);
+
+
+u.remove;
+u = Updater(BP(\sid), { |obj, what, mode|
+	var	newmode;
+	if(what == \modeChanged) {
+		BP(\abs).mode = (mode ++ "0").asSymbol;
+	};
+});
+
+

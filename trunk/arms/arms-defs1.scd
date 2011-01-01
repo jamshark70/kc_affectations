@@ -1712,9 +1712,9 @@ PR(\abstractProcess).clone {
 			\chan, ~event[\voicer].nodes[0].bus.asMixer,
 			\ffreq, ~event[\voicer].globalControls[\ffreq].asMap,
 			\rq, ~event[\voicer].globalControls[\rq].asMap,
-			\mode, BPStream(\mode),
 			\high, BPStream(\high),
 			\prevHigh, BPStream(\prevHigh),
+			\mode, BPStream(\mode),
 			\top, BPStream(\top),
 			\degree, BPStream(\degree),
 			\freq, BPStream(\freq),
@@ -1726,6 +1726,10 @@ PR(\abstractProcess).clone {
 			\lag, BPStream(\lag)
 		).collect { |ev|
 			var	sustain;
+			if(ev[\prevHigh] > 0) {
+				// listeners are free to ignore
+				BP(~collIndex).changed(\modeChanged, ev[\mode]);
+			};
 			if((sustain = ev[\sustain]).notNil and: { sustain != inf }) {
 				thisThread.clock.sched(sustain, e {
 					// ~node may have been cleared before getting here
