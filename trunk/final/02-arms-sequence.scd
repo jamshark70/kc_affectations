@@ -74,22 +74,45 @@
 			p.amp = -20.dbamp;
 
 			BP(\di).playTestFile = false;
+
+			\chuckIf.eval(Fact(\locomoLead), VC, \lm, Library.at(\rvbs));
+			VC(\lm).env.target.level = -19.dbamp;
+			\chuckIf.eval(PR(\locoMel), BP, \lm);
+			VC(\lm) => BP(\lm);
+			1 => BP(\lm);
 		},
-		unloadProcesses: { BP(\acDisp).free; VC(\ac).free },
+		unloadProcesses: { BP(#[acDisp, lm]).free; VC(#[ac, lm]).free },
 		seqPattern: {
 			// var	sect = currentEnvironment;
 			Pn((
 				sequence: [
 					bpCmd: Library.at(\diparms),
-					loopCmd: (
-						id: \lc1,
-						autoSync: false,
-						cmds: [
-							{ BP(\acDisp).spawnChild(0); 0 },
-							funcCmd: topEnvironment[\trigParms],
-							\cmdSync
-						]
-					),
+					[
+						loopCmd: (
+							id: \lc1,
+							autoSync: false,
+							cmds: [
+								{ BP(\acDisp).spawnChild(0); rrand(4.5, 8.5) },
+							]
+						),
+						loopCmd: (
+							cmds: [
+								funcCmd: topEnvironment[\trigParms],
+								\cmdSync,
+								// false == let bp finish after section stops
+								bpCmd: (name: \lm, shouldSync: false),
+								funcCmd: (
+									setDoneSignal: {
+										~doneSignal = Updater(BP(\lm), e { |obj, what, more|
+											if(more == \stopped) { ~stop.() };
+										});
+									},
+									clearDoneSignal: { ~doneSignal.remove }
+								),
+								\cmdSync
+							]
+						)
+					],
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -278,30 +301,49 @@
 						bp.autoRun = false;
 					}),
 					0.1,
-					loopCmd: (
+					{ PR(\loopCmd).copy.putAll((
+						id: \pt1,
 						cmds: [
-							{ PR(\loopCmd).copy.putAll((
-								cmds: [
-									{ BP(\ai).runGesture; 0 },
-									funcCmd: topEnvironment[\trigParms],
-									\cmdSync										
-								],
-								repeats: rrand(2, 3)
-							)) },
-							\cmdSync,
-							{ PR(\loopCmd).copy.putAll((
-								cmds: [
-									{ BP(\shivaTrig).triggerOneEvent(0); 0 },
-									funcCmd: topEnvironment[\trigParms],
-									\cmdSync										
-								],
-								repeats: rrand(2, 4),
-								clearDoneSignal: { BP(\shivaTrig).stop }
-							)) },
-							\cmdSync
+							{ BP(\ai).runGesture; rrand(4.0, 8.0) } //,
+							// funcCmd: topEnvironment[\trigParms],
+							// \cmdSync										
+						] //,
+						// repeats: rrand(2, 3)
+					)) },
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: { ~iterator.findActive(\pt1).stop }),
+					{ PR(\loopCmd).copy.putAll((
+						id: \pt2,
+						cmds: [
+							{ BP(\shivaTrig).triggerOneEvent(0); rrand(1.5, 2.5) } //,
+							// funcCmd: topEnvironment[\trigParms],
+							// \cmdSync										
+						],
+						// repeats: rrand(3, 5),
+						clearDoneSignal: { BP(\shivaTrig).stop }
+					)) },
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: { ~iterator.findActive(\pt2).stop }),
+					{ PR(\loopCmd).copy.putAll((
+						id: \pt3,
+						cmds: [
+							{ BP(\ai).runGesture; rrand(4.0, 8.0) } //,
+							// funcCmd: topEnvironment[\trigParms],
+							// \cmdSync										
+						] //,
+						// repeats: rrand(2, 3)
+					)) },
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: { ~iterator.findActive(\pt3).stop }),
+					loopCmd: (
+						autoSync: false,
+						cmds: [
+							{ BP(\acDisp).spawnChild(0); rrand(4.5, 8.5) } //,
 						]
-					),
-					\cmdSync
+					)
 				],
 				// onStop: {  },
 				dur: \trigger,  // or \sync

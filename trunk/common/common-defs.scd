@@ -1005,6 +1005,21 @@ PR(\gcAutoSynthCmd).fire = { |parms|
 	};
 };
 
+// definition in my Instr lib is wrong; this is easier to transport to others
+Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
+		ph_diff, /*width,*/ crossover, xfade;
+	var in, lo, hi;
+	in = In.ar(bus, 1);
+	lo = LPF.ar(in, crossover);
+	hi = in - lo; // HPF.ar(in, crossover);
+	hi = Array.fill(numChan, { |i|
+		predelay = predelay + depth;
+		DelayC.ar(hi, 0.5, SinOsc.kr(speed, ph_diff * i,
+		depth, predelay));
+	}).scramble;
+	lo = lo + hi;
+	XFade2.ar(in, lo, xfade * 2 - 1)
+}, [\audiobus, StaticSpec(1, 8, \lin, 1, 1), #[0.0001, 0.2, \exponential, 0, 0.001], #[0.001, 10, \exponential], #[0.0001, 0.25, \exponential], #[0, 2pi], /*#[0, 1],*/ \freq, #[0, 1]]);
 
 
 (thisProcess.nowExecutingPath.dirname +/+ "transports.scd").loadPath;
