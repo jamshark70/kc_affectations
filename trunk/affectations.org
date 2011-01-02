@@ -46,10 +46,9 @@
 ***** +Axial
 ***** +Locomotive + mel
 ****** cpu use with window is CRAZY
-****** TODO melody sound doesn't gel - no rvb?
 ***** +Swooshes
 ***** +Axial (Shiva)
-***** Partnering
+***** +Partnering
 ****** Swooshes
 ****** Axial
 ****** Swooshes + bell mel
@@ -58,7 +57,7 @@
 ***** +S&I (plus bass and bell mel)
 ***** +Manipulation
 ***** Something when Laura goes to the back
-***** +Locomotive - explode!
+***** Locomotive - explode!
 ****** Drop Stephen solo proc - had enough axial
 ***** Rocking chords (c. 45 sec)
 ****** Need melody

@@ -48,7 +48,7 @@ make: { |name|
 			sig = VOsc3.ar(buf, laggedfreq/detune, laggedfreq, laggedfreq*detune, amp)
 				* EnvGen.kr(~env.value, gate, doneAction:2);
 		Pan2.ar(RLPF.ar(sig, ffreq, rq), pan, ampMul)
-	}, nil, if(~isMono) { (nil ! 5) ++ #[0.1, 0.1] }, ~isMono).add;
+	}, nil, if(~isMono, { (nil!5) ++ #[0.1, 0.1] }, nil), ~isMono).add;
 	SynthDescLib.at(out.name.asSymbol).msgFuncKeepGate = true;
 
 // 	out = MonoPortaVoicer(1, WrapInstr("osc2.vosc3mapfporta"), [bufbase: `(~wt.first.bufnum), numbufs: `(~wt.size), basefreq: `(48.midicps), topfreq: `(132.midicps), env: Env.adsr(0.4, 0, 1, 1.2), ffreq: 2423.054873855, rq: 1, vsens: 0.84722220897675, detune: 1.003], target: ~target);
@@ -334,7 +334,8 @@ PR(\abstractProcess).clone {
 		~event.putAll((
 			glrvbout: VC(~vcKey).env[\glrvbmc].tryPerform(\inbus),
 			lcrvbout: VC(~vcKey).env[\lcrvbmc].tryPerform(\inbus),
-			distNear: 5, distFar: 20
+			distNear: 5, distFar: 20,
+			bufbase: VC(~vcKey).env[\wt].first.bufnum
 		));
 		~makeStreamForKey.(\level);
 		currentEnvironment
@@ -1519,7 +1520,7 @@ make: {
 		0 => bp;
 
 		bp.event.distFar_(50).lcrvbamt_(0.035).ampMul_(nil);
-		bp.gate = Pseg(
+		bp.gate = Penvir((), Pseg(
 			Pstutter(2, Pseq([
 				Pexprand(0.1, 0.22, 1),
 				Pwhite(0.6, 0.9, 1)
@@ -1529,7 +1530,10 @@ make: {
 				Pwhite(3.0, 8.0, inf),
 				Pwhite(1.1, 2.2, inf)
 			], inf)
-		);
+		).collect { |val|
+			if(~once.isNil) { val.debug("starting from scratch"); ~once = true };
+			val
+		});
 		bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
 	};
 },
@@ -2002,10 +2006,14 @@ type: \voicer) => Fact(\locomoLead);
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNote, mainAmp: -12.5.dbamp);
 	~mode = \g;
 	~alwaysReset = true;
 	~printStopMsg = false;
+
+	// ~prep = {
+	// 	~event.proto = topEnvironment[\rvbEvent].proto;
+	// };
 
 	~freq = Pseq([
 		Plazy({ ~ascent }),

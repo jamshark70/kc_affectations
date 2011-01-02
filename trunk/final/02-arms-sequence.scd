@@ -75,8 +75,8 @@
 
 			BP(\di).playTestFile = false;
 
-			\chuckIf.eval(Fact(\locomoLead), VC, \lm, Library.at(\rvbs));
-			VC(\lm).env.target.level = -19.dbamp;
+			\chuckIf.eval(Fact(\locomoLead), VC, \lm, nil, Library.at(\rvbs));
+			// VC(\lm).env.target.level = -19.dbamp;
 			\chuckIf.eval(PR(\locoMel), BP, \lm);
 			VC(\lm) => BP(\lm);
 			1 => BP(\lm);
@@ -92,7 +92,7 @@
 							id: \lc1,
 							autoSync: false,
 							cmds: [
-								{ BP(\acDisp).spawnChild(0); rrand(4.5, 8.5) },
+								{ BP(\acDisp).spawnChild(0); rrand(4.5, 6.5) },
 							]
 						),
 						loopCmd: (
@@ -304,7 +304,7 @@
 					{ PR(\loopCmd).copy.putAll((
 						id: \pt1,
 						cmds: [
-							{ BP(\ai).runGesture; rrand(4.0, 8.0) } //,
+							{ BP(\ai).runGesture; rrand(2.5, 5.0) } //,
 							// funcCmd: topEnvironment[\trigParms],
 							// \cmdSync										
 						] //,
@@ -312,7 +312,10 @@
 					)) },
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
-					funcCmd: (func: { ~iterator.findActive(\pt1).stop }),
+					funcCmd: (func: {
+						~iterator.findActive(\pt1).stop;
+						BP(#[am, am0, am1, am2]).do { |bp| bp.reset; bp.v.reset };
+					}),
 					{ PR(\loopCmd).copy.putAll((
 						id: \pt2,
 						cmds: [
@@ -320,10 +323,10 @@
 							// funcCmd: topEnvironment[\trigParms],
 							// \cmdSync										
 						],
-						// repeats: rrand(3, 5),
+						repeats: rrand(3, 5),
 						clearDoneSignal: { BP(\shivaTrig).stop }
 					)) },
-					funcCmd: topEnvironment[\trigParms],
+					// funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
 					funcCmd: (func: { ~iterator.findActive(\pt2).stop }),
 					{ PR(\loopCmd).copy.putAll((
@@ -345,7 +348,11 @@
 						]
 					)
 				],
-				// onStop: {  },
+				onStop: {
+					BP.keys.do { |key|
+						if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+					};
+				},
 				dur: \trigger,  // or \sync
 				id: 570,  // trig id
 				init: Func(\nextThingTrig).v,
