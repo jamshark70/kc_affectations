@@ -333,3 +333,19 @@ PR(\abstractProcess).clone {
 
 } => PR(\armsChord);
 )
+
+
+			// gets reset every arpeg; this should choose one or the other
+			// BP(\stack).lengthChoices = [
+			// 	Pwhite(3.0, 4.5, inf) - Pseries(0, Pkey(\dur), inf),
+			// 	//Pexprand(0.1, 0.22, inf)
+			// 	Pkey(\dur) * Pwhite(0.45, 0.8, inf)
+			// ];
+			// BP(\stack).lengthChooser = Pseq([0, Pwrand(#[0, 1], #[0.6, 0.4], inf)], 1);
+			// BP(\stack).length = Plazy({ |ev|
+			// 	~lengthChoices[~lengthChooserStream.next(ev)]
+			// 	//~lengthChoices[0] * rrand(0.2, 1.0)
+			// });
+			// BP(\stack).attackTimeScale = Pif(Pkey(\length) <= 0.22, 0.1, 1);
+			// BP(\stack).decayTimeScale = Pif(Pkey(\length) <= 0.22, 0.7, 1);
+			// BP(\stack).mod_lev = Pif(Pkey(\length) <= 0.22, Pwhite(7.0, 12.0, inf), 2.5);

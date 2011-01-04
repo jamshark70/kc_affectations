@@ -75,11 +75,11 @@
 
 			BP(\di).playTestFile = false;
 
-			\chuckIf.eval(Fact(\locomoLead), VC, \lm, nil, Library.at(\rvbs));
-			// VC(\lm).env.target.level = -19.dbamp;
-			\chuckIf.eval(PR(\locoMel), BP, \lm);
-			VC(\lm) => BP(\lm);
-			1 => BP(\lm);
+			\chuckIf.eval(Fact(\locomoLead), VC, \lcm, nil, Library.at(\rvbs));
+			// VC(\lcm).env.target.level = -19.dbamp;
+			\chuckIf.eval(PR(\locoMel), BP, \lcm);
+			VC(\lcm) => BP(\lcm);
+			1 => BP(\lcm);
 		},
 		unloadProcesses: { BP(#[acDisp, lm]).free; VC(#[ac, lm]).free },
 		seqPattern: {
@@ -92,7 +92,9 @@
 							id: \lc1,
 							autoSync: false,
 							cmds: [
-								{ BP(\acDisp).spawnChild(0); rrand(4.5, 6.5) },
+								{ BP(\acDisp).spawnChild(0); 0 },
+								0.05,
+								{ BP(BP(\acDisp).lastSpawned).automationTime + rrand(-1.0, 0.25) }
 							]
 						),
 						loopCmd: (
@@ -100,10 +102,10 @@
 								funcCmd: topEnvironment[\trigParms],
 								\cmdSync,
 								// false == let bp finish after section stops
-								bpCmd: (name: \lm, shouldSync: false),
+								bpCmd: (name: \lcm, shouldSync: false),
 								funcCmd: (
 									setDoneSignal: {
-										~doneSignal = Updater(BP(\lm), e { |obj, what, more|
+										~doneSignal = Updater(BP(\lcm), e { |obj, what, more|
 											if(more == \stopped) { ~stop.() };
 										});
 									},
@@ -115,6 +117,11 @@
 					],
 				],
 				// onStop: {},
+				onStop: {
+					BP.keys.do { |key|
+						if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+					};
+				},
 				dur: \trigger,  // or \sync
 				id: 520,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -151,12 +158,17 @@
 						autoSync: false,
 						cmds: [
 							{ BP(\acDisp).spawnChild(0); 0 },
-							funcCmd: topEnvironment[\trigParms],
-							\cmdSync
+							0.05,
+							{ BP(BP(\acDisp).lastSpawned).automationTime + rrand(-1.0, 0.25) }
 						]
 					)
 				],
 				// onStop: {},
+				onStop: {
+					BP.keys.do { |key|
+						if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+					};
+				},
 				dur: \trigger,  // or \sync
 				id: 530,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -182,6 +194,14 @@
 			));
 			VC(\ac) => BP(\stack);
 			0 => BP(\stack);
+
+			BP(\stack).length = Plazy({ |ev|
+				Pseries.fromEndpoints(1, exprand(0.05, 0.4), ev[\num])
+				* (Pwhite(3.0, 4.5, inf) - Pseries(0, Pkey(\dur), inf))
+			});
+			BP(\stack).attackTimeScale = Pkey(\length).linlin(0.2, 3.0, 0.1, 1, \minmax);
+			BP(\stack).decayTimeScale = Pkey(\length).linlin(0.2, 3.0, 0.1, 1, \minmax);
+			BP(\stack).mod_lev = Pkey(\length).linlin(0.2, 3.0, Pwhite(4.5, 8.0, inf), 2.5, \minmax);
 		},
 		unloadProcesses: { BP(\stack).free },
 		seqPattern: {
@@ -289,8 +309,28 @@
 	PR(\tlsAff).copy.putAll((
 		name: "A560-partnering",
 		segID: 560,
-		// initProcesses: {},
-		// unloadProcesses: {},
+		initProcesses: {
+			\chuckIf.eval(Fact(\armsmelVC), VC, \bmel, nil, (
+				env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+				// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+				isMono: false
+			));
+			VC(\bmel).v.setArgDefaults([ffreq: 12258]);
+
+			\chuckIf.eval(Fact(\bmelBP), BP, \bmel);
+			0 => BP(\bmel);
+
+			topEnvironment[\clock96] ?? {
+				topEnvironment[\clock96] = TempoClock(96/60);
+			};
+			topEnvironment[\clock96] => BP(\bmel);
+		},
+		// MUST free BP first
+		unloadProcesses: {
+			BP(\bmel).free; VC(\bmel).free;
+			topEnvironment[\clock96].stop;  // do I really want to do this?
+			topEnvironment[\clock96] = nil;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -328,16 +368,33 @@
 					)) },
 					// funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
-					funcCmd: (func: { ~iterator.findActive(\pt2).stop }),
-					{ PR(\loopCmd).copy.putAll((
-						id: \pt3,
-						cmds: [
-							{ BP(\ai).runGesture; rrand(4.0, 8.0) } //,
-							// funcCmd: topEnvironment[\trigParms],
-							// \cmdSync										
-						] //,
-						// repeats: rrand(2, 3)
-					)) },
+					funcCmd: (func: {
+						~iterator.findActive(\pt2).stop;
+						BP(\bmel).dur = BP(\bmel).simpleDur;
+						BP(\bmel).ampMul.value = 0.5;
+						BP(\bmel).numDescents = Pwhite(3, 5, inf);
+						BP(\bmel).numDecays = Pwhite(4, 7, inf);
+						BP(\bmel).distance = BP(\bmel).origDistance;
+					}),
+					subIterCmd: (
+						id: \pt3,  // I need this id below
+						clock108: TempoClock.default,
+						subIter: TLSequenceIterator([
+							loopCmd: (
+								cmds: [
+									{ BP(\ai).runGesture; rrand(2.5, 5.0) }
+								]
+							),
+							loopCmd: (
+								cmds: [
+									{ rrand(2.0, 4.0) },
+									bpCmd: (name: \bmel),
+									\cmdSync,
+									{ rrand(3.0, 5.0) }
+								]
+							)
+						])
+					),
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
 					funcCmd: (func: { ~iterator.findActive(\pt3).stop }),
@@ -408,29 +465,88 @@
 			BP(\sid).delta = Pif(Pkey(\high) > 0, Pwhite(3, 5, inf),
 				Pwrand(#[1, 2, 3, 4], (1..4).reciprocal, inf)
 			);
+			BP(\sid).printStopMsg = false;
+
+			\chuckIf.eval(Fact(\armsBass), VC, \abs, nil, Library.at(\rvbs));
+			\chuckIf.eval(PR(\armsbass), BP, \abs);
+			VC(\abs) => BP(\abs);
+			// 1 => BP(\abs); //?
 		},
-		unloadProcesses: { BP(\sid).free; },
+		unloadProcesses: { BP(#[sid, abs]).free; VC(\abs).free },
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: Library.at(\diparms),
+					{	// var	self = currentEnvironment;
+						PR(\bpCmd).copy.putAll((name: \abs, quant: 0, prepareBP: { |bp|
+							bp.dur = Pseq(#[1, 6], 1);  // not random, don't really need {}
+							VC(\abs).env.target.level = -19.dbamp;
+						}))
+					},
+					2,
 					loopCmd: (
 						id: \s_i,
 						autoSync: false,
-						highPats: Pseq([
-							Pn(`Pn(1, 1), 2),
-							`Pseq([0, 1], 1),
-							Pn(`Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], 1), inf)
-						]).asStream,
+						repeats: 2,
+						i: 0,
+						// highPats: Pseq([
+						// 	Pn(`Pn(1, 1), 2),
+						// 	`Pseq([0, 1], 1),
+						// 	Pn(`Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], 1), inf)
+						// ]).asStream,
 						cmds: [
 							{	var	self = currentEnvironment;
+								~i = ~i + 1;
+								if(~i == 2) { NotificationCenter.notify(\s_i, \go) };
 								PR(\bpCmd).copy.putAll((name: \sid, quant: 0, prepareBP: { |bp|
-									bp.high = self[\highPats].next.dereference
+									bp.high = Pn(1, 1) //self[\highPats].next.dereference
 								}))
 							},
 							\cmdSync,
 							funcCmd: topEnvironment[\trigParms],
 							\cmdSync
+						]
+					),
+					// simply block until second chord
+					funcCmd: (
+						setDoneSignal: {
+							~doneSignal = NotificationCenter.register(\s_i, \go, \wait, e { ~stop.() });
+						},
+						clearDoneSignal: {
+							NotificationCenter.unregister(\s_i, \go, \wait);
+						}
+					),
+					\cmdSync,
+					{	BP(\abs).dur = Plazy({
+							Pseq([rrand(2, 4), rrand(8, 12)], 1) * 0.5
+						});
+						rrand(3.5, 6.0)
+					},
+					{	BP(\sid).high = Pseq([Pn(0, { rrand(1, 5) }), Pn(1, { rrand(1, 2) })], 1);
+						0
+					},
+					loopCmd: (
+						cmds: [
+							{	var delays = [0, rrand(0.5, 2.5)];
+								[delays, [
+									[bpCmd: (name: \abs)],
+									[bpCmd: (name: \sid, prepareBP: { |bp| bp.highStream.reset })],
+								].rotate(2.rand)].flop.flat.debug("add TLSeq")
+							},
+							\cmdSync,
+							{ rrand(0.8, 2.5).debug("wait") }  // rrand(3.5, 6.0)
+						]
+					),
+					{	BP(\bmel).numDescents = Pwhite(5, 9, inf);
+						BP(\bmel).numDecays = Pwhite(4, 7, inf);
+						BP(\bmel).distance = BP(\bmel).origDistance + 12;
+						rrand(7.0, 10.0)
+					},
+					loopCmd: (
+						cmds: [
+							bpCmd: (name: \bmel),
+							\cmdSync,
+							{ rrand(5.0, 9.0) }
 						]
 					)
 				],

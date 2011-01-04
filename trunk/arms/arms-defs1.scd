@@ -760,9 +760,9 @@ PR(\abstractProcess).clone {
 		var	self = currentEnvironment, parms;
 		BP(name).free;
 		parms = (
-			angleBus: Bus.control(s, 1 /*, name + "angle"*/),
-			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
-			yxRatioBus: Bus.control(s, 1 /*, name + "rotSpeed"*/),
+			angleBus: Bus.control(s, 1 /*, name + "angle"*/)/*.debug("anglebus")*/,
+			rotSpeedBus: Bus.control(s, 1 /*, name + "rotSpeed"*/)/*.debug("rotspeedbus")*/,
+			yxRatioBus: Bus.control(s, 1 /*, name + "rotSpeed"*/)/*.debug("yxratiobus")*/,
 			shouldFreeGCs: true,
 			initChords: {
 				~fullCh = self[\fullCh];
@@ -836,7 +836,8 @@ PR(\abstractProcess).clone {
 
 	// TEMPORARY FOR RECORDING ONLY
 	~startAuto = {
-		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85), upd;
+		~automationTime = time;  // communicate back
 		fork {
 			~rotSpeed.automate({
 				Line.kr(0, 1, time, doneAction: 2);
@@ -855,12 +856,15 @@ PR(\abstractProcess).clone {
 				},
 				nil,
 				~rotSpeed.autoSynth, \addAfter);
-			OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
-				resp.remove;
-				if(BP.exists(~collIndex)) {
-					BP(~collIndex).stop(0);
+			NodeWatcher.register(~rotSpeed.autoSynth);
+			upd = Updater(~rotSpeed.autoSynth, e { |obj, what|
+				if(what == \n_end) {
+					upd.remove;
+					if(BP.exists(~collIndex)) {
+						BP(~collIndex).stop(0);
+					};
 				};
-			}).add;
+			});
 		};
 	};
 
@@ -892,9 +896,14 @@ PR(\abstractProcess).clone {
 		});
 	};
 
+	// f'ed up: it's possible to free the bus while autosynth is still going
+	// shouldn't be, but it's happening: a MC grabs a bus that's still automated
+	// so I'll just fricken' work around it by holding the bus numbers a bit longer
 	~freeCleanup = {
+		var gcs;
 		if(~shouldFreeGCs ? true) {
-			[~angle, ~rotSpeed, ~yxRatio].free;
+			gcs = [~angle, ~rotSpeed, ~yxRatio];
+			{ gcs.free }.defer(0.2);
 		};
 		if(~freeSpeedMul ? false) { ~speedMul.free };
 	};
@@ -1236,7 +1245,6 @@ PR(\abstractProcess).clone {
 
 	~asPattern = {
 		Pbind(
-			\count, Pseries(1, 1, inf),
 			\finalAmp, ~ampCtl.asMap,
 			\pan, BPStream(\pan),
 			\distance, BPStream(\distance),
@@ -1362,9 +1370,9 @@ PR(\abstractProcess).clone {
 					\dur, BPStream(\dur, true, envir: self),
 					\freq, BPStream(\freq, true, envir: self),
 					\mode, BPStream(\mode, true, envir: self),
+					\length, BPStream(\length, true, envir: self),
 					\gate, BPStream(\gate, true, envir: self),
 					\mod_lev, BPStream(\mod_lev, true, envir: self),
-					\length, BPStream(\length, true, envir: self),
 					\attackTimeScale, BPStream(\attackTimeScale, true, envir: self),
 					\decayTimeScale, BPStream(\decayTimeScale, true, envir: self)
 				),
@@ -1466,6 +1474,7 @@ PR(\abstractProcess).clone {
 					};
 					parms[key] = val;
 				};
+				("phraseStats" ++ key).asSymbol.envirPut(parms[key]);
 			};
 			Pbind(
 				\parms, parms,
@@ -2063,7 +2072,7 @@ PR(\abstractProcess).clone {
 			nil
 		};
 	});
-	~mod_ratio = Pwhite(2, 7, inf) * 0.5;
+	~mod_ratio = Pwhite(3, 7, inf); // Pwhite(2, 7, inf) * 0.5;
 	~mod_lev = Pkey(\gate).linexp(0, 1, 7, 25);
 
 	~bpsKeys = #[mode, freq, dur, length, gate, car_buf, mod_ratio, mod_lev];
@@ -2094,7 +2103,7 @@ PR(\abstractProcess).clone {
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		#[scaleLen, numDescents, numDecays, startDeg].do { |key| ~makeStreamForKey.(key) };
-		~ampMul = GenericGlobalControl(\ampMul, nil, 6.dbamp, [0, 12.dbamp, \amp]);
+		~ampMul = GenericGlobalControl(\ampMul, nil, 0.26, [0, 12.dbamp, \amp]);
 		~event.ampMul = ~ampMul.asMap;
 		~addedWavetables = IdentitySet.new;
 	};
@@ -2118,8 +2127,10 @@ PR(\abstractProcess).clone {
 			~addedWavetables.do { |key| ~vc.env[key].free; ~vc.env[key] = nil };
 			~addedWavetables.clear;
 		} {
-			"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
-			.format(~collIndex.asCompileString).warn;
+			if(~addedWavetables.notEmpty) {
+				"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
+				.format(~collIndex.asCompileString).warn;
+			}
 		};
 	};
 	~bindVoicer = { |voicer|
@@ -2168,7 +2179,7 @@ PR(\abstractProcess).clone {
 	], 1);
 
 	// ~dur = Pseq([0.5, Pn(0.25, { #[0, 1, 2, 3].wchoose(#[0.1, 0.4, 0.3, 0.2]) })], inf);
-	~dur = PR(\pwxrandn).copy.prep([
+	~complexDur = PR(\pwxrandn).copy.prep([
 		0.5, 0.75, 1,
 		Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
 	], Pstutter((Pwhite(6, 12, 3) * Pseq(#[1, 2, 20], 1)), Pseq([
@@ -2177,6 +2188,11 @@ PR(\abstractProcess).clone {
 		#[5, 5, 3, 1].normalizeSum,
 		#[2, 1, 0.2, 4].normalizeSum
 	], inf)), inf);
+	~simpleDur = PR(\pwxrandn).copy.prep([
+		0.5, 0.75, 1,
+		Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+	], #[2, 1, 0.2, 4].normalizeSum, inf);
+	~dur = ~simpleDur;
 	~length = Pkey(\dur) * 2.5;
 	~gate = Pif(Pkey(\dur) > 0.25, Pexprand(0.6, 0.9, inf), Pexprand(0.1, 0.35, inf));
 	~angle = Plazy({ (Ptime() * (2pi/rrand(2.5, 7.5))) * #[-1, 1].choose });
@@ -2185,11 +2201,12 @@ PR(\abstractProcess).clone {
 		Plazy({ Pgeom.fromEndpoints(1, 0.05, ~decay) })
 	], 1);
 	~pan = Pkey(\angle).sin * Pkey(\decayCurve);
-	~distance = (Pkey(\angle).cos * Pkey(\decayCurve))
+	~origDistance = (Pkey(\angle).cos * Pkey(\decayCurve))
 		.linlin(-1, 1,
 			Pkey(\decayCurve).explin(0.05, 1, 100, 14),
 			Pkey(\decayCurve).explin(0.05, 1, 100, 5)
 		);
+	~distance = ~origDistance;
 
 	~ffreq = Pnsym1(Pkey(\wtKey), (
 		wt: 12258,
@@ -2241,3 +2258,86 @@ PR(\abstractProcess).clone {
 	};
 	0 => BP(name);
 }, type: \bp) => Fact(\bmelBP);
+
+
+// bass (starts in S&I)
+
+
+(keys: #[master, glrvbmc],
+make: { |name|
+	var	v;
+	WrapInstr("osc2.slidefm2", { |freq, gate, freqlag, mod_ratio, mrlag, pan = 0|
+		var	sig = WrapInstr("osc2.fm2car").wrap([Lag.kr(freq, freqlag), gate, nil, nil, nil,
+			Lag.kr(mod_ratio, mrlag)]);
+		Pan2.ar(sig, pan)
+	}, [\freq, NoLagControlSpec(0, 1, \lin, 0, 1), #[0, 2], #[0.5, 10.5, \lin, 0.5, 1], #[0, 2], \bipolar]);
+
+	SynthDef(\hpfxfer, { |xferbus, outbus, ffreq = 300, level = 1|
+		var	sig = In.ar(outbus, 2);
+		Out.ar(xferbus, HPF.ar(sig, ffreq, level))
+	}).add;
+
+	~cb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1, 0.5]) });
+	~mb = Buffer.alloc(s, 2048, 1, { |buf| buf.sine1Msg(#[1]) });
+
+	~target = MixerChannel(name, s, 2, 2, level: -12.dbamp, outbus: ~master,
+		completionFunc: { |chan|
+			// post-fader custom send
+			~xfer = Synth(\hpfxfer, [xferbus: ~glrvbmc.inbus, ffreq: 290, level: 0.337],
+				chan.synth, \addAfter);
+			~chorus = chan.playfx(Instr("busfx.chorus2band"), [0, 2, 0.010549016482685, 0.13459606816896, 0.0082830816073226, 0.0, 290.0, 0.5]);
+			chan.sendsSignalTo(~glrvbmc);
+		}
+	);
+	
+	v = MonoPortaVoicer(1, WrapInstr("osc2.slidefm2"), [car_buf: ~cb, mod_buf: ~mb ?? { ~cb }, basefreq: `440, keyscale: `0, freqlag: 0.8503937007874, mrlag: 0.283, mod_lev: 3.4531104925503 / 0.4, detune: 0.35433070866142, car_detune: 1.0044526098252, car_env: Env.adsr(0.01, 0.25, 0.6, 1.2), mod_env: Env.adsr(0.01, 0.04, 0.4, 1.5), car_vs: 0.26771653543307, mod_vs: 0.5748031496063], target: ~target);
+	// gc's?
+
+	v
+},
+free: { [~target, ~cb, ~mb].free }, type: \voicer) => Fact(\armsBass);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~printStopMsg = false;
+
+	// ~prep = {};
+
+	~mode = \g0;
+	~freq = Pseries({ rrand(21, 28) }, Prand(#[5, 6, 8, 9, 10, 11].neg, 2), 2);
+	~freq = Plazy({
+		var	top = rrand(21, 28);
+		Pseq([top, top - (#[5, 6, 8, 9, 10, 11].select { |x| (top-x) > 12 }).choose], 1)
+	});
+	~dur = Plazy({
+		Pseq([rrand(2, 4), rrand(8, 12)], 1) * 0.5
+	});
+	~length = Pkey(\dur) * 1.01;  // ensure slide
+	~gate = 0.5;
+	~freqlag = 1.8;
+	~mrlag = Pkey(\freqlag) * 0.75;
+	~mod_ratio = Pwhite(2, 7, inf);
+
+	~preparePlay = {
+		~decay = nil;
+		~resetStreams.do { |key| ~makeStreamForKey.(key) };
+	};
+	~resetStreams = #[freq, dur, length, gate, mode/*, distFar, angle, decayCurve, pan, distance*/];
+
+	~asPattern = {
+		Pbind(
+			\mode, BPStream(\mode),
+			\freq, BPStream(\freq),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\gate, BPStream(\gate),
+			\freqlag, BPStream(\freqlag),
+			\mrlag, BPStream(\mrlag),
+			\mod_ratio, BPStream(\mod_ratio)
+		)
+	};
+} => PR(\armsbass);
+
+

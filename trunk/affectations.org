@@ -46,15 +46,18 @@
 ***** +Axial
 ***** +Locomotive + mel
 ****** cpu use with window is CRAZY
+****** DONE chord pacing, fix events after sunrise
+****** DONE Articulation in stacking
 ***** +Swooshes
 ***** +Axial (Shiva)
 ***** +Partnering
 ****** Swooshes
 ****** Axial
 ****** Swooshes + bell mel
-****** Locomotive
+******* DONE mel balance and tempo
+****** Locomotive - pacing
 ***** +Axial (3 levels)
-***** +S&I (plus bass and bell mel)
+***** +S&I (plus bass and bell mel) - take out event trigs
 ***** +Manipulation
 ***** Something when Laura goes to the back
 ***** Locomotive - explode!
