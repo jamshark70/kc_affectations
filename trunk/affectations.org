@@ -287,42 +287,59 @@
 
 
 * Environment building
-  1. Clean install directories.
-  2. Get debian packages needed to build sc (if not already done).
-     sudo apt-get install build-essential libjack0.100.0-dev libsndfile1-dev libasound2-dev libavahi-client-dev libicu-dev libreadline6-dev libfftw3-dev libxt-dev pkg-config scons git-core subversion
-  3. Check out and build sc (r10246).
-     mkdir ~/share
-     cd ~/share
-     svn co -r10246 https://supercollider.svn.sourceforge.net/svnroot/supercollider/trunk sc-svn
-     cd sc-svn/common
-     scons
-     cd ~/share/sc-svn/common/build/SCClassLibrary/Common/GUI
-     svn update -r 10373 Model.sc
-     cd ~/share/sc-svn/common
-     sudo scons install
-  4. Check out and build sc3-plugins (r444).
-     cd ~/share/sc-svn
-     svn co -r444 https://sc3-plugins.svn.sourceforge.net/svnroot/sc3-plugins sc3-plugins
-     cd sc3-plugins
-     scons
-     sudo scons install
-  5. Check out quarks (r1629).
-     1. In sc/emacs, "Quarks.gui"
-     2. Select dewdrop_lib, MathLib and cruciallib (buttons at left).
-     3. Click "save" and wait (it may issue several svn co commands).
-  6. Check out my git repos.
-     cd ~/wherever/you/want
-     git clone http://jamshark70@github.com/jamshark70/kc_affectations.git
-  7. Private extensions --> ~/share/SuperCollider/Extensions.
-     1. Extract trunk/sc-private-extensions.tar.gz into a separate directory.
-	cp trunk/sc-private-extensions.tar.gz ~/aDir
-	cd ~/aDir
-	tar -xvzf sc-private-extensions.tar.gz
-     2. mkdir ~/share/SuperCollider/Extensions/PrivateExtensions
-     3. cp *.sc ~/share/SuperCollider/Extensions/PrivateExtensions
-     4. tar -xvzf fixes.tar.gz ~/share/sc-svn/common/build/SCClassLibrary
-     5. cd ~/share/sc-svn/common
-     6. sudo scons install
-  8. Restart sc interpreter.
-** DONE Check all private-extensions into git.
+** HW/OS specs
+   - Intel Core i3-350M, 2.27 GHz
+     - feel free to go faster
+     - Core i5 or i7 will probably not benefit too much because scsynth uses only one thread for DSP)
+   - 4 GB RAM (but if you're just running SuperCollider, you won't even need half that)
+   - HD can be moderate speed
+   - OS: Ubuntu 10.04 (10.10 is newer but I've heard of audio system bugs).
+     http://www.ubuntu.com/desktop/get-ubuntu/download
 
+** OS configuration
+   After installing the OS (writing this from memory, hope it's okay):
+   1. Don't bother with system updates at first.
+   2. Go to Applications > Ubuntu Software Center and install linux-realtime.
+   3. /Then/ reboot and you can do security etc. updates after that.
+   4. Go to System > Administration > Software Sources
+      - Add http://ppa.launchpad.net/falk-t-j/lucid/ubuntu on the Other Software tab.
+   5. Install the jack2 package (which comes from the PPA).
+      - If Jack v1 is installed (shouldn't be), uninstall it manually before installing Jack2.
+      - Also install JACK Control (simplifies configuration).
+
+** SC building
+   1. Clean install directories.
+   2. Get debian packages needed to build sc (if not already done).
+      sudo apt-get install build-essential libjack0.100.0-dev libsndfile1-dev libasound2-dev libavahi-client-dev libicu-dev libreadline6-dev libfftw3-dev libxt-dev pkg-config scons git-core subversion
+   3. Check out and build sc.
+      mkdir ~/share
+      cd ~/share
+      git clone git://github.com/jamshark70/sc34-affectations.git sc.git
+      cd sc-svn/common
+      scons
+      sudo scons install
+   4. Check out and build sc3-plugins (r444).
+      cd ~/share/sc-svn
+      svn co -r444 https://sc3-plugins.svn.sourceforge.net/svnroot/sc3-plugins sc3-plugins
+      cd sc3-plugins
+      scons
+      sudo scons install
+   5. Check out quarks.
+      1. In sc/emacs, "Quarks.gui"
+      2. Select dewdrop_lib, MathLib and cruciallib (buttons at left).
+      3. Click "save" and wait (it may issue several svn co commands).
+   6. Check out my git repos.
+      cd ~/wherever/you/want
+      git clone http://jamshark70@github.com/jamshark70/kc_affectations.git
+   7. Private extensions --> ~/share/SuperCollider/Extensions.
+      1. Extract trunk/sc-private-extensions.tar.gz into a separate directory.
+ 	cp trunk/sc-private-extensions.tar.gz ~/aDir
+ 	cd ~/aDir
+ 	tar -xvzf sc-private-extensions.tar.gz
+      2. mkdir ~/share/SuperCollider/Extensions/PrivateExtensions
+      3. cp *.sc ~/share/SuperCollider/Extensions/PrivateExtensions
+ 	- Steps related to the old fixes.tar.gz should NO LONGER be needed.
+      4. cd ~/share/sc-svn/common
+      5. sudo scons install
+   8. Restart sc interpreter.
+** DONE Check all private-extensions into git.
