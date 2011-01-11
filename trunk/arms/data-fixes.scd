@@ -6,9 +6,9 @@ Dialog.getPaths { |paths| p = paths[0].postcs };
 // then cursor on open-paren and ctrl-alt-x
 (
 var f, sf;
-var	width = 5;
+var	width = 10;
 protect {
-	var	l, l2;
+	var	l; //, l2;
 	var write = Routine { |row|
 		var	databuf = FloatArray.newClear(width * 2000), i = 0, c = 0;
 		loop {
@@ -28,13 +28,14 @@ protect {
 		sf = SoundFile(p.splitext[0] ++ ".wav").headerFormat_("WAV").numChannels_(width);
 		if(sf.openWrite) {
 			while { (l = f.getLine).notNil } {
-				if(l.any(_.isDecDigit)) {
-					l = l.reject(_.isSpace).split($,).asFloat.extend(width, 0.0);
-					write.(l);
-					l2 = l;
-				} {
-					write.(l2/*.debug("wrote l2")*/)
-				};
+//				if(l.any(_.isDecDigit)) {
+				l = l.reject(_.isSpace).split($,).asFloat.extend(width, 0.0);
+				// if(l[1] == 0) { l[2..] = 0.0 };
+				write.(l);
+//					l2 = l;
+//				} {
+//					write.(l2/*.debug("wrote l2")*/)
+//				};
 			};
 			write.(nil);  // force flush
 		} { "Couldn't open output file".warn };
@@ -221,70 +222,140 @@ topEnvironment[\sampleDir] = thisProcess.nowExecutingPath.dirname.dirname +/+ "s
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| t.debug("node started at") }).add;
 
+ChuckableBrowser.newWindow;
+
 (
 BP(\di).free;
 PR(\dataIn).chuck(BP(\di), nil, (
 	alwaysReset: true,
-	numCh: 5,
-	outCh: 8,
-	path: topEnvironment[\sampleDir] +/+ "arms/NACL_Arms.wav", // "arms/hands-1_data2.wav",
-	path: topEnvironment[\sampleDir] +/+ "arms/hand_stack-100930.wav",
+	numCh: 10,
+	outCh: 10,
+	startFrame: 0,
+	vizRate: 5,
+	vizRate_: { |newRate = 10|
+		KrBusWatcher.updateFreq = newRate;
+		currentEnvironment.put(\vizRate, newRate);
+		if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
+	},
+	dataSpecs: [
+		[0, 60*60],  // 1 hr
+		[0, 50],
+		#[-1, 1],
+		#[-1, 1],
+		#[-1, 1],
+		#[-1, 1],
+		#[-1, 1],
+		#[-1, 1],
+		#[0, 8],
+		#[0, 2]		
+	].collect(_.asSpec),
+	// path: topEnvironment[\sampleDir] +/+ "arms/NACL_Arms.wav", // "arms/hands-1_data2.wav",
+	// path: topEnvironment[\sampleDir] +/+ "arms/hand_stack-100930.wav",
+	path: topEnvironment[\sampleDir] +/+ "vizdata/Affectations_KC1_Data.wav",
+	bus: 0,  // trick PR(\dataIn) into NOT creating the output bus
 	userprep: {
 		~buf = Buffer.readAndQuery(s, ~path);
+		~rawBus = Bus.control(s, ~numCh);
+		~bus = Bus.control(s, ~outCh);
 		~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 		~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
 
-		SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0|
+		SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, loop = 0, startFrame = 0|
 			var	fr = BufFrames.ir(buf),
 				dur = fr / frameRate,
 				notLoop = loop <= 0,
 				end = fr + (10000 * notLoop),
 				stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
-				ph = Phasor.kr(0, frameRate * ControlDur.ir, start: 0, end: end),
+				ph = Phasor.kr(0, frameRate * ControlDur.ir, start: startFrame, end: end),
 				data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
 	
 			Out.kr(outbus, data);
 		}).add;
 
-		SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
-			var	data = In.kr(bus, ~numCh),
-				avgSize = (avgTime * ControlRate.ir).trunc,
-				peak;
-		
-			data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
+		// want to drop time and num markers
+		SynthDef("datafixer" ++ ~numCh, { |rawBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, bufnum|
+			var	sig = In.kr(rawBus, ~numCh),
+				maxSamps = roundUp(avgTime * SampleRate.ir),
+				startTime = Index.kr(bufnum, 0);
+			sig[0] = sig[0] - startTime;
+			(sig.size-2 .. sig.size-1).do { |i|
+				sig[i] = Max.kr(K2A.ar(sig[i]), maxSamps);
+			};
 			FreeSelf.kr(stop);
-
-			(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
-			// w/o copy, 'data' has 3 more elements than In.kr created
-			// this causes In.kr to create 8 OutputProxies where 5 would be correct
-			data = data.copy.add(data[1] - data[0]).add(data[3] - data[2]);
-			data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
-			// peak = Peak.kr(data.last);
-			// peak.poll(stop, "peak was");
-			
-			ReplaceOut.kr(bus, data);
+			ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6, 8, 9]]);
 		}).add;
+
+		// SynthDef("datafixer" ++ ~numCh, { |bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
+		// 	var	data = In.kr(bus, ~numCh),
+		// 		avgSize = (avgTime * ControlRate.ir).trunc,
+		// 		peak;
+		
+		// 	data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
+		// 	FreeSelf.kr(stop);
+
+		// 	(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
+		// 	// w/o copy, 'data' has 3 more elements than In.kr created
+		// 	// this causes In.kr to create 8 OutputProxies where 5 would be correct
+		// 	data = data.copy.add(data[1] - data[0]).add(data[3] - data[2]);
+		// 	data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
+		// 	// peak = Peak.kr(data.last);
+		// 	// peak.poll(stop, "peak was");
+			
+		// 	ReplaceOut.kr(bus, data);
+		// }).add;
 
 		~visualizer.();
 	},
 	visualizer: {
+		~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
+		~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
 		defer(e {
 			~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
 				.onClose_(e { ~closeWin.() });
-			~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
-				.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
+			// ~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
+			// 	.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
+			~uv = UserView(~win, 200@200)
+			.drawFunc_(e { |view|
+				var	data = ~latestData.copy,
+					velSize = data[8] * 2 + 3;  // max approx = 18
+				(5..7).do { |i| data[i] = data[i].neg };
+				// data.debug("data");
+				Pen.color_(~boundsColor)
+					.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100))/*.debug("rect")*/)
+					.color_(~velColor)
+					.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100))/*.debug("ovalctr")*/,
+						velSize, velSize));
+			});
+			~win.startRow;
+			~tv = StaticText(~win, 100@30)
+				.font_(Font.default.copy.size_(14))
+				.align_(\right)
+				.background_(Color.white);
 			~win.recursiveResize.front;
 			
 //			KrBusWatcher.register(~bus);
-			KrBusWatcher.newFrom(s).updateFreq_(10);
+			KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
 			~upd = Updater(~bus, e { |obj, data|
-				var ms = ~ms;
-				defer { ms.value = data };
+				var /*ms = ~ms,*/ tv = ~tv, uv = ~uv, ds = ~dataSpecs, mins, secs; //,
+					//self = currentEnvironment;
+				~latestData = data;
+				defer {
+					// ms.value = data.collect { |val, i| ds[i].unmap(val) };
+					uv.refresh;
+					mins = data[0] div: 60;
+					secs = (data[0] % 60).round;
+					tv.string = "%%:%%".format(
+						if(mins < 10) { $0 } { "" },
+						mins,
+						if(secs < 10) { $0 } { "" },
+						secs
+					);
+				};
 			});
 		});
 	},
 	userfree: {
-		[~buf, ~maxVel, ~maxRatio].free;
+		[~buf, ~maxVel, ~maxRatio, ~rawBus, ~bus].free;
 		~closeWin.();
 	},
 	preparePlay: {
@@ -315,15 +386,17 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		Pseq([
 			(
 				instrument: ("datafixer" ++ ~numCh).asSymbol,
-				bus: ~bus, avgTime: ~avgTime ? 0.2,
+				rawBus: ~rawBus, bus: ~bus, avgTime: ~avgTime ? 0.2,
 				maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
+				bufnum: ~buf,
 				delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 			),
 			Pfuncn {
 				(
 					instrument: ("data" ++ ~numCh).asSymbol,
-					buf: ~buf, bus: ~bus, loop: 0,
+					buf: ~buf, bus: ~rawBus, loop: 0,
 					delta: ~buf.numFrames / 30,
+					startFrame: ~startFrame,
 					target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 				).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
 			}
@@ -340,6 +413,21 @@ PR(\dataIn).chuck(BP(\di), nil, (
 ));
 0 => BP(\di);
 )
+
+
+BP(\di).startFrame = (10/60 + 10) * 60 * 30;
+BP(\di).startFrame = 10 * 60 * 30;
+
+BP(\di).player.trace;
+BP(\di).fixer.trace;
+
+(5006.81 - 4962.45) / 60
+
+BP(\di).buf.getn(0, 10, _.postln);
+
+4962.45 + (10.5 * 60)
+
+(1000, 1002 .. 1012).do(s.sendMsg(\n_free, _))
 
 
 s.makeBundle(nil, {
@@ -409,3 +497,46 @@ BP(\stk).ymaxCtl.bus
 BP(\di).bus
 
 KrBusWatcher.newFrom(s).nodes
+
+
+// exploring new data file
+~sampleDir = thisProcess.nowExecutingPath.dirname.dirname +/+ "samples";
+
+b = Buffer.readAndQuery(s, ~sampleDir +/+ "vizdata/Affectations_KC1_Data.wav");
+
+SynthDef(\maxesmins, { |bufnum|
+	var i = Phasor.ar(0, 1, start: 0, end: b.numFrames + 100),
+		sig = BufRd.ar(b.numChannels, bufnum, i, loop: 0, interpolation: 1),  // no interp
+		min = RunningMin.ar(sig),
+		max = RunningMax.ar(sig),
+		sum = Integrator.ar(sig, coef: 1),  // 1 == no leak
+		done = i >= b.numFrames,
+		chanI = (0 .. (b.numChannels - 1));
+	Poll.ar(done, min, ["min ", chanI].flop.collect(_.join));
+	Poll.ar(done, max, ["max ", chanI].flop.collect(_.join));
+	Poll.ar(done, sum / b.numFrames, ["avg ", chanI].flop.collect(_.join));
+	FreeSelf.kr(done);
+}).add;
+
+a = Synth(\maxesmins, [bufnum: b]);
+
+var	chanI = (0 .. (b.numChannels - 1));
+["min ", chanI].flop.collect(_.join);
+
+"[min, max, avg]".postln;
+[0, 0, -0.995833, -0.995076, -0.995076, -0.994444, -0.988294, -0.989363, 0, 0, 7866.01, 34, 0.990799, 0.992708, 0.990799, 0, 0.966588, 0.176113, 7.64443, 1.65159, 6414.72, 12.3625, -0.209681, 0.304227, 0.0481094, -0.905037, 0.129889, -0.436496, 0.193188, 0.0412316].clump(10).flop.do(_.postln); ""
+
+// (time in sec.), (# markers), (XMin), (XMax), (XAvg), (YMin), (YMax), (YAvg), (VMax), (VAvg)
+[min, max, avg]
+[ 0, 7866.01, 6414.72 ]
+[ 0, 34, 12.3625 ]
+[ -0.995833, 0.990799, -0.209681 ]
+[ -0.995076, 0.992708, 0.304227 ]
+[ -0.995076, 0.990799, 0.0481094 ]
+[ -0.994444, 0, -0.905037 ]
+[ -0.988294, 0.966588, 0.129889 ]
+[ -0.989363, 0.176113, -0.436496 ]
+[ 0, 7.64443, 0.193188 ]
+[ 0, 1.65159, 0.0412316 ]
+
+b.free;
