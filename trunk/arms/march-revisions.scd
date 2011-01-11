@@ -1354,3 +1354,51 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, 
 BP(\bana).freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
 
 BP(\bana).event.lcrvbamt = 0.1;
+
+
+
+// test revised dataIn
+// so far, too dependent on velocity -- need other measures
+Fact(\dataIn) => BP(\di);
+
+BP(\di).startFrame = (9 * 60 + 30) * 30;
+
+BP(\di).startFrame = (10 * 60 + 6) * 30;
+
+\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
+\chuckIf.eval(PR(\armsChord), BP, \acDisp, nil, (
+	angleBus: BP(\di).bus.index + 1, // ??
+	rotSpeedBus: BP(\di).bus.index + 4
+));
+BP(\acDisp) => VC(\ac);
+0 => BP(\acDisp);
+
+p = BP(\acDisp);
+p.startAuto = p[\saveStartAuto] ? p[\startAuto];
+p.row = p[\saveRow] ? p[\row];
+p.chord = p[\saveChord] ? p[\chord];
+p.fullCh.removeAt(\diss1);
+p.fullCh.removeAt(\diss2);
+p.amp = -20.dbamp;
+
+BP(\di).playTestFile = true;
+
+Fact(\acTrig) => BP(\act);
+
+BP(#[di, act]).play(0);
+
+BP(#[di, act]).stop(0);
+
+BP.keys.do { |key|
+	if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+};
+
+// keep quiet! the naughty way
+s.sendMsg(\d_free, VC(\ac).v.nodes[0].defname);
+
+(
+var	p = BP(BP(\acDisp).lastSpawned);
+#[rotSpeed, angle, yxRatio].do { |key|
+	p[key].autoSynth.tryPerform(\trace);
+};
+)

@@ -272,7 +272,6 @@ PR(\dataIn).chuck(BP(\di), nil, (
 			Out.kr(outbus, data);
 		}).add;
 
-		// want to drop time and num markers
 		SynthDef("datafixer" ++ ~numCh, { |rawBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, bufnum|
 			var	sig = In.kr(rawBus, ~numCh),
 				maxSamps = roundUp(avgTime * SampleRate.ir),
@@ -310,37 +309,34 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
 		~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
 		defer(e {
-			~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
+			~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
 				.onClose_(e { ~closeWin.() });
-			// ~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
-			// 	.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
 			~uv = UserView(~win, 200@200)
-			.drawFunc_(e { |view|
-				var	data = ~latestData.copy,
-					velSize = data[8] * 2 + 3;  // max approx = 18
-				(5..7).do { |i| data[i] = data[i].neg };
-				// data.debug("data");
-				Pen.color_(~boundsColor)
-					.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100))/*.debug("rect")*/)
-					.color_(~velColor)
-					.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100))/*.debug("ovalctr")*/,
-						velSize, velSize));
-			});
+				.drawFunc_(e { |view|
+					var	data = ~latestData.copy,
+						velSize = data[8] * 2 + 3;  // max approx = 18
+					(5..7).do { |i| data[i] = data[i].neg };
+					Pen.color_(~boundsColor)
+						.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
+						.color_(~velColor)
+						.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100)),
+							velSize, velSize));
+				});
 			~win.startRow;
-			~tv = StaticText(~win, 100@30)
+			~tv = StaticText(~win, 200@30)
 				.font_(Font.default.copy.size_(14))
 				.align_(\right)
 				.background_(Color.white);
+			~win.startRow;
+			~vs = EZSlider(~win, 200@30, "velocity", ~dataSpecs[8]);
 			~win.recursiveResize.front;
 			
-//			KrBusWatcher.register(~bus);
 			KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
 			~upd = Updater(~bus, e { |obj, data|
-				var /*ms = ~ms,*/ tv = ~tv, uv = ~uv, ds = ~dataSpecs, mins, secs; //,
-					//self = currentEnvironment;
+				var tv = ~tv, uv = ~uv, vs = ~vs, ds = ~dataSpecs, mins, secs;
 				~latestData = data;
 				defer {
-					// ms.value = data.collect { |val, i| ds[i].unmap(val) };
+					vs.value = data[8];
 					uv.refresh;
 					mins = data[0] div: 60;
 					secs = (data[0] % 60).round;
@@ -415,7 +411,8 @@ PR(\dataIn).chuck(BP(\di), nil, (
 )
 
 
-BP(\di).startFrame = (10/60 + 10) * 60 * 30;
+BP(\di).startFrame = (10 * 60 + 10) * 30;
+BP(\di).startFrame = (9 * 60 + 30) * 30;
 BP(\di).startFrame = 10 * 60 * 30;
 
 BP(\di).player.trace;

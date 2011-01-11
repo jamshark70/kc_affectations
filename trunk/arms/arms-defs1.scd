@@ -657,22 +657,24 @@ make: { |name|
 
 // locomotive theme chords
 
-SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5|
-	ReplaceOut.kr(outbus,
-		In.kr(inbus, 1).linlin(0, 1, 0.1, 1.0)
+s.doWhenBooted {
+	SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5|
+		ReplaceOut.kr(outbus,
+			In.kr(inbus, 1).linlin(0, 1, 0.1, 1.0)
 			* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
 				timeScale: time, doneAction: 2)
-	);
-}).add;
+		);
+	}).add;
 
-SynthDef(\angleAuto, { |speedMul = 1, speedBus, outbus|
-	// leaky integrator is not leaky if coef == 1
-	ReplaceOut.kr(outbus, Integrator.kr(In.kr(speedBus, 1) * speedMul * ControlDur.ir, 1).wrap(0, 2pi));
-}).add;
+	SynthDef(\angleAuto, { |speedMul = 1, speedBus, outbus|
+		// leaky integrator is not leaky if coef == 1
+		ReplaceOut.kr(outbus, Integrator.kr(In.kr(speedBus, 1) * speedMul * ControlDur.ir, 1).wrap(0, 2pi));
+	}).add;
 
-SynthDef(\yxRatioAuto, { |inbus, outbus|
-	ReplaceOut.kr(outbus, In.kr(inbus, 1))
-}).add;
+	SynthDef(\yxRatioAuto, { |inbus, outbus|
+		ReplaceOut.kr(outbus, In.kr(inbus + #[2, 0], 1).reduce('/'))
+	}).add;
+};
 
 
 PR(\abstractProcess).clone {
@@ -708,16 +710,12 @@ PR(\abstractProcess).clone {
 		}, Pkey(\row))
 	}, 1);
 	~arpeg = \armsCh;
-	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc { ~maxRotSpeed }, 0.6, 4);
-// 	~gate = 0.2;
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~maxRotSpeed }), 0.6, 4);
 	~amp = -14.dbamp;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
 	~mod_ratio = 1;
-	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc { ~maxRotSpeed });
-// 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.2 + (0.8 * Pkey(\rotSpeed));
-
-//	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.4, 0.08);
+	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc({ ~maxRotSpeed }));
 
 	~durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
 	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
@@ -725,10 +723,7 @@ PR(\abstractProcess).clone {
 	});
 
 	~sustain = Pwhite(1.2, 2.0, inf) * 4 / (Pkey(\row) + 4);
-// 	~dur = max(0.1, Pkey(\rotSpeed)).reciprocal / 40;
-// 	~sustain = Pkey(\dur) * (3 - Pkey(\row));  // hmm... not quite
-	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc { ~maxRotSpeed }, 0.5, 1);
-// 	~attScale = max(0.1, Pkey(\rotSpeed)).reciprocal * 0.2;
+	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc({ ~maxRotSpeed }), 0.5, 1);
 	~decScale = Pkey(\attackTimeScale);
 
 	~maxRotSpeed = 1;
@@ -751,7 +746,7 @@ PR(\abstractProcess).clone {
 			~speedMul = GenericGlobalControl(\speedMul, nil, 12, #[0.1, 10, exp]);
 			~freeSpeedMul = true;
 		};
-		KrBusWatcher.newFrom(s).updateFreq = 8;
+		// KrBusWatcher.newFrom(s).updateFreq = 8;
 		~initChords.();
 		~makeStreamForKey.(\chordTime);
 	};
@@ -834,16 +829,13 @@ PR(\abstractProcess).clone {
 		}.flatten(1).sort { |a, b| a[0] < b[0] or: { a[0] == b[0] and: { a[1] < b[1] } } });
 	};
 
-	// TEMPORARY FOR RECORDING ONLY
 	~startAuto = {
 		var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85), upd;
 		~automationTime = time;  // communicate back
 		fork {
-			~rotSpeed.automate({
-				Line.kr(0, 1, time, doneAction: 2);
-				LFDNoise1.kr(Rand(0.8, 1.5)).range(1.8, 3.0)
-			},
-				[time: time],
+			~rotSpeed.automate(\rotSpeedAuto,
+				[time: time, inbus: BP(\di).bus.index + 8,
+					outbus: ~rotSpeed.bus, proportion: proportion],
 				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
 					.tryPerform(\fadergroup),
 				\addToHead);
@@ -851,10 +843,8 @@ PR(\abstractProcess).clone {
 			~angle.automate(\angleAuto,
 				[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 				~rotSpeed.autoSynth, \addAfter);
-			~yxRatio.automate({
-					EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
-				},
-				nil,
+			~yxRatio.automate(\yxRatioAuto,
+				[inbus: BP(\di).bus.index + 10, outbus: ~yxRatio.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			NodeWatcher.register(~rotSpeed.autoSynth);
 			upd = Updater(~rotSpeed.autoSynth, e { |obj, what|
@@ -867,6 +857,40 @@ PR(\abstractProcess).clone {
 			});
 		};
 	};
+
+	// // TEMPORARY FOR RECORDING ONLY
+	// ~startAuto = {
+	// 	var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85), upd;
+	// 	~automationTime = time;  // communicate back
+	// 	fork {
+	// 		~rotSpeed.automate({
+	// 			Line.kr(0, 1, time, doneAction: 2);
+	// 			LFDNoise1.kr(Rand(0.8, 1.5)).range(1.8, 3.0)
+	// 		},
+	// 			[time: time],
+	// 			~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
+	// 				.tryPerform(\fadergroup),
+	// 			\addToHead);
+	// 		s.sync;
+	// 		~angle.automate(\angleAuto,
+	// 			[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
+	// 			~rotSpeed.autoSynth, \addAfter);
+	// 		~yxRatio.automate({
+	// 				EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
+	// 			},
+	// 			nil,
+	// 			~rotSpeed.autoSynth, \addAfter);
+	// 		NodeWatcher.register(~rotSpeed.autoSynth);
+	// 		upd = Updater(~rotSpeed.autoSynth, e { |obj, what|
+	// 			if(what == \n_end) {
+	// 				upd.remove;
+	// 				if(BP.exists(~collIndex)) {
+	// 					BP(~collIndex).stop(0);
+	// 				};
+	// 			};
+	// 		});
+	// 	};
+	// };
 
 	// ~startAuto = {
 	// 	var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
@@ -960,13 +984,13 @@ Proto {
 		if(~bus.notNil) {
 			~bus = SharedBus.newFrom(~bus, \notMe);
 		} {
-			~bus = Bus.control(s, max(~numCh, ~outCh));
+			~bus = Bus.control(s, ~outCh);
 			// ~iMadeBus = true;
 		};
 		if(~recvBus.notNil) {
 			~recvBus = SharedBus.newFrom(~recvBus, \notMe);
 		} {
-			~recvBus = Bus.control(s, max(~numCh, ~outCh));
+			~recvBus = Bus.control(s, ~numCh);
 			// ~iMadeBus = true;
 		};
 		~userprep.();
@@ -988,18 +1012,25 @@ Proto {
 
 
 (keys: #[],
-filename: "arms/hands-1_data2.wav",
+// filename: "arms/hands-1_data2.wav",
+filename: "vizdata/Affectations_KC1_Data.wav",
 make: { |name|
 	BP(name).free;
 	PR(\dataIn).chuck(BP(name), nil, (
 		alwaysReset: true,
-		numCh: 5,
-		outCh: 8,
+		numCh: 10,
+		outCh: 14,
 		bus: ~bus,
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
 		playTestFile: false,
 		startFrame: 0,
+		vizRate: 5,
+		vizRate_: { |newRate = 10|
+			KrBusWatcher.newFrom(s).updateFreq = newRate;
+			currentEnvironment.put(\vizRate, newRate);
+			if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
+		},
 		userprep: {
 			~buf = Buffer.readAndQuery(s, ~path);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
@@ -1017,51 +1048,75 @@ make: { |name|
 				Out.kr(outbus, data);
 			}).add;
 	
-			SynthDef("datafixer" ++ ~numCh, { |recvBus, writeBus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10|
-				var	data = In.kr(recvBus, ~numCh),
-					avgSize = (avgTime * ControlRate.ir).trunc,
-					peak;
-			
-				data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, bufnum|
+				var	sig = In.kr(recvBus, ~numCh),
+					maxSamps = roundUp(avgTime * SampleRate.ir),
+					startTime = Index.kr(bufnum, 0);
+				sig = sig.copy;
+				sig[0] = sig[0] - startTime;
+				(sig.size-2 .. sig.size-1).do { |i|
+					sig[i] = Max.kr(K2A.ar(sig[i]), maxSamps);
+				};
+				sig = sig.add(sig[3] - sig[2])
+					.add((sig[4] - sig[2]) / sig[10])
+					.add(sig[6] - sig[5])
+					.add((sig[7] - sig[5]) / sig[12]);
 				FreeSelf.kr(stop);
-	
-				(~numCh-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
-				// w/o copy, 'data' has 3 more elements than In.kr created
-				// this causes In.kr to create 8 OutputProxies where 5 would be correct
-				data = data.copy.add(data[1] - data[0]).add(data[3] - data[2]);
-				data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
-				// peak = Peak.kr(data.last);
-				// peak.poll(stop, "peak was");
-				
-				ReplaceOut.kr(writeBus, data);
+				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6, 8, 9, 10, 11, 12, 13]]);
 			}).add;
-	
+
 			~visualizer.();
 			topEnvironment[\seq] !? {
 				topEnvironment[\seq].addDependant(currentEnvironment)
 			};
 		},
 		visualizer: {
+			~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
+			~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
 			defer(e {
-				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 200))
+				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
 					.onClose_(e { ~closeWin.() });
-				~ms = MultiSliderView(~win, Rect(0, 0, 100, 200))
-					.indexThumbSize_(100/~outCh - 4).gap_(4).value_(0 ! ~outCh);
-				~win.recursiveResize;
-				~win.bounds = ~win.bounds
-					.right_(Window.screenBounds.right)
-					.bottom_(Window.screenBounds.bottom);
-				~win.front;
+				~uv = UserView(~win, 200@200)
+					.drawFunc_(e { |view|
+						var	data = ~latestData.copy,
+							velSize = data[8] * 2 + 3;  // max approx = 18
+						(5..7).do { |i| data[i] = data[i].neg };
+						Pen.color_(~boundsColor)
+							.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
+							.color_(~velColor)
+							.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100)),
+								velSize, velSize));
+					});
+				~win.startRow;
+				~tv = StaticText(~win, 200@30)
+					.font_(Font.default.copy.size_(18))
+					.align_(\center)
+					.background_(Color.white);
+				~win.startRow;
+				~vs = EZSlider(~win, 200@30, "velocity", #[0, 8]);
+				~win.recursiveResize.front;
 				
-				KrBusWatcher.newFrom(s).updateFreq_(10);
+				KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
 				~upd = Updater(~bus, e { |obj, data|
-					var ms = ~ms;
-					defer { ms.value = data };
+					var tv = ~tv, uv = ~uv, vs = ~vs, ds = ~dataSpecs, mins, secs;
+					~latestData = data;
+					defer {
+						vs.value = data[8];
+						uv.refresh;
+						mins = data[0] div: 60;
+						secs = (data[0] % 60).round;
+						tv.string = "%%:%%".format(
+							if(mins < 10) { $0 } { "" },
+							mins,
+							if(secs < 10) { $0 } { "" },
+							secs
+						);
+					};
 				});
 			});
 		},
 		userfree: {
-			[~buf, ~maxVel, ~maxRatio].free;
+			[~buf, ~maxVel, ~maxRatio/*, ~recvBus, ~bus*/].free;
 			topEnvironment[\seq] !? {
 				topEnvironment[\seq].removeDependant(currentEnvironment)
 			};
@@ -1097,19 +1152,20 @@ make: { |name|
 			Pseq([
 				(
 					instrument: ("datafixer" ++ ~numCh).asSymbol,
-					recvBus: ~recvBus, writeBus: ~bus, avgTime: ~avgTime ? 0.2,
+					recvBus: ~recvBus, bus: ~bus, avgTime: ~avgTime ? 0.2,
 					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
+					bufnum: ~buf,
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
 				Pfuncn({
 					(
-						instrument: if(~playTestFile) { ("data" ++ ~numCh).asSymbol } { \rest },
-						buf: ~buf, loop: 0, bus: ~recvBus,
-						startFrame: ~startFrame,
+						instrument: ("data" ++ ~numCh).asSymbol,
+						buf: ~buf, bus: ~recvBus, loop: 0,
 						delta: ~buf.numFrames / 30,
+						startFrame: ~startFrame,
 						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
-				}, if(~playTestFile) { 1 } { inf })
+				})
 			], 1)
 		},
 		closeWin: {
