@@ -349,3 +349,82 @@ PR(\abstractProcess).clone {
 			// BP(\stack).attackTimeScale = Pif(Pkey(\length) <= 0.22, 0.1, 1);
 			// BP(\stack).decayTimeScale = Pif(Pkey(\length) <= 0.22, 0.7, 1);
 			// BP(\stack).mod_lev = Pif(Pkey(\length) <= 0.22, Pwhite(7.0, 12.0, inf), 2.5);
+
+
+
+/*
+	PR(\tlsAff).copy.putAll((
+		name: "A590-locomotive(short)",
+		segID: 590,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+					bpCmd: Library.at(\diparms),
+					loopCmd: (
+						id: \lc2,
+						autoSync: false,
+						cmds: [
+							{ BP(\acDisp).spawnChild(0); 0 },
+							funcCmd: topEnvironment[\trigParms],
+							\cmdSync
+						]
+					)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 600,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+*/
+
+
+	PR(\tlsAff).copy.putAll((
+		name: "A620-Stephen solo",
+		segID: 620,
+		initProcesses: {
+			\chuckIf.eval(PR(\armsSkidMel), BP, \ssol, nil, (
+				master: topEnvironment[\master],
+				glrvbmc: topEnvironment[\glrvbmc],
+				lcrvbmc: topEnvironment[\lcrvbmc],
+				event: (eventKey: \polySynthPlayer),
+				def: \airskid,
+				hiffreq: Pfunc({ |ev|
+					var deg = ev[\degree];
+					deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.1, 0.5, 0.4]) } ! 2).integrate);
+					Mode(ev[\mode]).cps(deg + 42)
+				}),
+				delta: Pwhite(1.5, 4.0, inf),
+				sustain: Pkey(\delta) * Pwhite(1.8, 2.5, inf),
+				amp: 0.45
+			));
+		},
+		unloadProcesses: { BP(\ssol).free },
+		seqPattern: {
+			Pn((
+				sequence: [
+					bpCmd: Library.at(\diparms),
+					loopCmd: (
+						id: \stsolo,
+						autoSync: false,
+						cmds: [
+							{ 2.do { BP(\ssol).triggerOneEvent(0) }; 0 },
+							funcCmd: topEnvironment[\trigParms],
+							\cmdSync
+						],
+						clearDoneSignal: { BP(\ssol).stop }
+					)
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 630,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+

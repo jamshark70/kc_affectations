@@ -526,12 +526,13 @@
 						0
 					},
 					loopCmd: (
+						bpCmdArray: [
+							[bpCmd: (name: \abs)],
+							[bpCmd: (name: \sid, prepareBP: { |bp| bp.highStream.reset })],
+						],
 						cmds: [
 							{	var delays = [0, rrand(0.5, 2.5)];
-								[delays, [
-									[bpCmd: (name: \abs)],
-									[bpCmd: (name: \sid, prepareBP: { |bp| bp.highStream.reset })],
-								].rotate(2.rand)].flop.flat.debug("add TLSeq")
+								[delays, ~bpCmdArray.rotate(2.rand)].flop.flat.debug("add TLSeq")
 							},
 							\cmdSync,
 							{ rrand(0.8, 2.5).debug("wait") }  // rrand(3.5, 6.0)
@@ -558,36 +559,6 @@
 			), 1)
 		}
 	)),
-
-/*
-	PR(\tlsAff).copy.putAll((
-		name: "A590-locomotive(short)",
-		segID: 590,
-		// initProcesses: {},
-		// unloadProcesses: {},
-		seqPattern: {
-			Pn((
-				sequence: [
-					bpCmd: Library.at(\diparms),
-					loopCmd: (
-						id: \lc2,
-						autoSync: false,
-						cmds: [
-							{ BP(\acDisp).spawnChild(0); 0 },
-							funcCmd: topEnvironment[\trigParms],
-							\cmdSync
-						]
-					)
-				],
-				// onStop: {},
-				dur: \trigger,  // or \sync
-				id: 600,  // trig id
-				init: Func(\nextThingTrig).v,
-				clear: Func(\clearNextTrig).v
-			), 1)
-		}
-	)),
-*/
 
 	PR(\tlsAff).copy.putAll((
 		name: "A600-manipulation",
@@ -623,8 +594,26 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "A610-locomotive(short)",
+		name: "A610-loco-prep",
 		segID: 610,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		seqPattern: {
+			Pn((
+				sequence: [
+				],
+				onStop: {},
+				dur: \trigger,  // or \sync
+				id: 620,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "A620-locomotive(short)",
+		segID: 620,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -642,51 +631,6 @@
 					)
 				],
 				onStop: {},
-				dur: \trigger,  // or \sync
-				id: 620,  // trig id
-				init: Func(\nextThingTrig).v,
-				clear: Func(\clearNextTrig).v
-			), 1)
-		}
-	)),
-
-	PR(\tlsAff).copy.putAll((
-		name: "A620-Stephen solo",
-		segID: 620,
-		initProcesses: {
-			\chuckIf.eval(PR(\armsSkidMel), BP, \ssol, nil, (
-				master: topEnvironment[\master],
-				glrvbmc: topEnvironment[\glrvbmc],
-				lcrvbmc: topEnvironment[\lcrvbmc],
-				event: (eventKey: \polySynthPlayer),
-				def: \airskid,
-				hiffreq: Pfunc({ |ev|
-					var deg = ev[\degree];
-					deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.1, 0.5, 0.4]) } ! 2).integrate);
-					Mode(ev[\mode]).cps(deg + 42)
-				}),
-				delta: Pwhite(1.5, 4.0, inf),
-				sustain: Pkey(\delta) * Pwhite(1.8, 2.5, inf),
-				amp: 0.45
-			));
-		},
-		unloadProcesses: { BP(\ssol).free },
-		seqPattern: {
-			Pn((
-				sequence: [
-					bpCmd: Library.at(\diparms),
-					loopCmd: (
-						id: \stsolo,
-						autoSync: false,
-						cmds: [
-							{ 2.do { BP(\ssol).triggerOneEvent(0) }; 0 },
-							funcCmd: topEnvironment[\trigParms],
-							\cmdSync
-						],
-						clearDoneSignal: { BP(\ssol).stop }
-					)
-				],
-				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 630,  // trig id
 				init: Func(\nextThingTrig).v,

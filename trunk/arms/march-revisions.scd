@@ -686,7 +686,7 @@ PR(\abstractProcess).clone {
 	~mode = \g0;
 	~freq = Pseq([
 		(
-			Pseries({ |ev| ~startDegStream.next(ev) }, 
+			Pseries({ |ev| ~startDegStream.next(ev) },
 				Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
 				.collect { |bot| ~bot = bot }
 			+.x
@@ -1015,13 +1015,13 @@ WrapInstr("osc2.fm2car").openFile;
 v.trace
 
 
-\freqlag, 0.8503937007874, 
-\mrlag, 0.283, 
-\mod_lev, 8.6327762313757, 
-\detune, 0.35433070866142, 
-\car_detune, 1.0044526098252, 
-\car_vs, 0.26771653543307, 
-\mod_vs, 0.5748031496063, 
+\freqlag, 0.8503937007874,
+\mrlag, 0.283,
+\mod_lev, 8.6327762313757,
+\detune, 0.35433070866142,
+\car_detune, 1.0044526098252,
+\car_vs, 0.26771653543307,
+\mod_vs, 0.5748031496063,
 
 
 Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
@@ -1086,7 +1086,7 @@ make: { |name|
 		~chorus = chan.playfx(Instr("busfx.chorus2band"), [0, 2, 0.010549016482685, 0.13459606816896, 0.0082830816073226, 0.0, 290.0, 0.5]);
 		chan.sendsSignalTo(~glrvbmc);
 	});
-	
+
 	v = MonoPortaVoicer(1, WrapInstr("osc2.slidefm2"), [car_buf: ~cb, mod_buf: ~mb ?? { ~cb }, basefreq: `440, keyscale: `0, freqlag: 0.8503937007874, mrlag: 0.283, mod_lev: 3.4531104925503 / 0.4, detune: 0.35433070866142, car_detune: 1.0044526098252, car_env: Env.adsr(0.01, 0.25, 0.6, 1.2), mod_env: Env.adsr(0.01, 0.04, 0.4, 1.5), car_vs: 0.26771653543307, mod_vs: 0.5748031496063], target: ~target);
 	// gc's?
 
@@ -1217,3 +1217,140 @@ u = Updater(BP(\sid), { |obj, what, mode|
 });
 
 
+// prep for post-manipulation blowout
+VC(\lm).free;
+Fact(\locomoLead) => VC(\lm);
+
+VC(\lm).v.nodes[0].initArgs
+VC(\lm).v.nodes[0].initArgDict.as(Event)
+
+// locoMel mainAmp == -12.5.dbamp
+
+p = VC(\lm).env.target.play(Pmono(VC(\lm).v.nodes[0].defname,
+	\freq, 59.midicps,
+	\car_buf, Prand(VC(\lm).env.cb, inf),
+	\mod_lev, Pexprand(7, 25, inf),
+	\mod_ratio, Pwhite(2, 7, inf),
+	// \dur, Pwrand(#[0.25, 0.5, 0.75], #[0.4, 0.4, 0.2], inf),
+	\dur, Pseq([
+		Pwhite(3, 7, 1) * 0.5,
+		Pseq([
+			Pn(0.25, { rrand(2, 5) }),
+			Pwrand(#[0.5, 0.75, 1.0, 1.5], #[0.3, 0.3, 0.3, 0.1], { rrand(1, 3) })
+		], inf)
+	], 1),
+	\gate, 0.8,
+	\mainAmp, -12.5.dbamp
+) <> VC(\lm).v.nodes[0].initArgDict.as(Event)/*, ()*/);
+
+p.stop
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \default, distFar: 100);
+	~alwaysReset = true;
+	~printStopMsg = false;
+	~vcKey = \lm;  // change to lcm later
+
+	~prep = {
+		if(~iMadeMixer = ~chan.isNil) {
+			~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master]/*, level: */);
+			#[glrvbmc, lcrvbmc].do { |key|
+				topEnvironment[key].tryPerform(\receivesSignalFrom, ~chan);
+			};
+		};
+		~event.proto = (
+			group: ~chan.synthgroup.nodeID,
+			out: ~chan.inbus.index,
+			outbus: ~chan.inbus.index
+		).putAll(topEnvironment[\rvbEvent].proto).putAll(VC(~vcKey).v.nodes[0].initArgDict);
+		~mainAmpCtl = GenericGlobalControl(\mainAmp, nil, -12.5.dbamp, \amp);
+	};
+	~freeCleanup = {
+		if(~iMadeMixer) { ~chan.free };
+		~mainAmpCtl.free
+	};
+
+	~freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
+	~car_buf = Plazy({ Prand(VC(~vcKey).env.cb, inf) });
+	~mod_lev = Pexprand(7, 25, inf);
+	~mod_ratio = Pwhite(2, 7, inf);
+	~dur = Pseq([
+		Pwhite(3, 7, 1) * 0.5,
+		Pseq([
+			Pn(0.25, { rrand(2, 5) }),
+			Pwrand(#[0.5, 0.75, 1.0, 1.5], #[0.3, 0.3, 0.3, 0.1], { rrand(1, 3) })
+		], inf)
+	], 1);
+	~gate = 0.8;
+	~mainAmp = -12.5.dbamp;
+
+	~reset = Func(\resetBPStreams);
+
+	~onePattern = { |fmul = 1|
+		Pmono(VC(~vcKey).v.nodes[0].defname,
+			\freq, ~freq * fmul,
+			\car_buf, ~car_buf,
+			\mod_lev, ~mod_lev,
+			\mod_ratio, ~mod_ratio,
+			\dur, ~dur,
+			\gate, ~gate,
+			\mainAmp, ~mainAmpCtl.asMap, // BPStream(\mainAmp)
+			\distance, Plazy({ Env(#[75, 5], [rrand(8.0, 12.0)]) }),
+			\pan, Pbrown(-1, 1, 0.25)
+		)
+		// Pmono(VC(~vcKey).v.nodes[0].defname,
+		// 	\freq, BPStream(\freq),
+		// 	\car_buf, BPStream(\car_buf),
+		// 	\mod_lev, BPStream(\mod_lev),
+		// 	\mod_ratio, BPStream(\mod_ratio),
+		// 	\dur, Pconst(tdur, BPStream(\dur)),
+		// 	\gate, BPStream(\gate),
+		// 	\mainAmp, ~mainAmpCtl.asMap // BPStream(\mainAmp)
+		// )
+	};
+
+	~asPattern = {
+		var	tdur;
+		~totalDurStream ?? { ~makeStreamForKey.(\totalDur) };
+		~thisTotalDur = tdur = ~totalDurStream.next;
+
+		Pspawner({ |sp|
+			var fmul = Pstutter(Pwhite(3, 5, inf), Pseries(1, 1, inf)).asStream;
+			loop {
+				sp.par(~onePattern.(fmul.next));
+				sp.wait(rrand(5, 10) * 0.25);
+			}
+		});
+
+		// Pseq([
+		// 	(	instrument: \ctlEnv,
+		// 		group: ~chan.synthgroup, addAction: \addBefore,
+		// 		out: ~mainAmpCtl.index, outbus: ~mainAmpCtl.index,
+		// 		time: tdur, delta: 0, connect: 0,
+		// 		env: Env(#[0.05, 1] * -12.5.dbamp, #[1], \exp)
+		// 	),
+		// 	Pfindur(tdur, 
+		// 		Ptpar([[0, (tdur * rrand(0.1, 0.25)).round(0.25)], ~onePattern.()].flop.flat)
+		// 	)
+		// ], 1)
+	};
+} => PR(\bAnacrusis);
+)
+
+BP(\bana).free;
+PR(\bAnacrusis) => BP(\bana);
+0 => BP(\bana);
+
+BP(\bana).totalDur = Pwhite(8, 12, inf);
+
+BP(\bana).totalDur = 20;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+
+BP(\bana).freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
+
+BP(\bana).event.lcrvbamt = 0.1;
