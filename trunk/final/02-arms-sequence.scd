@@ -7,9 +7,9 @@
 		name: "A500-axial",
 		segID: 500,
 		initProcesses: {
-			\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
+			\chuckIf.eval(Fact(\dataIn), BP, \di, nil/*, (
 				filename: "arms/hands-1_data2.wav" //"arms/NACL_Arms.wav"
-			));
+			)*/);
 			BP(\di).put(\update, { |obj, what|
 				if(what == \stop and: { obj === topEnvironment[\seq] }) {
 					BP(~collIndex).stop;
@@ -86,7 +86,9 @@
 			// var	sect = currentEnvironment;
 			Pn((
 				sequence: [
-					bpCmd: Library.at(\diparms),
+					bpCmd: Library.at(\diparms).copy.put(\prepareBP, { |bp|
+						bp.startFrame = (10 * 60 + 6) * 30;
+					}),
 					[
 						loopCmd: (
 							id: \lc1,
@@ -183,14 +185,22 @@
 		initProcesses: {
 			\chuckIf.eval(PR(\stacking), BP, \stack, nil, (
 				// TEST
-				root: Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
-					Pwhile1({ |inval, next| next < 40 },
-						Pseries(26, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf), inf)
-					),
-					Pwhile1({ |inval, next| next >= 21 },
-						Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
+				// root: Pstutter(Pwrand(#[1, 2], #[0.8, 0.2], inf), Pseq([
+				// 	Pwhile1({ |inval, next| next < 40 },
+				// 		Pseries(26, Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf), inf)
+				// 	),
+				// 	Pwhile1({ |inval, next| next >= 21 },
+				// 		Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
+				// 	)
+				// ]))
+				root: Pwhile1({ |inval, next| next >= 21 },
+					Pseries(
+						26,
+						Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf)
+							* sign(Pkey(\ymax) - Pkey(\prevymax)),
+						inf
 					)
-				]))
+				)
 			));
 			VC(\ac) => BP(\stack);
 			0 => BP(\stack);
@@ -207,7 +217,9 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: Library.at(\diparms),
+					bpCmd: Library.at(\diparms).copy.put(\prepareBP, { |bp|
+						bp.startFrame = (10 * 60 + 51) * 30;
+					}),
 					bpCmd: (id: \stack, name: \stack)
 				],
 				dur: \trigger,  // or \sync

@@ -1363,7 +1363,9 @@ Fact(\dataIn) => BP(\di);
 
 BP(\di).startFrame = (9 * 60 + 30) * 30;
 
-BP(\di).startFrame = (10 * 60 + 6) * 30;
+BP(\di).startFrame = (10 * 60 + 51) * 30;
+
+BP(\di).playTestFile = true;
 
 \chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
 \chuckIf.eval(PR(\armsChord), BP, \acDisp, nil, (
@@ -1379,11 +1381,11 @@ p.row = p[\saveRow] ? p[\row];
 p.chord = p[\saveChord] ? p[\chord];
 p.fullCh.removeAt(\diss1);
 p.fullCh.removeAt(\diss2);
-p.amp = -20.dbamp;
+p.amp = 0.dbamp;
 
 BP(\di).playTestFile = true;
 
-Fact(\acTrig) => BP(\act);
+Fact(\acTrig).chuck(BP(\act), nil, (delta: Pwhite(1.5, 4.5, inf)));
 
 BP(#[di, act]).play(0);
 
@@ -1402,3 +1404,73 @@ var	p = BP(BP(\acDisp).lastSpawned);
 	p[key].autoSynth.tryPerform(\trace);
 };
 )
+
+
+// tuning
+yxRatio -> row
+rotSpeed -> gate
+rotSpeed -> dur
+rotSpeed -> attScale
+
+BP(#[di, act]).play(0);
+
+BP(\act).stop(0);
+u.remove;
+u = Updater(BP(BP(\acDisp).lastSpawned), { |obj, what, more|
+	if(more == \stopped) {
+		u.remove;
+		BP(\di).stop;
+	}
+});
+
+u.remove;
+u = Updater(BP(\act), { |obj, what, more|
+	var	updater;
+	if(more == \stopped) {
+		"will stop BP('di') after BP(%) finishes\n".postf(BP(\acDisp).lastSpawned.asCompileString);
+		updater = Updater(BP(BP(\acDisp).lastSpawned), { |obj, what, more|
+			if(more == \stopped) {
+				updater.remove;
+				BP(\di).stop;
+			}
+		});
+	};
+});
+
+BP.keys.do { |key|
+	if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+};
+
+BP(\acDisp).maxRotSpeed = 1.35;
+BP(\acDisp).maxSpeedInput = 1;
+BP(\di).maxRatio.value = 1.5;
+
+BP(\acDisp).dur = Pwrand(#[0.5, 1], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
+	~durxfer.at(rs/*.debug("speed")*/)
+}); //.trace(prefix: "dur");
+
+// bias it to skip row 0 if yx is high enough
+BP(\acDisp).row = Plazy({
+	(Pwhite(0, 1, inf) + Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 1.99)).collect(_.asInteger)
+});
+
+BP(\acDisp).durxfer.times.sum
+BP(\acDisp).durxfer.postcs
+
+p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~typicalRotSpeed }), 3, 4));
+
+p.amp = -10.dbamp;
+
+p.typicalRotSpeed = 0.5;
+p.bpsKeys = p.bpsKeys.add(\typicalRotSpeed);
+
+p.maxRotSpeed
+p.listVars;
+
+BP.all.do(_.reset);
+
+TempoClock.default.dumpQueue;
+TempoClock.default.clear;
+
+u.remove;
+BP.all.free; VC.all.free;

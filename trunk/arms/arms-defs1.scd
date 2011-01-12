@@ -658,9 +658,9 @@ make: { |name|
 // locomotive theme chords
 
 s.doWhenBooted {
-	SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5|
+	SynthDef(\rotSpeedAuto, { |inbus, outbus, time = 1, proportion = 0.5, maxSpeedInput = 1, maxRotSpeed = 1|
 		ReplaceOut.kr(outbus,
-			In.kr(inbus, 1).linlin(0, 1, 0.1, 1.0)
+			In.kr(inbus, 1).linlin(0, maxSpeedInput, 0.1, maxRotSpeed, \minmax)
 			* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
 				timeScale: time, doneAction: 2)
 		);
@@ -672,7 +672,8 @@ s.doWhenBooted {
 	}).add;
 
 	SynthDef(\yxRatioAuto, { |inbus, outbus|
-		ReplaceOut.kr(outbus, In.kr(inbus + #[2, 0], 1).reduce('/'))
+		// ReplaceOut.kr(outbus, In.kr(inbus + #[2, 0], 1).reduce('/'))
+		ReplaceOut.kr(outbus, In.kr(inbus, 1))
 	}).add;
 };
 
@@ -691,9 +692,12 @@ PR(\abstractProcess).clone {
 
 	~chordTime = Pwhite(3.5, 8.0, inf);
 	// ~row = Pwhite(0, Pkey(\rotSpeed) * 2.99, inf).collect(_.asInteger);
-	~row = Plazy {
-		Pwhite(0, Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99), inf).collect(_.asInteger)
-	};
+	// ~row = Plazy({
+	// 	Pwhite(0, Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99), inf).collect(_.asInteger)
+	// });
+	~row = Plazy({
+		(Pwhite(0, 1, inf) + Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 1.99)).collect(_.asInteger)
+	});
 	~chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }; // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
 	~chordItem = Pfunc { |ev|
 		if(ev[\chord] != ~lastChord) {
@@ -710,7 +714,8 @@ PR(\abstractProcess).clone {
 		}, Pkey(\row))
 	}, 1);
 	~arpeg = \armsCh;
-	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~maxRotSpeed }), 0.6, 4);
+	// ~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~maxRotSpeed }), 0.6, 4);
+	~gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~typicalRotSpeed }), 3, 4);
 	~amp = -14.dbamp;
 
 	~mod_lev = Pkey(\distance).linlin(Pkey(\distNear), Pkey(\distFar), 2.5, 1);
@@ -718,7 +723,7 @@ PR(\abstractProcess).clone {
 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc({ ~maxRotSpeed }));
 
 	~durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
-	~dur = Pwrand(#[1, 2], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
+	~dur = Pwrand(#[0.5, 1], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
 		~durxfer.at(rs)
 	});
 
@@ -726,14 +731,19 @@ PR(\abstractProcess).clone {
 	~attScale = Pkey(\rotSpeed).linexp(0.1, Pfunc({ ~maxRotSpeed }), 0.5, 1);
 	~decScale = Pkey(\attackTimeScale);
 
-	~maxRotSpeed = 1;
+	~maxRotSpeed = 1.35;
 	~maxRotSpeed_ = { |speed = 1|
 		if(speed != ~maxRotSpeed) {
 			~maxRotSpeed = speed;
 			~rotSpeed.spec = [0, speed];  // asSpec is automatic
+			if(~rotSpeed.autoSynth.notNil) {
+				~rotSpeed.autoSynth.set(\maxRotSpeed, speed);
+			};
 		};
 		currentEnvironment
 	};
+	~maxSpeedInput = 1; // 7.75;
+	~typicalRotSpeed = 0.5;
 	~speedThresh = 0.15;
 	~angleBus = 3997;
 	~rotSpeedBus = 4000;
@@ -801,7 +811,7 @@ PR(\abstractProcess).clone {
 	};
 	~killOldProcTime = 1.4;
 
-	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, mod_ratio, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, speedMul, durxfer, amp];
+	~bpsKeys = #[radius, /*chord,*/ chordItem, row, midinote, gate, mod_lev, mod_ratio, dur, sustain, attScale, decScale, arpeg, maxRotSpeed, typicalRotSpeed, speedMul, durxfer, amp];
 
 	// dispatcher will override this to pull prepared fullCh dictionary,
 	// rather than rebuilding every time
@@ -834,8 +844,9 @@ PR(\abstractProcess).clone {
 		~automationTime = time;  // communicate back
 		fork {
 			~rotSpeed.automate(\rotSpeedAuto,
-				[time: time, inbus: BP(\di).bus.index + 8,
-					outbus: ~rotSpeed.bus, proportion: proportion],
+				[time: time, proportion: proportion,
+					maxSpeedInput: ~maxSpeedInput, maxRotSpeed: ~maxRotSpeed,
+					inbus: BP(\di).bus.index + 8, outbus: ~rotSpeed.bus],
 				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
 					.tryPerform(\fadergroup),
 				\addToHead);
@@ -844,7 +855,7 @@ PR(\abstractProcess).clone {
 				[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			~yxRatio.automate(\yxRatioAuto,
-				[inbus: BP(\di).bus.index + 10, outbus: ~yxRatio.bus],
+				[inbus: BP(\di).bus.index + 12, outbus: ~yxRatio.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			NodeWatcher.register(~rotSpeed.autoSynth);
 			upd = Updater(~rotSpeed.autoSynth, e { |obj, what|
@@ -941,12 +952,11 @@ PR(\abstractProcess).clone {
 	~asPattern = {
 		~arpegStream ?? { ~makeStreamForKey.(\arpeg) };
 		Pseq([
-			// workaround scel indent bug
-			'Pfuncn'.asClass.new { |ev|
+			Pfuncn({ |ev|
 				[~angle, ~rotSpeed, ~yxRatio].do(_.watch);
 				~startAuto.();
 				Event.silent(0)
-			},
+			}),
 			Pbind(
 				\angle, ~angle,
 				\rotSpeed, ~rotSpeed,
@@ -1025,6 +1035,11 @@ make: { |name|
 		path: topEnvironment[\sampleDir] +/+ ~filename,
 		playTestFile: false,
 		startFrame: 0,
+		startFrame_: { |startFrame = 0|
+			currentEnvironment.put(\startFrame, startFrame);
+			if(~data.notNil) { ~data.set(\startFrame, startFrame) };
+			currentEnvironment
+		},
 		vizRate: 5,
 		vizRate_: { |newRate = 10|
 			KrBusWatcher.newFrom(s).updateFreq = newRate;
@@ -1041,10 +1056,12 @@ make: { |name|
 					dur = fr / frameRate,
 					notLoop = loop <= 0,
 					end = fr + (10000 * notLoop),
-					stopper = Line.kr(0, 1, dur - (startFrame / frameRate), doneAction: notLoop*2),
-					ph = Phasor.kr(0, frameRate * ControlDur.ir, start: startFrame, end: end),
+					// stopper = Line.kr(0, 1, dur - (startFrame / frameRate), doneAction: notLoop*2),
+					startChanged = HPZ1.kr(startFrame).abs > 0,
+					ph = Phasor.kr(startChanged, frameRate * ControlDur.ir,
+						start: startFrame, end: end, resetPos: startFrame),
 					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
-		
+				FreeSelf.kr(notLoop * (end >= fr));
 				Out.kr(outbus, data);
 			}).add;
 	
@@ -1073,10 +1090,12 @@ make: { |name|
 		visualizer: {
 			~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
 			~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
+			~uvBackColor = ~uvBackColor ?? { Color.gray(0.9) };
 			defer(e {
 				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
 					.onClose_(e { ~closeWin.() });
 				~uv = UserView(~win, 200@200)
+					.background_(~uvBackColor)
 					.drawFunc_(e { |view|
 						var	data = ~latestData.copy,
 							velSize = data[8] * 2 + 3;  // max approx = 18
@@ -1104,7 +1123,7 @@ make: { |name|
 						vs.value = data[8];
 						uv.refresh;
 						mins = data[0] div: 60;
-						secs = (data[0] % 60).round;
+						secs = (data[0] % 60).trunc;
 						tv.string = "%%:%%".format(
 							if(mins < 10) { $0 } { "" },
 							mins,
@@ -1158,13 +1177,15 @@ make: { |name|
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
 				Pfuncn({
-					(
-						instrument: ("data" ++ ~numCh).asSymbol,
-						buf: ~buf, bus: ~recvBus, loop: 0,
-						delta: ~buf.numFrames / 30,
-						startFrame: ~startFrame,
-						target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
-					).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
+					if(~playTestFile) {
+						(
+							instrument: ("data" ++ ~numCh).asSymbol,
+							buf: ~buf, bus: ~recvBus, loop: 0,
+							delta: ~buf.numFrames / 30,
+							startFrame: ~startFrame,
+							target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
+						).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
+					} { Event.silent(5000) };
 				})
 			], 1)
 		},
@@ -1364,7 +1385,7 @@ PR(\abstractProcess).clone {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~ymaxCtl = GenericGlobalControl(
 			\ymax,
-			SharedBus.new(\control, BP(\di).bus.index + 3, 1, s),
+			SharedBus.new(\control, BP(\di).bus.index + 6, 1, s),
 			0, \bipolar
 		).watch;
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
@@ -1413,6 +1434,8 @@ PR(\abstractProcess).clone {
 		~restStream ?? { ~makeStreamForKey.(\rest) };
 		PR(\psetp2).copy.prep(
 			Pbind(
+				\ymax, ~ymaxCtl,
+				\prevymax, Pdelay(Pkey(\ymax)),
 				\root, BPStream(\root, envir: self),
 				\num, BPStream(\num, envir: self)
 			),
