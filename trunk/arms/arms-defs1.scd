@@ -1157,7 +1157,7 @@ make: { |name|
 		},
 		preparePlay: {
 			~bus.setn(0 ! ~outCh);
-			~recvBus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~numCh);
 			KrBusWatcher.register(~bus)
 		},
 		stopCleanup: {
@@ -1172,7 +1172,7 @@ make: { |name|
 			~fixer = nil;
 			~player = nil;
 			~bus.setn(0 ! ~outCh);
-			~recvBus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~numCh);
 		},
 		recvEventNotify: { |node, ev|
 			if(ev[\instrument].asString.contains("fixer")) {
@@ -1486,13 +1486,20 @@ PR(\abstractProcess).clone {
 PR(\abstractProcess).clone {
 	~event = (eventKey: \voicerNote);
 	~autoRun = false;
+	~dataKey = \di;
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
+		BP(~dataKey).addDependant(currentEnvironment);
+		BP(~dataKey).bus.addDependant(currentEnvironment);
 	};
 	~ctlGuiKeys = #[ampCtl];
 	~useGui = Func(\bpUseGui).v;
-	~freeCleanup = { ~ampCtl.free };
+	~freeCleanup = {
+		BP(~dataKey).removeDependant(BP(\ai).v);
+		BP(~dataKey).bus.removeDependant(BP(\ai).v);
+		~ampCtl.free
+	};
 
 	~gest = Pseq(#[inversion1, inversion2, lauraslide], inf);
 	~numEv = Pwhite(12, 19, inf);
@@ -1515,6 +1522,7 @@ PR(\abstractProcess).clone {
 			~slideNotes[parms[\gest]].value(parms) + 28)
 	};
 	~mode = \g;
+	~direction = Pfunc({ (~thisY > ~prevY).binaryValue * 2 - 1 }); // 1;
 	~ffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\freq]) * 4 };
 	~gate = Pkey(\freq).linlin(14, 54, 0.1, 0.8);
 // 	~mod_lev = 2.5;
@@ -1526,20 +1534,26 @@ PR(\abstractProcess).clone {
 
 	~slideNotes = (
 		lauraslide: Pseries(
-			{ rrand(-7, 0) },
-			Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+			{ |ev|
+				if(ev[\parms][\direction].isPositive)
+				{ rrand(-7, 0) } { rrand(7, 14) }
+			},
+			Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf) * Pfunc({ |ev| ev[\parms][\direction] }),
 			Pkey(\numEv).asStream
-		),
+		), // .trace(prefix: "ls: "),
 		inversion1: Pseries(
-			{ rrand(-3, 4) },
+			{ |ev|
+				if(ev[\parms][\direction].isPositive)
+				{ rrand(-3, 4) } { rrand(10, 17) }
+			},
 			Pstutter(
 				Pseq([Pfuncn({ |ev| (ev[\numEv] * 0.6).round }), 100], 1),
-				Pseq([1, -1], 1)
+				Pseq([1, -1], 1) * Pfunc({ |ev| ev[\parms][\direction] })
 			) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
 			Pkey(\numEv).asStream
-		),
+		), // .trace(prefix: "i1: "),
 		inversion2: Pseries(
-			{ rrand(0, 8) },
+			{ rrand(0, 8) },  // direction doesn't matter
 			Pstutter(
 				Pseries(1, 1, inf),
 				Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
@@ -1559,7 +1573,7 @@ PR(\abstractProcess).clone {
 	~makePhrase = { |parms(Event.new)|
 		block { |break|
 			var val;
-			#[gest, numEv, totalDur].do { |key|
+			#[gest, numEv, totalDur, direction].do { |key|
 				parms[key] ?? {
 					if((val = (key ++ "Stream").asSymbol.envirGet.next(parms)).isNil) {
 						break.(nil)
@@ -1587,7 +1601,7 @@ PR(\abstractProcess).clone {
 	};
 
 	~asPattern = {
-		#[gest, numEv, totalDur, rest].do { |key|
+		#[gest, numEv, totalDur, rest, direction].do { |key|
 			(key ++ "Stream").asSymbol.envirGet ?? {
 				~makeStreamForKey.(key)
 			};
@@ -1607,6 +1621,22 @@ PR(\abstractProcess).clone {
 			}
 		})
 	};
+
+	~update = { |obj, what, more|
+		switch(obj)
+		{ BP(~dataKey).bus } {  // not compiler optimized; put more common case first
+			~prevY = ~thisY;
+			~thisY = what[7];
+		}
+		{ BP(~dataKey) } {
+			if(more == \stopped) {
+				~prevY = -0.01;
+				~thisY = 0;
+			}
+		};
+	};
+	~prevY = -0.01;
+	~thisY = 0;
 } => PR(\armsInv);
 
 

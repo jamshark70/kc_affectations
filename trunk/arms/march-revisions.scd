@@ -1513,4 +1513,100 @@ f.dump
 f.close;
 
 // now use this to get y position --> pitch
+BP(\di).setStartTime(11, 7);
+
 BP(\di).latestData
+
+\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
+).putAll(Library.at(\rvbs)));
+\chuckIf.eval(PR(\armsInv), BP, \ai);
+BP(\ai).ampCtl.value = 0.115; // 0.045;
+VC(\sp) => BP(\ai);
+0 => BP(\ai);
+
+p = BP(\ai);
+p.autoRun = true;
+
+p.direction = -1;
+p.directionStream;
+
+p.slideNotes = (
+	lauraslide: Pseries(
+		{ |ev|
+			if(ev[\parms][\direction].isPositive)
+			{ rrand(-7, 0) } { rrand(7, 14) }
+		},
+		Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf) * Pfunc({ |ev| ev[\parms][\direction] }),
+		Pkey(\numEv).asStream
+	), // .trace(prefix: "ls: "),
+	inversion1: Pseries(
+		{ |ev|
+			if(ev[\parms][\direction].isPositive)
+			{ rrand(-3, 4) } { rrand(10, 17) }
+		},
+		Pstutter(
+			Pseq([Pfuncn({ |ev| (ev[\numEv] * 0.6).round }), 100], 1),
+			Pseq([1, -1], 1) * Pfunc({ |ev| ev[\parms][\direction] })
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	), // .trace(prefix: "i1: "),
+	inversion2: Pseries(
+		{ rrand(0, 8) },  // direction doesn't matter
+		Pstutter(
+			Pseries(1, 1, inf),
+			Pseq([1, -1], inf, 0 /*, { 2.rand }*/)
+		) * Pwrand(#[1, 2, 3], #[2, 2, 1].normalizeSum, inf),
+		Pkey(\numEv).asStream
+	)
+);
+
+p.update = { |obj, what, more|
+	switch(obj)
+	{ BP(\di) } {
+		if(more == \stopped) {
+			~prevY = -0.01;
+			~thisY = 0;
+		}
+	}
+	{ BP(\di).bus } {
+		~prevY = ~thisY;
+		~thisY = what[7];
+	}
+};
+
+BP(\di).addDependant(BP(\ai).v);
+BP(\di).bus.addDependant(BP(\ai).v);
+
+p.direction = Pfunc({ (~thisY > ~prevY).binaryValue * 2 - 1 });
+BP(\di).dependants
+
+BP(\di).removeDependant(BP(\ai).v);
+BP(\di).bus.removeDependant(BP(\ai).v);
+
+p.gest.postcs
+p.gest = Pseq(#[inversion1, lauraslide], inf);
+
+BP(\di).play; BP(\ai).play(DelayTimeSpec(0.1));
+
+BP.all.stop;
+~master.synth.trace
+
+BP(\ai).event.voicer.trace
+
+~master.inbus
+VC(\sp).env.target.inbus
+VC(\sp).env.target.synth.trace
+
+BP(\di).player.trace
+BP(\di).fixer.trace
+
+VC(\sp).env.target.controls[\level].stopWatching;
+VC(\sp).env.target.watch(\level)
+VC(\sp).env.target.stopWatching(\level)
+
+VC(\sp).env.target.controls[\level].bus.get(_.postln)
+VC(\sp).env.target.synth.set(\level, VC(\sp).env.target.controls[\level]);
+
+VC(\sp).env.target.level = 0.75;
