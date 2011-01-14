@@ -1359,7 +1359,7 @@ BP(\bana).event.lcrvbamt = 0.1;
 
 // test revised dataIn
 // so far, too dependent on velocity -- need other measures
-Fact(\dataIn) => BP(\di);
+Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true));
 
 BP(\di).startFrame = (9 * 60 + 30) * 30;
 
@@ -1474,3 +1474,43 @@ TempoClock.default.clear;
 
 u.remove;
 BP.all.free; VC.all.free;
+
+
+// armsInv
+BP(\di).setStartTime(11, 7);
+
+BP(\di).buf.get(0, { |d| z = d });
+(11*60+10) + z
+
+y = BP(\di).startFrame;
+
+f = SoundFile.openRead(BP(\di).buf.path);
+f.isOpen
+
+f.seek(y);
+f.readData(d = FloatArray.newClear(10));
+
+f.seek(10, origin: 1);
+f.seek(-1, origin: 1);
+
+f.readData(d = FloatArray.newClear(10 * 30 * 30));
+
+d.size
+
+e = d.as(Array);
+e = e.clump(10).flop;
+e[8].size
+e[8].plot;
+
+e[9].plot;
+
+e[4].plot;
+
+e[[2, 4, 3]].flop.flat.plot(numChannels: 3, minval: -1, maxval: 1);
+e[[5, 7, 6]].flop.flat.plot(numChannels: 3, minval: -1, maxval: 1);
+
+f.dump
+f.close;
+
+// now use this to get y position --> pitch
+BP(\di).latestData

@@ -1024,6 +1024,7 @@ Proto {
 (keys: #[],
 // filename: "arms/hands-1_data2.wav",
 filename: "vizdata/Affectations_KC1_Data.wav",
+playTestFile: false,
 make: { |name|
 	BP(name).free;
 	PR(\dataIn).chuck(BP(name), nil, (
@@ -1033,12 +1034,19 @@ make: { |name|
 		bus: ~bus,
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
-		playTestFile: false,
+		playTestFile: ~playTestFile,
 		startFrame: 0,
 		startFrame_: { |startFrame = 0|
 			currentEnvironment.put(\startFrame, startFrame);
-			if(~data.notNil) { ~data.set(\startFrame, startFrame) };
+			if(~player.notNil) { ~player.set(\startFrame, startFrame) };
 			currentEnvironment
+		},
+		setStartTime: { |min(0), sec(0)|
+			~startFrame_.((min*60 + sec) * 30);
+		},
+		startTime: {
+			var	t = ~startFrame / 30;
+			[t div: 60, t % 60]
 		},
 		vizRate: 5,
 		vizRate_: { |newRate = 10|
@@ -1083,6 +1091,26 @@ make: { |name|
 			}).add;
 
 			~visualizer.();
+			~upd = Updater(~bus, e { |obj, data|
+				var tv, uv, vs, ds, mins, secs;
+				~latestData = data;
+				~win !? {
+					tv = ~tv; uv = ~uv; vs = ~vs; ds = ~dataSpecs;
+					defer {
+						vs.value = data[8];
+						uv.refresh;
+						mins = data[0] div: 60;
+						secs = (data[0] % 60).trunc;
+						tv.string = "%%:%%".format(
+							if(mins < 10) { $0 } { "" },
+							mins,
+							if(secs < 10) { $0 } { "" },
+							secs
+						);
+					};
+				};
+			});
+
 			topEnvironment[\seq] !? {
 				topEnvironment[\seq].addDependant(currentEnvironment)
 			};
@@ -1116,25 +1144,11 @@ make: { |name|
 				~win.recursiveResize.front;
 				
 				KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
-				~upd = Updater(~bus, e { |obj, data|
-					var tv = ~tv, uv = ~uv, vs = ~vs, ds = ~dataSpecs, mins, secs;
-					~latestData = data;
-					defer {
-						vs.value = data[8];
-						uv.refresh;
-						mins = data[0] div: 60;
-						secs = (data[0] % 60).trunc;
-						tv.string = "%%:%%".format(
-							if(mins < 10) { $0 } { "" },
-							mins,
-							if(secs < 10) { $0 } { "" },
-							secs
-						);
-					};
-				});
 			});
 		},
 		userfree: {
+			KrBusWatcher.unregister(~bus);
+			~upd.remove;
 			[~buf, ~maxVel, ~maxRatio/*, ~recvBus, ~bus*/].free;
 			topEnvironment[\seq] !? {
 				topEnvironment[\seq].removeDependant(currentEnvironment)
@@ -1193,8 +1207,7 @@ make: { |name|
 			var	win = ~win;
 			win !? {
 				defer(e { win.onClose_(nil).close });
-				KrBusWatcher.unregister(~bus);
-				~upd.remove;
+				~win = nil;
 			};
 		}
 	));

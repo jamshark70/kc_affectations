@@ -6,6 +6,21 @@
 * Schedules
 
 
+* January open studio
+** Interaction
+*** The axial melody and variations;
+    One or two of the swipes -- maybe up + down or left + right, so the player could get a sequence of notes by moving back and forth vertically or horizontally.
+*** Locomotive arpeggios;
+    Circle or wave.
+*** Various types of chordal material (musical gestures are more distinct);
+    Swiping on the axis that is not used for #1.
+    use directional marker (avg) data for pitch direction
+*** Bass support that would work with #2 or #3;
+    Push.
+*** A faster, kind of bouncy tune in a bell like sound.
+    Jump.
+
+
 * For March shows
 ** Management [1/1]
 *** DONE Tech deadlines with Lorne
@@ -89,6 +104,10 @@
 ***** Rhythm?
 ***** As she leaves, push sounds into distance
 *** TODO Head [0/2] <2010-12-23 Thu>
+**** Notes
+***** Some dips in continuous data
+***** 24:20 - moving around
+***** 24:40 - low to ground
 **** TODO Face: Less squeaky
 **** TODO New material for slower movements toward end
 *** TODO Torso [0/1] <2010-12-26 Sun>
@@ -122,6 +141,9 @@
 *** Other CC data
 *** Note data per instrument
 
+** Data from Lorne [0/1]
+*** TODO Possible to get average position weighted by velocity?
+    E.g., late head section (sparkles)
 
 * Cue list
   Segments are in 3rd-level headings (***)
