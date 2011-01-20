@@ -17,8 +17,14 @@
     use directional marker (avg) data for pitch direction
 *** Bass support that would work with #2 or #3;
     Push.
+    Process isn't good for on-the-fly reset
+    Triggers while it's already playing will be dropped
 *** A faster, kind of bouncy tune in a bell like sound.
     Jump.
+** To-dos [2/3]
+*** DONE Bus index for continuous data
+*** DONE IP for sending "midi"
+*** TODO Add vizdata wrapper to 5 procs
 
 
 * For March shows
@@ -141,8 +147,8 @@
 *** Other CC data
 *** Note data per instrument
 
-** Data from Lorne [0/1]
-*** TODO Possible to get average position weighted by velocity?
+** Data from Lorne [1/1]
+*** DONE Possible to get average position weighted by velocity?
     E.g., late head section (sparkles)
 
 * Cue list

@@ -774,7 +774,7 @@ Fact(\armsmelVC).chuck(VC(\bmel), nil, (
 ));
 VC(\bmel).v.setArgDefaults([ffreq: 12258]);
 
-TempoClock.tempo = 84/60;
+TempoClock.tempo = 96/60;
 
 BP(\bmel).free;
 PR(\bellMel) => BP(\bmel);
@@ -859,6 +859,12 @@ BP(\bmel).ffreq = Pnsym1(Pkey(\wtKey), (
 ));
 
 BP(\bmel).rq = Pif(Pbinop('==', Pkey(\wtKey), \wt), 1, Pexprand(0.25, 0.9, inf));
+
+
+// try on-the-fly reset
+BP(\bmel).play(0);
+
+BP(\bmel).preparePlay;
 
 
 // if I'm going to do this, I need lags on most of the args
@@ -1331,7 +1337,7 @@ PR(\abstractProcess).clone {
 		// 		time: tdur, delta: 0, connect: 0,
 		// 		env: Env(#[0.05, 1] * -12.5.dbamp, #[1], \exp)
 		// 	),
-		// 	Pfindur(tdur, 
+		// 	Pfindur(tdur,
 		// 		Ptpar([[0, (tdur * rrand(0.1, 0.25)).round(0.25)], ~onePattern.()].flop.flat)
 		// 	)
 		// ], 1)
@@ -1359,7 +1365,7 @@ BP(\bana).event.lcrvbamt = 0.1;
 
 // test revised dataIn
 // so far, too dependent on velocity -- need other measures
-Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true));
+Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true, readFrame: 138));
 
 BP(\di).startFrame = (9 * 60 + 30) * 30;
 
@@ -1386,6 +1392,9 @@ p.amp = 0.dbamp;
 BP(\di).playTestFile = true;
 
 Fact(\acTrig).chuck(BP(\act), nil, (delta: Pwhite(1.5, 4.5, inf)));
+
+BP(\di).setStartTime(10, 0);
+BP(\di).startTime;
 
 BP(#[di, act]).play(0);
 
@@ -1441,10 +1450,15 @@ BP.keys.do { |key|
 	if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
 };
 
+BP(#[di, act]).play(0);
+
 BP(\acDisp).maxRotSpeed = 1.35;
 BP(\acDisp).maxSpeedInput = 1;
+BP(\acDisp).typicalRotSpeed = 1.35;
 BP(\di).maxRatio.value = 1.5;
 
+BP(\acDisp).durxfer.postcs
+BP(\acDisp).durxfer = Env(#[1.0, 0.5, 0.15], #[0.45, 0.9], \lin);
 BP(\acDisp).dur = Pwrand(#[0.5, 1], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
 	~durxfer.at(rs/*.debug("speed")*/)
 }); //.trace(prefix: "dur");
@@ -1457,7 +1471,7 @@ BP(\acDisp).row = Plazy({
 BP(\acDisp).durxfer.times.sum
 BP(\acDisp).durxfer.postcs
 
-p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~typicalRotSpeed }), 3, 4));
+p.gate = Pexprand(0.05, 0.2, inf) * Pkey(\rotSpeed).linlin(0.1, Pfunc({ ~typicalRotSpeed }), 3, 4);
 
 p.amp = -10.dbamp;
 
@@ -1477,7 +1491,7 @@ BP.all.free; VC.all.free;
 
 
 // armsInv
-BP(\di).setStartTime(11, 7);
+BP(\di).setStartTime(10, 48);
 
 BP(\di).buf.get(0, { |d| z = d });
 (11*60+10) + z
@@ -1493,12 +1507,13 @@ f.readData(d = FloatArray.newClear(10));
 f.seek(10, origin: 1);
 f.seek(-1, origin: 1);
 
-f.readData(d = FloatArray.newClear(10 * 30 * 30));
+f.seek(BP(\di).startFrame);
+f.readData(d = FloatArray.newClear(10 * 30 * 30));  // 10 samp/frame * 30 sec * 30 frames/sec
 
 d.size
 
 e = d.as(Array);
-e = e.clump(10).flop;
+e = e.clump(12).flop;
 e[8].size
 e[8].plot;
 
@@ -1511,6 +1526,8 @@ e[[5, 7, 6]].flop.flat.plot(numChannels: 3, minval: -1, maxval: 1);
 
 f.dump
 f.close;
+
+e[1].detectIndex(_ > 0)
 
 // now use this to get y position --> pitch
 BP(\di).setStartTime(11, 7);
@@ -1591,22 +1608,353 @@ p.gest = Pseq(#[inversion1, lauraslide], inf);
 BP(\di).play; BP(\ai).play(DelayTimeSpec(0.1));
 
 BP.all.stop;
-~master.synth.trace
 
-BP(\ai).event.voicer.trace
 
-~master.inbus
-VC(\sp).env.target.inbus
-VC(\sp).env.target.synth.trace
+// later partnering
+BP(\di).setStartTime(12, 2);
 
-BP(\di).player.trace
-BP(\di).fixer.trace
+(
+\chuckIf.eval(Fact(\armsmelVC), VC, \bmel, nil, (
+	env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	isMono: false
+));
+VC(\bmel).v.setArgDefaults([ffreq: 12258]);
 
-VC(\sp).env.target.controls[\level].stopWatching;
-VC(\sp).env.target.watch(\level)
-VC(\sp).env.target.stopWatching(\level)
+\chuckIf.eval(Fact(\bmelBP), BP, \bmel);
+0 => BP(\bmel);
 
-VC(\sp).env.target.controls[\level].bus.get(_.postln)
-VC(\sp).env.target.synth.set(\level, VC(\sp).env.target.controls[\level]);
+topEnvironment[\clock96] ?? {
+	topEnvironment[\clock96] = TempoClock(96/60);
+};
+topEnvironment[\clock96] => BP(\bmel);
 
-VC(\sp).env.target.level = 0.75;
+BP(\bmel).dur = BP(\bmel).simpleDur;
+BP(\bmel).ampMul.value = 0.5;
+BP(\bmel).numDescents = Pwhite(3, 5, inf);
+BP(\bmel).numDecays = Pwhite(4, 7, inf);
+BP(\bmel).distance = BP(\bmel).origDistance;
+)
+
+a.trace
+
+
+a.set(\t_trig, 1);
+
+(
+fork {
+	var	c = Condition.new, u, start;
+	BP(\di).play;
+	0.01.wait;
+	NodeWatcher.register(BP(\di).v[\fixer]);
+	u = Updater(BP(\di).v[\fixer], { |obj, what|
+		if(what == \n_go) { u.remove; c.unhang };
+	});
+	c.hang;
+	a = { |inbus, t_trig = 0|
+		var	vel = In.kr(inbus-2, 1),
+			vdecay = Decay.kr(vel, 0.5),
+			vcheck = vel > 0.6;  // this is OK to trigger melody but I'm curious...
+		var	area = In.kr(inbus, 1).abs + In.kr(inbus + 2, 1).abs,
+			slope = RunningSum.kr(Slope.kr(area), 60) / 60,
+			acheck = (slope > 0.5) * (area > 1.7);
+		// Poll.kr(/*t_trig*/ Impulse.kr(10), [area, slope]);
+		SendReply.kr(/*vcheck **/ acheck, "/vel1trig", [area, slope]);
+		0
+	}.play(BP(\di).fixer, addAction: \addAfter, args: [inbus: BP(\di).bus.index + 10]);
+
+	o.remove;
+	start = Main.elapsedTime;
+	o = OSCresponderNode(s.addr, '/vel1trig', { |t, r, m|
+		[t - start, m].postln;
+		if(BP(\bmel).isPlaying.not) { BP(\bmel).play };
+	}).add;
+};
+)
+
+a.free; BP(\di).stop; o.remove;
+
+a.trace;
+
+60/11
+
+
+
+// look at perimeter for L's solo
+BP(\di).visualizer = {
+	~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
+	~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
+	~uvBackColor = ~uvBackColor ?? { Color.gray(0.9) };
+	~velSpec = ~velSpec ?? { #[3, 18, -4].asSpec };
+	defer(e {
+		~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
+		.onClose_(e { ~closeWin.() });
+		~uv = UserView(~win, 200@200)
+		.background_(~uvBackColor)
+		.drawFunc_(e { |view|
+			var	data = ~latestData.copy,
+			// velSize = data[8] * 2 + 3;  // max approx = 18
+			velSize = ~velSpec.map(data[8]);
+			(5..7).do { |i| data[i] = data[i].neg };
+			Pen.color_(~boundsColor)
+			.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
+			.color_(~velColor)
+			.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100)),
+				velSize, velSize));
+		});
+		~win.startRow;
+		~tv = StaticText(~win, 200@30)
+		.font_(Font.default.copy.size_(18))
+		.align_(\center)
+		.background_(Color.white);
+		~win.startRow;
+		~vs = EZSlider(~win, 200@30, "velocity", #[0, 8]);
+		~win.startRow;
+		~ps = EZSlider(~win, 200@30, "perimeter", #[0, 4]);
+		~win.startRow;
+		~yx = EZSlider(~win, 200@30, "y/x", #[0.01, 100, \exp]);
+		~win.recursiveResize.front;
+
+		KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
+	});
+};
+
+BP(\di).upd.remove;
+BP(\di).use {
+	~upd = Updater(~bus, e { |obj, data|
+		var tv, uv, vs, ds, ps, yx, mins, secs;
+		~latestData = data;
+		~win !? {
+			tv = ~tv; uv = ~uv; vs = ~vs; ps = ~ps; yx = ~yx; ds = ~dataSpecs;
+			defer {
+				vs.value = data[8];
+				ps.value = data[10] + data[12];
+				yx.value = (data[12] / max(data[10], 0.01)).abs;
+				uv.refresh;
+				mins = data[0] div: 60;
+				secs = (data[0] % 60).trunc;
+				tv.string = "%%:%%".format(
+					if(mins < 10) { $0 } { "" },
+					mins,
+					if(secs < 10) { $0 } { "" },
+					secs
+				);
+			};
+		};
+	});
+};
+
+BP(\di).visualizer;
+
+BP(\di).setStartTime(14, 57);  // L's solo
+BP(\di).setStartTime(15, 23);
+
+(
+fork {
+	var	c = Condition.new, u, start;
+	BP(\di).play;
+	0.01.wait;
+	NodeWatcher.register(BP(\di).v[\fixer]);
+	u = Updater(BP(\di).v[\fixer], { |obj, what|
+		switch(what)
+			{ \n_go } { c.unhang }
+			{ \n_end } { u.remove; a.free };
+	});
+	c.hang;
+	// // not bad as a bass trigger
+	// a = { |inbus, t_trig = 0|
+	// 	var	yx = (In.kr(inbus + 2, 1) / max(0.01, In.kr(inbus, 1))).abs,
+	// 		trig = yx < 1.2,
+	// 		timer = Timer.kr(trig),
+	// 		thintrig = trig * (timer > 1.5),
+	// 		thintimer = Timer.kr(thintrig);
+	// 	Poll.kr(thintrig, [thintimer, yx]);
+	// 	0
+	// }.play(BP(\di).fixer, addAction: \addAfter, args: [inbus: BP(\di).bus.index + 10]);
+
+	a = ~master.play({ |inbus|
+		var	vel = In.kr(inbus, 1),
+			avgSamps = 0.15 * ControlRate.ir;
+		vel = RunningSum.kr(vel, avgSamps) / avgSamps;
+		vel = #[0, 18, -4].asSpec.map(vel);
+		SinOsc.ar(vel.linexp(0, 18, 100, 600)) ! 2
+	}, [inbus: BP(\di).bus.index + 8]);
+
+	// o.remove;
+	// start = Main.elapsedTime;
+	// o = OSCresponderNode(s.addr, '/vel1trig', { |t, r, m|
+	// 	[t - start, m].postln;
+	// 	if(BP(\bmel).isPlaying.not) { BP(\bmel).play };
+	// }).add;
+};
+)
+
+a.free; BP(\di).stop; // o.remove;
+
+s.sendMsg(\n_free, 1027);
+
+
+// for laura's solo: bouncy chords
+// Env.perc is too sharp
+\chuckIf.eval(Fact(\shimmerpad), VC, \sp2, nil, (
+	env: {
+		var t = NamedControl.kr(\sustain, 0.1);
+		Env.perc(0.01, t, curve: -1.2) // Env(#[0, 1, 0.4, 0], [] * t)
+	},
+	fenv: {
+		var t = NamedControl.kr(\sustain, 0.1);
+		Env(#[0.25, 1, 0.25], [0.01, t], \exp)
+	},
+	bufmod: { NamedControl.kr(\bufmod, 0) }
+).putAll(Library.at(\rvbs)));
+
+VC(\sp2).v.globalControls.do { |gc| VC(\sp2).v.unmapGlobal(gc.name) };
+
+TempoClock.tempo = 96/60;
+
+p = Pbind(
+	\voicer, VC(\sp2).v,
+	\freq, (Pwhite(35, 42, inf) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 3], 3), 3)).clump(3),
+	\mode, \g,
+	\dur, Pseq([0.5, Pn(0.25, { rrand(0, 3) })], inf),
+	\length, Pkey(\dur) * 16,
+	\bufmod, Pwhite(0, 6.99, inf),
+	\gate, 0.4,
+	\attackTimeScale, 0.1,
+	\decayTimeScale, 0.1,
+	\ffreq, Pexprand(900, 6000, inf),
+	\rq, 0.5 - Pexprand(0.01, 0.45, inf)
+).play(protoEvent: ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto));
+
+p.stop;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto;
+	};
+
+	~freq = (Pwhite(35, 42, inf) -.x Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 3], 3), 3)).clump(3);
+	~mode = \g;
+	~dur = Pseq([0.5, Pn(0.25, { rrand(0, 3) })], inf);
+	~length = Pkey(\dur) * 16;
+	~bufmod = Pwhite(0, 6.99, inf);
+	~gate = 0.4;
+	~attackTimeScale = 0.1;
+	~decayTimeScale = 0.1;
+	~ffreq = Pexprand(900, 6000, inf);
+	~rq = 0.5 - Pexprand(0.01, 0.45, inf);
+	~distance = 5;
+	~pan = 0;
+
+	~asPattern = {
+		Pbind(
+			\freq, BPStream(\freq),
+			\mode, BPStream(\mode),
+			\dur, BPStream(\dur),
+			\length, BPStream(\length),
+			\sustain, Pkey(\length) / Ptempo(),
+			\bufmod, BPStream(\bufmod),
+			\gate, BPStream(\gate),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\distance, BPStream(\distance),
+			\pan, BPStream(\pan),
+			\ffreq, BPStream(\ffreq),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\armsFastCh);
+)
+
+BP(\afc).free;
+PR(\armsFastCh) => BP(\afc);
+VC(\sp2) => BP(\afc);
+1 => BP(\afc);
+
+p = BP(\afc);
+
+p.attackTimeScale = 1;
+p.decayTimeScale = 1;
+p.length = Pkey(\dur);
+
+p.ffreq = Pwhite(1200, 12000, inf);
+p.ffreq = Pif(0.15.asPattern.coin, Pwhite(900, 1400, inf), Pwhite(2400, 12000, inf));
+p.rq = Pif(0.15.asPattern.coin, Pwhite(0.05, 0.15, inf), Pwhite(0.5, 0.9, inf));
+
+p.top = \patRejectLastN.eval(Pwhite(32, 47, inf), 4);
+p.intervals = Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 3].normalizeSum, 3), 3);
+p.freq = Plazy({ (BPStream(\top) -.x BPStream(\intervals, resetSource: true)).clump(3) });
+
+p.dur = Pwrand([
+	Pseq([Pn(0.25, { rrand(0, 3) }), 0.5], { rrand(3, 5) }),
+	Pseq(#[0.75, 0.5], { rrand(3, 5) }, { 2.rand })
+], #[0.8, 0.2], inf);
+
+p.length = min(Pkey(\dur) * 0.9, 0.5);
+
+p.distance = 20;
+p.distance = 5;
+
+p.pan = Pwhite(-0.8, 0.8, inf) + Pn(Pshuf(#[-0.2, 0, 0.2], 1).clump(3), inf);
+
+p.pan = -1;
+
+p.startDeg = Pwhite(39, 50, inf);
+p.numDescents = Pwhite(3, 6, inf);
+p.scaleLen = Pwhite(3, 5, inf);
+p.numDecays = Pif(0.2.asPattern.coin, Pwhite(3, 7, inf), 0);
+
+p.top = Pseq([
+		(
+			Pseries({ |ev| ~startDegStream.next(ev) }, 
+				Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+				.collect { |bot| if(bot >= 28) { ~bot = bot } { nil } }
+			+.x
+			Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+				.collect { |scale| ~scale = scale }
+		)
+		+.x
+		Pif(
+			Pfunc({ ~scale < (~scaleSize - 1) }),
+			Pn(0, 1),
+			Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+		),
+		Plazy({ |ev|
+			var	num = ~numDecaysStream.next(ev);
+			~decay = num;
+			(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 2.rand)
+		})
+	], inf);
+
+BP(\di).setStartTime(14, 57);  // L's solo
+
+// really, half-perimeter
+p.perimeterCtl = GenericGlobalControl(\perim, nil, 0, #[0, 4]);
+p.v[\freeCleanup] = { ~perimeterCtl.free };
+
+p.perimeterCtl.automate({ |inbus|
+	In.kr(inbus, 1).abs + In.kr(inbus + 2, 1).abs
+}, [inbus: BP(\di).busIndex(\xspan)], p.event.voicer.bus.asMixer.fadergroup, \addToHead);
+
+p.perimeterCtl.watch;
+p.perimeterCtl.gui;
+
+p.perimeterCtl.stopAuto;
+p.perimeterCtl.stopWatching;
+
+BP(\di).fixer.trace;
+
+p.distance = p.perimeterCtl.asPattern.linlin(0.4, 1.6, 20, 5);
+
+BP(#[di, afc]).play;
+
+BP(#[di, afc]).stop;
+
+// pitch contour from height

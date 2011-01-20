@@ -6,7 +6,7 @@ Dialog.getPaths { |paths| p = paths[0].postcs };
 // then cursor on open-paren and ctrl-alt-x
 (
 var f, sf;
-var	width = 10;
+var	width = 12;
 protect {
 	var	l; //, l2;
 	var write = Routine { |row|
