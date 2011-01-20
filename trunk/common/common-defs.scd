@@ -720,9 +720,11 @@ Proto {
 
 	~preparePlay = {
 		~node ?? { ~node = Synth(~message, [bus: ~bus, replyID: ~reply]) };
+		~userPreparePlay.(~node);
 	};
 	~stopCleanup = {
-		~node !? { ~node.free };
+		~userStopCleanup.(~node);
+		~node !? { ~node.free; ~node = nil };
 	};
 
 	~asPattern = {

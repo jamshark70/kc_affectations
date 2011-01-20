@@ -530,6 +530,16 @@ makeTempAmps: {
 randomizeAmps: { |amps|
 	amps + ({ 0.12.rand2 } ! amps.size)
 },
+bufmod: {
+	var	rate = Rand(0.7, 1.4),
+		dur = rate.reciprocal,
+		pulse = Impulse.kr(rate),
+		buf = Demand.kr(pulse, 0, Dseq([
+			Dwhite(0.0, ~numCols * 0.25, 1),
+			Dwhite(~numCols * 0.7, ~numCols-1.001, 1)
+		], inf));
+	EnvGen.kr(Env([Rand(~numCols * 0.7, ~numCols-1.001), buf], [dur]), pulse)
+},
 spatialize: true,
 make: { |name|
 	var	tempAmps = ~makeTempAmps.(),
@@ -537,7 +547,7 @@ make: { |name|
 		out;
 
 	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
-		var	patch = chan.playfx(Instr("busfx.chorus2"), [0, 1, 2, 3, 0.006957213735427, 0.1708276390401, 0.0034747717625074, 1.1689647098094, 0.3]);
+		var	patch = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.006957213735427, 0.1708276390401, 0.0034747717625074, 1.1689647098094, 0.3]);
 		patch.doWhenPlaying({
 			patch.synth.moveToTail(chan.effectgroup);
 		});
@@ -550,6 +560,7 @@ make: { |name|
 		// generate a matrix of buffers
 		// if numCols is 8, 0-7 have the most partials, 8-15 have fewer, etc.
 		// each column is randomized differently for more animation in higher partials
+		// bufmod in the WrapInstr affects rows - columns chosen by frequency mapping
 	~bufs = Buffer.allocConsecutive(~numRows * ~numCols, s, 2048, 1);
 	fork {
 		~bufs.do({ |buf, i|
@@ -582,7 +593,7 @@ make: { |name|
 		buf = bufbase + (fmapfloor * numcols) + bufmod;
 		#sig1, sig2 = VOsc3.ar([buf, buf+numcols], detunedown, freq, detuneup);
 		eg_test = [fenv, env].collect { |e, i|
-			EnvGen.kr(e, gate, timeScale: timeScales[i], doneAction: 2 * i);
+			EnvGen.kr(e.dereference.value, gate, timeScale: timeScales[i], doneAction: 2 * i);
 		};
 		LocalOut.kr(eg_test);
 		ffreq = (ffreq * Sensitivity.kr(1, eg_test[0], fenvsens)).clip(20, 20000);
@@ -595,15 +606,7 @@ make: { |name|
 		var	sig = WrapInstr("osc2.vosc3matrix").valueArray([
 			Lag.kr(freq, freqlag), gate,
 			~bufs[0].bufnum,  // bufbase
-			{	var	rate = Rand(0.7, 1.4),
-					dur = rate.reciprocal,
-					pulse = Impulse.kr(rate),
-					buf = Demand.kr(pulse, 0, Dseq([
-						Dwhite(0.0, ~numCols * 0.25, 1),
-						Dwhite(~numCols * 0.7, ~numCols-1.001, 1)
-					], inf));
-				EnvGen.kr(Env([Rand(~numCols * 0.7, ~numCols-1.001), buf], [dur]), pulse)
-			},
+			~bufmod,
 			~env,
 			vsens, /*detune:*/ 1.003,
 			ffreq, rq, ~fenv, fenvsens,
@@ -722,7 +725,7 @@ PR(\abstractProcess).clone {
 	~mod_ratio = 1;
 	~radius = sin(Ptime() * 2pi / 11.3247623) * 0.5 + (0.5 * Pkey(\rotSpeed) / Pfunc({ ~maxRotSpeed }));
 
-	~durxfer = Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
+	~durxfer = Env(#[1.0, 0.5, 0.15], #[0.45, 0.9], \lin); //Env(#[0.7, 0.3, 0.06], #[0.35, 1], #[5, -7]);
 	~dur = Pwrand(#[0.5, 1], #[0.9, 0.1], inf) * (Pkey(\rotSpeed).collect { |rs|
 		~durxfer.at(rs)
 	});
@@ -743,7 +746,7 @@ PR(\abstractProcess).clone {
 		currentEnvironment
 	};
 	~maxSpeedInput = 1; // 7.75;
-	~typicalRotSpeed = 0.5;
+	~typicalRotSpeed = 1.35;
 	~speedThresh = 0.15;
 	~angleBus = 3997;
 	~rotSpeedBus = 4000;
@@ -846,7 +849,7 @@ PR(\abstractProcess).clone {
 			~rotSpeed.automate(\rotSpeedAuto,
 				[time: time, proportion: proportion,
 					maxSpeedInput: ~maxSpeedInput, maxRotSpeed: ~maxRotSpeed,
-					inbus: BP(\di).bus.index + 8, outbus: ~rotSpeed.bus],
+					inbus: BP(\di).busIndex(\vmax), outbus: ~rotSpeed.bus],
 				~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
 					.tryPerform(\fadergroup),
 				\addToHead);
@@ -855,7 +858,7 @@ PR(\abstractProcess).clone {
 				[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			~yxRatio.automate(\yxRatioAuto,
-				[inbus: BP(\di).bus.index + 12, outbus: ~yxRatio.bus],
+				[inbus: BP(\di).busIndex(\xspan), outbus: ~yxRatio.bus],
 				~rotSpeed.autoSynth, \addAfter);
 			NodeWatcher.register(~rotSpeed.autoSynth);
 			upd = Updater(~rotSpeed.autoSynth, e { |obj, what|
@@ -1023,18 +1026,27 @@ Proto {
 
 (keys: #[],
 // filename: "arms/hands-1_data2.wav",
-filename: "vizdata/Affectations_KC1_Data.wav",
+filename: "vizdata/Affectations_KC1-VelMod.wav",
 playTestFile: false,
+readFrame: 0,
+frameRate: 30,
+showViz: true,
 make: { |name|
 	BP(name).free;
 	PR(\dataIn).chuck(BP(name), nil, (
 		alwaysReset: true,
-		numCh: 10,
-		outCh: 14,
+		numCh: 12,
+		outCh: 16,
 		bus: ~bus,
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
 		playTestFile: ~playTestFile,
+		readFrame: ~readFrame,
+		frameRate: ~frameRate ? 30,
+		dataNames: ~dataNames ?? { 
+			#[time, markers, xmin, xavg, xmax, ymin, yavg, ymax,
+			vmax, vavg, xavgv, yavgv, xspan, xratio, yspan, yratio]
+		},
 		startFrame: 0,
 		startFrame_: { |startFrame = 0|
 			currentEnvironment.put(\startFrame, startFrame);
@@ -1042,20 +1054,24 @@ make: { |name|
 			currentEnvironment
 		},
 		setStartTime: { |min(0), sec(0)|
-			~startFrame_.((min*60 + sec) * 30);
+			~startFrame_.((min*60 + sec) * ~frameRate);
 		},
 		startTime: {
-			var	t = ~startFrame / 30;
+			var	t = ~startFrame / ~frameRate;
 			[t div: 60, t % 60]
 		},
-		vizRate: 5,
+		vizRate: 10,
 		vizRate_: { |newRate = 10|
 			KrBusWatcher.newFrom(s).updateFreq = newRate;
 			currentEnvironment.put(\vizRate, newRate);
 			if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
 		},
+		showViz: ~showViz ? true,
 		userprep: {
-			~buf = Buffer.readAndQuery(s, ~path);
+			~dataMap = IdentityDictionary.new;
+			~dataNames.do { |name, i| ~dataMap.put(name, i) };
+
+			~buf = Buffer.readAndQuery(s, ~path, ~readFrame);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
 	
@@ -1068,29 +1084,36 @@ make: { |name|
 					startChanged = HPZ1.kr(startFrame).abs > 0,
 					ph = Phasor.kr(startChanged, frameRate * ControlDur.ir,
 						start: startFrame, end: end, resetPos: startFrame),
-					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
+					prevph = Delay1.kr(ph),
+					// sampleChanged = prevph.trunc < ph.trunc,
+					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 2);
+				data = data.copy.put(0, ph);
+				// data = data.collect { |chan|
+				// 	EnvGen.kr(Env(chan ! 2, [frameRate.reciprocal], \lin), sampleChanged)
+				// };
 				FreeSelf.kr(notLoop * (end >= fr));
 				Out.kr(outbus, data);
 			}).add;
 	
-			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, bufnum|
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, frameRate = 30, bufnum|
 				var	sig = In.kr(recvBus, ~numCh),
-					maxSamps = roundUp(avgTime * SampleRate.ir),
-					startTime = Index.kr(bufnum, 0);
+					maxSamps = roundUp(avgTime * SampleRate.ir); //,
+					//startTime = Index.kr(bufnum, 0);
 				sig = sig.copy;
-				sig[0] = sig[0] - startTime;
-				(sig.size-2 .. sig.size-1).do { |i|
-					sig[i] = Max.kr(K2A.ar(sig[i]), maxSamps);
-				};
+				// sig[0] = sig[0] - startTime;
+				sig[0] = sig[0] / frameRate;
+				// (sig.size-2 .. sig.size-1).do { |i|
+				// 	sig[i] = Max.kr(K2A.ar(sig[i]), maxSamps);
+				// };
 				sig = sig.add(sig[3] - sig[2])
 					.add((sig[4] - sig[2]) / sig[10])
 					.add(sig[6] - sig[5])
 					.add((sig[7] - sig[5]) / sig[12]);
 				FreeSelf.kr(stop);
-				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6, 8, 9, 10, 11, 12, 13]]);
+				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15]]);
 			}).add;
 
-			~visualizer.();
+			if(~showViz) { ~visualizer.() };
 			~upd = Updater(~bus, e { |obj, data|
 				var tv, uv, vs, ds, mins, secs;
 				~latestData = data;
@@ -1155,6 +1178,10 @@ make: { |name|
 			};
 			~closeWin.();
 		},
+		busIndex: { |name|
+			var	add;
+			if((add = ~dataMap[name]).notNil) { ~bus.index + add }
+		},
 		preparePlay: {
 			~bus.setn(0 ! ~outCh);
 			~recvBus.setn(0 ! ~numCh);
@@ -1187,7 +1214,7 @@ make: { |name|
 					instrument: ("datafixer" ++ ~numCh).asSymbol,
 					recvBus: ~recvBus, bus: ~bus, avgTime: ~avgTime ? 0.2,
 					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
-					bufnum: ~buf,
+					bufnum: ~buf, frameRate: ~frameRate,
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
 				Pfuncn({
@@ -1195,8 +1222,8 @@ make: { |name|
 						(
 							instrument: ("data" ++ ~numCh).asSymbol,
 							buf: ~buf, bus: ~recvBus, loop: 0,
-							delta: ~buf.numFrames / 30,
-							startFrame: ~startFrame,
+							delta: ~buf.numFrames / ~frameRate,
+							startFrame: ~startFrame, frameRate: ~frameRate,
 							target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 						).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
 					} { Event.silent(5000) };
@@ -1398,7 +1425,7 @@ PR(\abstractProcess).clone {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~ymaxCtl = GenericGlobalControl(
 			\ymax,
-			SharedBus.new(\control, BP(\di).bus.index + 6, 1, s),
+			SharedBus.new(\control, BP(\di).busIndex(\ymax), 1, s),
 			0, \bipolar
 		).watch;
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
@@ -2463,3 +2490,73 @@ PR(\abstractProcess).clone {
 } => PR(\armsbass);
 
 
+// anacrusis between manipulation and locomotive stuff
+PR(\abstractProcess).clone {
+	~event = (eventKey: \default, distFar: 100);
+	~alwaysReset = true;
+	~printStopMsg = false;
+	~vcKey = \lm;  // change to lcm later
+
+	~prep = {
+		if(~iMadeMixer = ~chan.isNil) {
+			~chan = MixerChannel(~collIndex, s, 2, 2, outbus: topEnvironment[\master]/*, level: */);
+			#[glrvbmc, lcrvbmc].do { |key|
+				topEnvironment[key].tryPerform(\receivesSignalFrom, ~chan);
+			};
+		};
+		~event.proto = (
+			group: ~chan.synthgroup.nodeID,
+			out: ~chan.inbus.index,
+			outbus: ~chan.inbus.index
+		).putAll(topEnvironment[\rvbEvent].proto).putAll(VC(~vcKey).v.nodes[0].initArgDict);
+		~mainAmpCtl = GenericGlobalControl(\mainAmp, nil, -12.5.dbamp, \amp);
+	};
+	~freeCleanup = {
+		if(~iMadeMixer) { ~chan.free };
+		~mainAmpCtl.free
+	};
+
+	~freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
+	~car_buf = Plazy({ Prand(VC(~vcKey).env.cb, inf) });
+	~mod_lev = Pexprand(7, 25, inf);
+	~mod_ratio = Pwhite(2, 7, inf);
+	~dur = Pseq([
+		Pwhite(3, 7, 1) * 0.5,
+		Pseq([
+			Pn(0.25, { rrand(2, 5) }),
+			Pwrand(#[0.5, 0.75, 1.0, 1.5], #[0.3, 0.3, 0.3, 0.1], { rrand(1, 3) })
+		], inf)
+	], 1);
+	~gate = 0.8;
+	~mainAmp = -12.5.dbamp;
+
+	~reset = Func(\resetBPStreams);
+
+	~onePattern = { |fmul = 1|
+		Pmono(VC(~vcKey).v.nodes[0].defname,
+			\freq, ~freq * fmul,
+			\car_buf, ~car_buf,
+			\mod_lev, ~mod_lev,
+			\mod_ratio, ~mod_ratio,
+			\dur, ~dur,
+			\gate, ~gate,
+			\mainAmp, ~mainAmpCtl.asMap, // BPStream(\mainAmp)
+			\distance, Plazy({ Env(#[75, 5], [rrand(8.0, 12.0)]) }),
+			\pan, Pbrown(-1, 1, 0.25)
+		)
+	};
+
+	~asPattern = {
+		var	tdur;
+		~totalDurStream ?? { ~makeStreamForKey.(\totalDur) };
+		~thisTotalDur = tdur = ~totalDurStream.next;
+
+		Pspawner({ |sp|
+			var fmul = Pstutter(Pwhite(3, 5, inf), Pseries(1, 1, inf)).asStream;
+			loop {
+				sp.par(~onePattern.(fmul.next));
+				sp.wait(rrand(5, 10) * 0.25);
+			}
+		});
+	};
+} => PR(\bAnacrusis);
