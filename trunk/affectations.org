@@ -21,11 +21,12 @@
     Triggers while it's already playing will be dropped
 *** A faster, kind of bouncy tune in a bell like sound.
     Jump.
-** To-dos [2/3]
+** To-dos [4/5]
 *** DONE Bus index for continuous data
 *** DONE IP for sending "midi"
-*** TODO Add vizdata wrapper to 5 procs
-
+*** DONE Add vizdata wrapper to 5 procs
+*** DONE Balances
+*** TODO More use of continuous data
 
 * For March shows
 ** Management [1/1]

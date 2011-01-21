@@ -182,7 +182,7 @@ s.doWhenBooted {
 
 // airy melody
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayer, distNear: 5, distFar: 20);
+	~event = (eventKey: \singleSynthPlayerData, distNear: 5, distFar: 20);
 	~xyDef = \xylin;
 	~def = \airskid;
 
@@ -283,6 +283,8 @@ PR(\abstractProcess).clone {
 			var xyEv = ~xyPatStream.next(ev);
 			xyEv !? {  // DON'T YIELD NIL!!!
 				xyEv.put(\delta, 0).put(\chan, nil).put(\bus, ev[\xylock].bus)
+				// don't send data for the automation event
+				.parent_(ProtoEvent(\singleSynthPlayer).v.parent)
 				.yield
 			};
 			// why? event must .play before ev[\id] is available
@@ -682,7 +684,7 @@ s.doWhenBooted {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote, distNear: 5, distFar: 20, midi: false);
+	~event = (eventKey: \voicerNoteData, distNear: 5, distFar: 20, midi: false);
 	~alwaysReset = true;
 
 	~chords = (
@@ -764,8 +766,13 @@ PR(\abstractProcess).clone {
 		~makeStreamForKey.(\chordTime);
 	};
 
-	~copyProc = { |name ((~collIndex ++ UniqueID.next).asSymbol)|
-		var	self = currentEnvironment, parms;
+	~copyProc = { |name|
+		var	self = currentEnvironment, parms, uid = UniqueID.next;
+		if(name.notNil) {
+			name = name.asSymbol;
+		} {
+			name = (~collIndex ++ uid).asSymbol;
+		};
 		BP(name).free;
 		parms = (
 			angleBus: Bus.control(s, 1 /*, name + "angle"*/)/*.debug("anglebus")*/,
@@ -782,6 +789,8 @@ PR(\abstractProcess).clone {
 		// and they get spawned thru to the children
 		~bpsKeys.do { |key| parms[key] = key.envirGet };
 		PR(\armsChord).chuck(BP(name), nil, parms);
+		BP(name).event.put(\soundID, uid)
+			.put(\vizKeys, Library.at(\defaultVoicerVizKeys).copy.put(0, ~collIndex.hash));
 		~event[\voicer] => BP(name)	// should return BP
 	};
 
@@ -1050,7 +1059,7 @@ make: { |name|
 		startFrame: 0,
 		startFrame_: { |startFrame = 0|
 			currentEnvironment.put(\startFrame, startFrame);
-			if(~player.notNil) { ~player.set(\startFrame, startFrame) };
+			if(~player.notNil) { ~player.set(\t_startFrame, startFrame) };
 			currentEnvironment
 		},
 		setStartTime: { |min(0), sec(0)|
@@ -1075,13 +1084,14 @@ make: { |name|
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
 	
-			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, startFrame = 0, loop = 0|
+			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, t_startFrame = 0, loop = 0|
 				var	fr = BufFrames.ir(buf),
+					startFrame = Latch.kr(t_startFrame, t_startFrame),
 					dur = fr / frameRate,
 					notLoop = loop <= 0,
 					end = fr + (10000 * notLoop),
 					// stopper = Line.kr(0, 1, dur - (startFrame / frameRate), doneAction: notLoop*2),
-					startChanged = HPZ1.kr(startFrame).abs > 0,
+					startChanged = t_startFrame > 0,
 					ph = Phasor.kr(startChanged, frameRate * ControlDur.ir,
 						start: startFrame, end: end, resetPos: startFrame),
 					prevph = Delay1.kr(ph),
@@ -1511,7 +1521,7 @@ PR(\abstractProcess).clone {
 // partnering/inversions
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData);
 	~autoRun = false;
 	~dataKey = \di;
 	~prep = {
@@ -2246,7 +2256,7 @@ PR(\abstractProcess).clone {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote, distFar: 100, lcrvbamt: 0.01);
+	~event = (eventKey: \voicerNoteData, distFar: 100, lcrvbamt: 0.01);
 	~printStopMsg = false;
 	~alwaysReset = true;
 	~prep = {
@@ -2448,7 +2458,7 @@ free: { [~target, ~cb, ~mb].free }, type: \voicer) => Fact(\armsBass);
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData);
 	~alwaysReset = true;
 	~printStopMsg = false;
 

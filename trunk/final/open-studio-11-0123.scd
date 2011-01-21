@@ -76,19 +76,22 @@ s.waitForBoot {
 			~resp.remove; ~resp = nil;
 		},
 		procDisplayNames: [nil, \axial, \locomotive, \chordal, \bass, \bells],
-		procResetTimes: 0 ! 6,
+		procResetTimes: (0 ! 6).put(0, nil),
 		procFlashTime: 0.75,
 		procFlashColor: Color.new255(255, 120, 120),
 		procUnFlashColor: Color.gray(0.92),
 		flashProc: { |i|
 			{	var now = thisThread.clock.beats;
-				if(now > ~procResetTimes[i]) {
-					~procBtns[i].background_(~procFlashColor);
-				};
-				~procResetTimes[i] = now + ~procFlashTime;
-				~procFlashTime.wait;
-				if(thisThread.clock.beats >= ~procResetTimes[i]) {
-					~procBtns[i].background_(~procUnFlashColor);
+				// the array item is nil if there's nothing to do; ignore in that case
+				if(~procResetTimes[i].notNil) {
+					if(now > ~procResetTimes[i]) {
+						~procBtns[i].background_(~procFlashColor);
+					};
+					~procResetTimes[i] = now + ~procFlashTime;
+					~procFlashTime.wait;
+					if(thisThread.clock.beats >= ~procResetTimes[i]) {
+						~procBtns[i].background_(~procUnFlashColor);
+					};
 				};
 			}.fork(AppClock);
 		},
@@ -174,7 +177,7 @@ s.waitForBoot {
 					var	vizAddr = Library.at(\vizAddr);
 					if(vizAddr.notNil) {
 						"Sending test message to %\n".postf(vizAddr);
-						vizAddr.sendMsg(*([\test.hash, -1, 0.2, 0.0, 1.0, 1.0, 0.0, 5].debug("msg")));
+						vizAddr.sendBundle(nil, [\note, \test.hash, -1, 0.2, 0.0, 1.0, 1.0, 0.0, 5].debug("msg"));
 					} {
 						"Enter a valid address before clicking".warn;
 					};
@@ -236,7 +239,7 @@ s.waitForBoot {
 		master: topEnvironment[\master]
 	));
 	
-	BP(\am).amp = 0.9;
+	BP(\am).amp = 0.35 * 10.dbamp; // 0.9;
 	BP(\am).prepareForPlay;
 	BP(\am).v.reset;
 
@@ -244,7 +247,8 @@ s.waitForBoot {
 	\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
 	\chuckIf.eval(PR(\armsChord), BP, \acDisp, nil, (
 		angleBus: BP(\di).bus.index + 1, // ??
-		rotSpeedBus: BP(\di).bus.index + 4
+		rotSpeedBus: BP(\di).bus.index + 4,
+		amp: 0.2 * (10.dbamp)
 	));
 	BP(\acDisp) => VC(\ac);
 	0 => BP(\acDisp);
@@ -255,7 +259,7 @@ s.waitForBoot {
 	p.chord = p[\saveChord] ? p[\chord];
 	p.fullCh.removeAt(\diss1);
 	p.fullCh.removeAt(\diss2);
-	p.amp = -20.dbamp;
+	// p.amp = -20.dbamp;
 
 	// 3. Chordal
 	\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
@@ -263,7 +267,7 @@ s.waitForBoot {
 		fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
 	).putAll(Library.at(\rvbs)));
 	\chuckIf.eval(PR(\armsInv), BP, \ai);
-	BP(\ai).ampCtl.value = 0.115; // 0.045;
+	BP(\ai).ampCtl.value = 0.115 * 10.dbamp; // 0.115; // 0.045;
 	VC(\sp) => BP(\ai);
 	0 => BP(\ai);
 
@@ -272,6 +276,7 @@ s.waitForBoot {
 	\chuckIf.eval(PR(\armsbass), BP, \abs);
 	VC(\abs) => BP(\abs);
 	1 => BP(\abs);
+	VC(\abs).env.target.level = -10.dbamp;
 
 	// 5. Bell melody
 	topEnvironment[\clock96] ?? {
@@ -288,8 +293,18 @@ s.waitForBoot {
 	\chuckIf.eval(Fact(\bmelBP), BP, \bmel);
 	0 => BP(\bmel);
 	topEnvironment[\clock96] => BP(\bmel);
+	BP(\bmel).ampMul.value = 0.26 * 10.dbamp;
 
+	BP(\am).event.vizKeys = Library.at(\defaultVizKeys).copy.put(3, {
+		~hiffreq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0)
+	});
+	BP(\am).event.soundID = 0;
 
+	BP(\ai).event.soundID = 0;
+	BP(\abs).event.soundID = 0;
+	BP(\bmel).event.soundID = 0;
+
+	~master.level = -10.dbamp;
 };
 )
 
@@ -313,11 +328,31 @@ if(BP.exists(\mstClock)) { BP(\mstClock).free };
 
 // unit tests
 c = BP(\evTrig).bus;
-c.set(1);
-c.set(2);
-c.set(3);
-c.set(4);
-c.set(5);
+c.set(1.debug);
+c.set(2.debug);
+c.set(3.debug);
+c.set(4.debug);
+c.set(5.debug);
+
+r = fork {
+	var	p = Psmartstutter(Pfunc({ |pr| if(pr == 1) { rrand(3, 8) } { 1 } }),
+			Pwhite(1, 5, inf)).asStream,
+	w = Pswitch1([
+		1, //dummy
+		Pwhite(0.7, 1.2, inf),
+		Pwhite(2.0, 4.5, inf),
+		Pwhite(2.0, 4.5, inf),
+		Pwhite(2.0, 4.5, inf),
+		Pwhite(2.0, 4.5, inf)
+	], Pfunc({ |n| n })).asStream,
+	proc;
+	loop {
+		BP(\evTrig).bus.set(proc = p.next);
+		w.next(proc).wait;
+	}
+};
+
+r.stop;
 
 
 BP(\evTrig).flashProc(1)
@@ -328,3 +363,40 @@ BP(\di).setStartTime(10, 0);
 
 BP(\di).bus
 BP(\di).recvBus
+
+o.remove;
+o = OSCresponderNode(nil, '/note', { |t, r, m| m.postln }).add;
+
+Library.at(\vizAddr).sendMsg('/note', 834821825, -1, 0.20000000298023, 0, 1, 1, 0, 5);
+Library.at(\vizAddr).sendMsg(*['/note', 834821825, -1, 0.20000000298023, 0, 1, 1, 0, 5]);
+Library.at(\vizAddr).sendMsg(*[834821825, -1, 0.20000000298023, 0, 1, 1, 0, 5]);
+Library.at(\vizAddr).sendMsg(834821825, -1, 0.20000000298023, 0, 1, 1, 0, 5);
+
+n = NetAddr("127.0.0.1", NetAddr.langPort);
+
+BP(\am).event.vizKeys = Library.at(\defaultVizKeys).copy.put(3, { ~hiffreq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) });
+BP(\am).event.soundID = 0;
+
+BP(\ai).event.soundID = 0;
+BP(\abs).event.soundID = 0;
+BP(\bmel).event.soundID = 0;
+
+BP(\am).reset; BP(\am).v.reset;
+
+BP(\am).amp = 0.35 * 10.dbamp;
+BP(\acDisp).amp = 0.2 * (10.dbamp);
+
+BP(\acDisp).amp = 0.1 * 10.dbamp;
+
+BP(\bmel).ampMul.value = 0.26 * 10.dbamp;
+BP(\ai).ampCtl.value = 0.115 * 10.dbamp;
+VC(\abs).env.target.level = -17.dbamp * 10.dbamp;
+
+
+c.set(10);
+
+ChuckableBrowser.newWindow;
+
+MixingBoard.at(0).add(VC(\abs));
+
+PeakMonitor(~master)
