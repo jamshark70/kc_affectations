@@ -126,6 +126,9 @@ s.waitForBoot {
 					dibus.releaseBus(~collIndex);
 				});
 	
+			if(thisProcess.platform.name == \osx) {
+				Font.default = Font(Font.defaultSansFace, 12);
+			};
 			StaticText(~win, 590@40)
 				.string_("Open Studio 2011-01-23")
 				.align_(\center)

@@ -245,7 +245,7 @@ PR(\abstractProcess).clone {
 					}
 				])
 			},
-			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (~phrases.size-1)), inf)]), 1)
 		)
 	};
 	~hiffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree] + 35) };
@@ -367,7 +367,7 @@ PR(\abstractProcess).clone {
 					}
 				])
 			},
-			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (a.size-1)), inf)]), 1)
+			\patRejectLastN.eval(Pseq([0, 1, 2, Prand((0 .. (~phrases.size-1)), inf)]), 1)
 		)
 	});
 
@@ -1148,10 +1148,16 @@ make: { |name|
 				topEnvironment[\seq].addDependant(currentEnvironment)
 			};
 		},
+		// oh HELL - the stupid @#$@$# mac refreshes a userview on creation
+		// while Swing doesn't - @#$@$# @#$@$# @#$@$# @#$@$# @#$@$#
+		latestData: 0 ! ~outCh,
 		visualizer: {
 			~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
 			~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
 			~uvBackColor = ~uvBackColor ?? { Color.gray(0.9) };
+			if(thisProcess.platform.name == \osx) {
+				Font.default = Font(Font.defaultSansFace, 12);
+			};
 			defer(e {
 				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
 					.onClose_(e { ~closeWin.() });
@@ -1529,6 +1535,8 @@ PR(\abstractProcess).clone {
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
 		BP(~dataKey).addDependant(currentEnvironment);
 		BP(~dataKey).bus.addDependant(currentEnvironment);
+
+		~dataIndices
 	};
 	~ctlGuiKeys = #[ampCtl];
 	~useGui = Func(\bpUseGui).v;
@@ -1544,8 +1552,8 @@ PR(\abstractProcess).clone {
 	~rest = Pwhite(0.8, 1.6, inf);
 
 	~pan = { |parms|
-		Pseries.fromEndpoints(rrand(-1.0, -0.5), rrand(0.5, 1.0), parms[\numEv])
-			* #[-1, 1].choose;
+		(Pseries.fromEndpoints(rrand(-1.0, -0.5), rrand(0.5, 1.0), parms[\numEv])
+			* #[-1, 1].choose).linlin(-1, 1, Pfunc({ ~minX }), Pfunc({ ~maxX }));
 	};
 	~distance = { |parms|
 		Pseries.fromEndpoints(rrand(15.0, 18.0), rrand(5.0, 7.0), parms[\numEv])
@@ -1568,6 +1576,10 @@ PR(\abstractProcess).clone {
 	};
 	~attackTimeScale = Pkey(\gate).linlin(0.1, 0.8, 1.4, 0.15);
 	~decayTimeScale = 1;
+	~minX = -1;
+	~maxX = 1;
+	~prevY = -0.01;
+	~thisY = 0;
 
 	~slideNotes = (
 		lauraslide: Pseries(
@@ -1664,11 +1676,15 @@ PR(\abstractProcess).clone {
 		{ BP(~dataKey).bus } {  // not compiler optimized; put more common case first
 			~prevY = ~thisY;
 			~thisY = what[7];
+			~minX = what[2];
+			~maxX = what[4];
 		}
 		{ BP(~dataKey) } {
 			if(more == \stopped) {
 				~prevY = -0.01;
 				~thisY = 0;
+				~minX = -1;
+				~maxX = 1;
 			}
 		};
 	};
@@ -2265,6 +2281,10 @@ PR(\abstractProcess).clone {
 		~ampMul = GenericGlobalControl(\ampMul, nil, 0.26, [0, 12.dbamp, \amp]);
 		~event.ampMul = ~ampMul.asMap;
 		~addedWavetables = IdentitySet.new;
+
+		~dataIndices = #[xmin, xmax].collect { |name|
+			BP(\di).busIndex(name) - BP(\di).bus.index
+		};
 	};
 	~freeCleanup = {
 		~removeWavetables.();
@@ -2359,7 +2379,9 @@ PR(\abstractProcess).clone {
 		Pwhile1({ ~decay.isNil }, 1),
 		Plazy({ Pgeom.fromEndpoints(1, 0.05, ~decay) })
 	], 1);
-	~pan = Pkey(\angle).sin * Pkey(\decayCurve);
+	~pan = (Pkey(\angle).sin * Pkey(\decayCurve)).collect { |pan|
+		pan.linlin(-1, 1, BP(\di).latestData[~dataIndices[0]], BP(\di).latestData[~dataIndices[1]])
+	};
 	~origDistance = (Pkey(\angle).cos * Pkey(\decayCurve))
 		.linlin(-1, 1,
 			Pkey(\decayCurve).explin(0.05, 1, 100, 14),
