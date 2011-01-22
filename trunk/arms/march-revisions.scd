@@ -1958,3 +1958,20 @@ BP(#[di, afc]).play;
 BP(#[di, afc]).stop;
 
 // pitch contour from height
+
+
+
+BP(\bmel).use {
+	BP(\bmel).origDistance = (Pkey(\angle).cos * Pkey(\decayCurve))
+	.linlin(-1, 1,
+		Pkey(\decayCurve).explin(0.05, 1, 100, 14),
+		Pkey(\decayCurve).explin(0.05, 1, 100, 5)
+	).linlin(5, 100, Pfunc({ BP(\di).latestData[~dataIndices[2]].linlin(0, 4, 70, 5) }), 100);
+};
+
+BP(\bmel).use {
+		~dataIndices = #[xmin, xmax, yspan].collect { |name|
+			BP(\di).busIndex(name) - BP(\di).bus.index
+		};
+};
+

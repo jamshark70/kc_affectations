@@ -85,12 +85,14 @@ s.waitForBoot {
 				// the array item is nil if there's nothing to do; ignore in that case
 				if(~procResetTimes[i].notNil) {
 					if(now > ~procResetTimes[i]) {
-						~procBtns[i].background_(~procFlashColor);
+						// ~procBtns[i].background_(~procFlashColor);
+						~procBtns[i].value = 1;
 					};
 					~procResetTimes[i] = now + ~procFlashTime;
 					~procFlashTime.wait;
 					if(thisThread.clock.beats >= ~procResetTimes[i]) {
-						~procBtns[i].background_(~procUnFlashColor);
+						// ~procBtns[i].background_(~procUnFlashColor);
+						~procBtns[i].value = 0;
 					};
 				};
 			}.fork(AppClock);
@@ -190,10 +192,15 @@ s.waitForBoot {
 			~procBtns = Array.newClear(6);
 			~bWidth = (590 - (4*4)) / 5;
 			~procDisplayNames[1..].do { |proc, i|
-				~procBtns[i+1] = StaticText(~win, ~bWidth @ 20)
-				.background_(~procUnFlashColor)
-				.string_(proc)
-				.align_(\center)
+				// ~procBtns[i+1] = StaticText(~win, ~bWidth @ 20)
+				// 	.background_(~procUnFlashColor)
+				// 	.string_(proc)
+				// 	.align_(\center)
+				~procBtns[i+1] = Button(~win, ~bWidth @ 20)
+					.states_([proc, Color.black, [~procUnFlashColor, ~procFlashColor]].flop)
+					.action_(e { |view|
+						~bus.set(i+1);
+					});
 			};
 	
 			StaticText(~win, (590/2 - 2) @ 20)
@@ -247,7 +254,10 @@ s.waitForBoot {
 	BP(\am).v.reset;
 
 	// 2. Locomotive
-	\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, Library.at(\rvbs));
+	\chuckIf.eval(Fact(\armsChordVC), VC, \ac, nil, (
+		car_env: Env.adsr(0.05, 0.8, 0.75, 1.0) //,
+		// mod_env: Env.adsr(0.01, 2.5, 0.05, 1, curve: -2.5),
+	).putAll(Library.at(\rvbs)));
 	\chuckIf.eval(PR(\armsChord), BP, \acDisp, nil, (
 		angleBus: BP(\di).bus.index + 1, // ??
 		rotSpeedBus: BP(\di).bus.index + 4,
@@ -266,8 +276,9 @@ s.waitForBoot {
 
 	// 3. Chordal
 	\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
-		env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
-		fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
+		env: Env.adsr(0.05, 0.15, 0.4, 1.8, curve: -2),
+		fenv: Env.adsr(0.09, 0.18, 0.1, 3, peakLevel: 1, bias: 1),
+		globalFilter: false
 	).putAll(Library.at(\rvbs)));
 	\chuckIf.eval(PR(\armsInv), BP, \ai);
 	BP(\ai).ampCtl.value = 0.115 * 10.dbamp; // 0.115; // 0.045;
@@ -331,11 +342,22 @@ if(BP.exists(\mstClock)) { BP(\mstClock).free };
 
 // unit tests
 c = BP(\evTrig).bus;
-c.set(1.debug);
-c.set(2.debug);
-c.set(3.debug);
-c.set(4.debug);
-c.set(5.debug);
+c.set(1);
+c.set(2);
+c.set(3);
+c.set(4);
+c.set(5);
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, m[1]) }).add;
+
+o.remove;
+i = 0;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	i = i + 1;
+	if(i == 2) { r.remove };
+	s.sendMsg(\n_trace, m[1])
+}).add;
 
 r = fork {
 	var	p = Psmartstutter(Pfunc({ |pr| if(pr == 1) { rrand(3, 8) } { 1 } }),

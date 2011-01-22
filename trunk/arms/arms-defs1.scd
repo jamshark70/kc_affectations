@@ -526,6 +526,7 @@ numCols: 8,
 env: Env.adsr(1, 0.4, 0.8, 1.2, curve: -2),
 fenv: Env.one,
 graphInsert: nil,
+globalFilter: true,
 makeTempAmps: {
 	{ |i| Array.triangleAmps((20000 / ((4+i) * 12).midicps).asInteger) } ! ~numRows
 },
@@ -626,11 +627,14 @@ make: { |name|
 			Out.ar(outbus, SynthDef.wrap(ugenfunc))
 		}).add;
 	};
+	SynthDescLib.at(~defname).msgFuncKeepGate = true;
 
 	out = Voicer(25, ~defname, target: ~target);
-	
-	out.mapGlobal(\ffreq, nil, 14000, \freq);
-	out.mapGlobal(\rq, nil, 1.0, \myrq);
+
+	if(~globalFilter) {
+		out.mapGlobal(\ffreq, nil, 14000, \freq);
+		out.mapGlobal(\rq, nil, 1.0, \myrq);
+	};
 	// out.mapGlobal(\fenvsens, nil, 1.0, #[0.1, 15, \exp]);
 	
 	// ~target.doWhenReady({ |chan|
@@ -1531,12 +1535,12 @@ PR(\abstractProcess).clone {
 	~autoRun = false;
 	~dataKey = \di;
 	~prep = {
-		~event.proto = topEnvironment[\rvbEvent].proto;
+		~event.proto = topEnvironment[\rvbEvent].proto.copy.putAll((
+			distFar: 50, lcrvbamt: 0.025
+		));
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
 		BP(~dataKey).addDependant(currentEnvironment);
 		BP(~dataKey).bus.addDependant(currentEnvironment);
-
-		~dataIndices
 	};
 	~ctlGuiKeys = #[ampCtl];
 	~useGui = Func(\bpUseGui).v;
@@ -1555,12 +1559,25 @@ PR(\abstractProcess).clone {
 		(Pseries.fromEndpoints(rrand(-1.0, -0.5), rrand(0.5, 1.0), parms[\numEv])
 			* #[-1, 1].choose).linlin(-1, 1, Pfunc({ ~minX }), Pfunc({ ~maxX }));
 	};
+	// ~distance = { |parms|
+	// 	Pseries.fromEndpoints(rrand(15.0, 18.0), rrand(5.0, 7.0), parms[\numEv])
+	// };
 	~distance = { |parms|
-		Pseries.fromEndpoints(rrand(15.0, 18.0), rrand(5.0, 7.0), parms[\numEv])
+		var	far = rrand(25.0, 35.0), // rrand(15.0, 18.0);
+			p = Pseq([
+				Pseries.fromEndpoints(rrand(5.0, 7.0), far, 4),
+				Pseries.fromEndpoints(far, rrand(8.0, 11.0), parms[\numEv] - 3).drop(1)
+			], 1),
+			i = BP(\di).busIndex(\yspan) - BP(\di).bus.index;
+		Pfunc({ BP(\di).latestData[i] }).linlin(0, 1.32, p * 0.1 + 40, p)
 	};
 	~dur = { |parms|
-		Pgeom.fromEndpoints(rrand(0.12, 0.22), rrand(0.06, 0.09), parms[\numEv])
-			* Pexprand(0.75, 1.333, inf);
+		var	dur = Pgeom.fromEndpoints(rrand(0.12, 0.22), rrand(0.06, 0.09), parms[\numEv])
+			* Pexprand(0.75, 1.333, inf),
+			i = BP(\di).busIndex(\vmax) - BP(\di).bus.index;
+		Pconst(parms[\totalDur] - 1, dur.collect { |d|
+			BP(\di).latestData[i].linlin(0, 1.35, d * 1.2, d * 0.6)
+		});
 	};
 	~freq = { |parms|
 		Pwhile1({ |ev, next| next <= 54 },
@@ -1568,11 +1585,25 @@ PR(\abstractProcess).clone {
 	};
 	~mode = \g;
 	~direction = Pfunc({ (~thisY > ~prevY).binaryValue * 2 - 1 }); // 1;
-	~ffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\freq]) * 4 };
-	~gate = Pkey(\freq).linlin(14, 54, 0.1, 0.8);
+	~ffreq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\freq]) * 12 };
+	// ~rq = { rrand(0.1, 0.5) };
+	~rq = { |parms| Pseq([exprand(0.12, 0.25), Pseries.fromEndpoints(0.25, 1, parms[\numEv]-1)], 1) };
+	~gate = { |parms|
+		var	// n = (parms[\numEv] - 1) * 0.5,
+			// up = n.trunc, down = n.roundUp,
+			top = rrand(0.75, 0.9),
+			p = Pseq([
+				1,
+				Pgeom.fromEndpoints(rrand(0.08, 0.15), top, parms[\numEv] - 1),
+				// Pgeom.fromEndpoints(top, rrand(0.08, 0.15), down)
+			], 1);
+		// p is deterministic, ok to poll twice from separate streams
+		Pkey(\freq).linlin(14, 54, (p-1) * 0.1 + 1, p)
+	};
+	// ~gate = Pkey(\freq).linlin(14, 54, 0.1, 0.8);
 // 	~mod_lev = 2.5;
 	~length = { |parms|
-		(Pwhite(0.8, 1.2, inf) * parms[\totalDur]) - Pseries(0, Pkey(\dur), inf);
+		max(0.1, (Pwhite(0.8, 1.2, inf) * parms[\totalDur]) - Pseries(0, Pkey(\dur), inf));
 	};
 	~attackTimeScale = Pkey(\gate).linlin(0.1, 0.8, 1.4, 0.15);
 	~decayTimeScale = 1;
@@ -1641,7 +1672,8 @@ PR(\abstractProcess).clone {
 				\freq, ~freq.(parms),
 				\mode, BPStream(\mode),
 				\ffreq, BPStream(\ffreq),
-				\gate, BPStream(\gate),
+				\rq, ~rq.(parms),
+				\gate, ~gate.(parms),
 				\length, ~length.(parms),
 				\attackTimeScale, BPStream(\attackTimeScale),
 				\decayTimeScale, BPStream(\decayTimeScale)
