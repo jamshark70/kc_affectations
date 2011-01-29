@@ -1023,6 +1023,77 @@ Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
 	XFade2.ar(in, lo, xfade * 2 - 1)
 }, [\audiobus, StaticSpec(1, 8, \lin, 1, 1), #[0.0001, 0.2, \exponential, 0, 0.001], #[0.001, 10, \exponential], #[0.0001, 0.25, \exponential], #[0, 2pi], /*#[0, 1],*/ \freq, #[0, 1]]);
 
+PR(\abstractProcess).clone {
+	~alwaysReset = true;
+	~autoPlay = true;
+	~event = (eventKey: \singleSynthPlayNotify);
+	~dk = \di;
+	~prep = {
+		if(BP.exists(~dk).not) {
+			"Load BP(%) first.".format(~dk.asCompileString).warn
+		} {
+			#[bus, trigbus, recvBus, numCh, outCh].do { |key| key.envirPut(BP(~dk)[key]) };
+		};
+
+		~def = ~makeDef.();
+		~userprep.();
+
+		BP(~dk).addDependant(currentEnvironment);
+	};
+	~freeCleanup = {
+		BP(~dk).removeDependant(currentEnvironment);
+		~userfree.();
+	};
+	~update = { |obj, what, more|
+		case
+		{ obj.tryPerform(\collIndex) == ~dk } {
+			case { ~autoPlay and: { what == \play } } { BP(~collIndex).play }
+				{ more == \stopped } { BP(~collIndex).stop }
+		}
+	};
+
+	~makeDef = {
+		SynthDef(("datafetcher" ++ ~outCh).asSymbol, { |bus, useTrigBus, recvBus, trigbus,
+			replyID|
+			var	sig = In.kr(bus, ~outCh),
+				trig = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0;  // force trig to be exactly 0 or 1
+			SendReply.kr(trig, '/datafetch', sig, replyID);
+		}).add
+	};
+	~makeResponder = { |node|
+		var	self = currentEnvironment;
+		OSCpathResponder(s.addr, ['/datafetch', (node ?? { ~node }).nodeID], { |time, resp, msg|
+			self[\latest] = msg[3..];
+			BP(self[\collIndex]).changed(\data, self[\latest]);
+		}).add;
+	};
+
+	// ~preparePlay = {
+	// };
+	~stopCleanup = {
+		~node !? { ~node.free; ~node = nil };
+		~resp.do(_.remove); ~resp = nil;
+	};
+	~recvEventNotify = { |node|
+		~node = node;
+		~resp = ~makeResponder.(node);
+	};
+	~asPattern = {
+		Pseq([
+			(instrument: ~def.name,
+				bus: ~bus, useTrigBus: BP(~dk).playTestFile.binaryValue, recvBus: ~recvBus,
+				trigbus: ~trigbus, replyID: ~replyID ? 0, addAction: \addToTail,
+				delta: 2
+			).putAll(~synthEventParms.()),
+			Pn((instrument: \rest, delta: 2), inf)
+		])
+	};
+	~synthEventParms = ();
+} => PR(\dataReader);
+
 
 (thisProcess.nowExecutingPath.dirname +/+ "transports.scd").loadPath;
 

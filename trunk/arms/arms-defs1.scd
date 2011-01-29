@@ -681,8 +681,8 @@ s.doWhenBooted {
 	}).add;
 
 	SynthDef(\yxRatioAuto, { |inbus, outbus|
-		// ReplaceOut.kr(outbus, In.kr(inbus + #[2, 0], 1).reduce('/'))
-		ReplaceOut.kr(outbus, In.kr(inbus, 1))
+		ReplaceOut.kr(outbus, max(0.01, In.kr(inbus + #[2, 0], 1)).reduce('/'))
+		// ReplaceOut.kr(outbus, In.kr(inbus, 1))
 	}).add;
 };
 
@@ -705,9 +705,9 @@ PR(\abstractProcess).clone {
 	// 	Pwhite(0, Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99), inf).collect(_.asInteger)
 	// });
 	~row = Plazy({
-		(Pwhite(0, 1, inf) + Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 1.99)).collect(_.asInteger)
+		(/*Pwhite(0, 1, inf) +*/ Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99)).trunc
 	});
-	~chord = Plazy { Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }; // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
+	~chord = Plazy({ Pn(Pshuf(~fullCh.keys.asArray, 1), inf) }); // Pstutter(Pwhite(20, 60, inf), Pfunc { ~fullCh.keys.choose });
 	~chordItem = Pfunc { |ev|
 		if(ev[\chord] != ~lastChord) {
 			~lastChord = ev[\chord];
@@ -1049,7 +1049,7 @@ make: { |name|
 	PR(\dataIn).chuck(BP(name), nil, (
 		alwaysReset: true,
 		numCh: 12,
-		outCh: 16,
+		outCh: 28,
 		bus: ~bus,
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
@@ -1058,7 +1058,7 @@ make: { |name|
 		frameRate: ~frameRate ? 30,
 		dataNames: ~dataNames ?? { 
 			#[time, markers, xmin, xavg, xmax, ymin, yavg, ymax,
-			vmax, vavg, xavgv, yavgv, xspan, xratio, yspan, yratio]
+			vmax, vavg, xavgv, yavgv, xspan/*, xratio*/, yspan/*, yratio*/]
 		},
 		startFrame: 0,
 		startFrame_: { |startFrame = 0|
@@ -1077,8 +1077,9 @@ make: { |name|
 		vizRate_: { |newRate = 10|
 			KrBusWatcher.newFrom(s).updateFreq = newRate;
 			currentEnvironment.put(\vizRate, newRate);
-			if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
+			//if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
 		},
+		avgTime: 0.2,
 		showViz: ~showViz ? true,
 		userprep: {
 			~dataMap = IdentityDictionary.new;
@@ -1087,8 +1088,11 @@ make: { |name|
 			~buf = Buffer.readAndQuery(s, ~path, ~readFrame);
 			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
 			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
+
+			~trigbus = Bus.control(s, 1);
 	
-			SynthDef("data" ++ ~numCh, { |buf, outbus, frameRate = 30, t_startFrame = 0, loop = 0|
+			SynthDef("data" ++ ~numCh, { |buf, outbus, trigbus, frameRate = 30,
+				t_startFrame = 0, loop = 0|
 				var	fr = BufFrames.ir(buf),
 					startFrame = Latch.kr(t_startFrame, t_startFrame),
 					dur = fr / frameRate,
@@ -1099,34 +1103,94 @@ make: { |name|
 					ph = Phasor.kr(startChanged, frameRate * ControlDur.ir,
 						start: startFrame, end: end, resetPos: startFrame),
 					prevph = Delay1.kr(ph),
-					// sampleChanged = prevph.trunc < ph.trunc,
-					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 2);
+					sampleChanged = prevph.trunc < ph.trunc,
+					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
 				data = data.copy.put(0, ph);
 				// data = data.collect { |chan|
 				// 	EnvGen.kr(Env(chan ! 2, [frameRate.reciprocal], \lin), sampleChanged)
 				// };
 				FreeSelf.kr(notLoop * (end >= fr));
 				Out.kr(outbus, data);
+				// tell the data fixer when a new value is coming
+				Out.kr(trigbus, sampleChanged);
 			}).add;
 	
-			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, frameRate = 30, bufnum|
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, trigbus, useTrigBus = 0, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, frameRate = 30, bufnum|
 				var	sig = In.kr(recvBus, ~numCh),
-					maxSamps = roundUp(avgTime * SampleRate.ir); //,
-					//startTime = Index.kr(bufnum, 0);
+					trig = Select.kr(useTrigBus, [
+						InTrig.kr(recvBus, 1),
+						In.kr(trigbus, 1)
+					]) > 0,  // force trig to be exactly 0 or 1
+					trigTime = max(0.001, Timer.kr(trig)),
+					avgSamps = (avgTime * frameRate).trunc,
+					delayChan = ~numCh,
+					delayBuf = LocalBuf(delayChan * avgSamps).clear,
+					delayPhase = Demand.kr(trig, 0, Dseq([Dseries(0, delayChan, avgSamps)], inf)),
+					prev, writer, sum, sigdiff,
+					initTrig = Impulse.kr(0),
+					slopeBuf, slopePrev;
 				sig = sig.copy;
-				// sig[0] = sig[0] - startTime;
+			
+				trig = Trig1.kr(trig, ControlDur.ir);
+			
 				sig[0] = sig[0] / frameRate;
-				// (sig.size-2 .. sig.size-1).do { |i|
-				// 	sig[i] = Max.kr(K2A.ar(sig[i]), maxSamps);
-				// };
-				sig = sig.add(sig[3] - sig[2])
-					.add((sig[4] - sig[2]) / sig[10])
-					.add(sig[6] - sig[5])
-					.add((sig[7] - sig[5]) / sig[12]);
+				// delayPhase = delayPhase + (0 .. (sig.size-1));
+				// prev = Demand.kr(trig, 0, Dbufrd(delayBuf, delayPhase));
+				// sigdiff = sig - prev;
+				// sum = Select.kr(initTrig, [LocalIn.kr(delayChan), 0]);
+				// sum = sum + (trig * sigdiff);
+				// writer = Demand.kr(trig <! prev[0], 0, Dbufwr(sig, delayBuf, delayPhase));
+				// LocalOut.kr(sum);
+				sum = MedianTriggered.kr(sig, trig, avgSamps);
+				sum = sum.copy.add(sum[3] - sum[2])
+					.add(sum[6] - sum[5]);
+				// sum = sum / avgSamps;
+				slopeBuf = LocalBuf(sum.size).clear;
+				slopePrev = Demand.kr(trig, 0, Dbufrd(slopeBuf, (0 .. (sum.size-1))));
+				sig = sum ++ ((sum - slopePrev) / trigTime);
+				Demand.kr(trig <! slopePrev[0], 0, Dbufwr(sum, slopeBuf, (0 .. (sum.size-1))));
 				FreeSelf.kr(stop);
-				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15]]);
+				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6] ++ (8..(~outCh-1))]);
 			}).add;
-
+/*
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, trigbus, useTrigBus = 0, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, frameRate = 30, bufnum|
+				var	sig = In.kr(recvBus, ~numCh),
+					trig = Select.kr(useTrigBus, [
+						InTrig.kr(recvBus, 1),
+						In.kr(trigbus, 1)
+					]) > 0,  // force trig to be exactly 0 or 1
+					trigTime = max(0.001, Timer.kr(trig)),
+					avgSamps = (avgTime * frameRate).trunc,
+					delayChan = ~numCh + 2,
+					delayBuf = LocalBuf(delayChan * avgSamps).clear,
+					delayPhase = Demand.kr(trig, 0, Dseq([Dseries(0, delayChan, avgSamps)], inf)),
+					// delayPhase = ((PulseCount.kr(trig)-1) % avgSamps) * delayChan,
+					prev, writer, sum, sigdiff,
+					initTrig = Impulse.kr(0),
+					slopeBuf = LocalBuf(avgSamps).clear,
+					slopePrev;
+				sig = sig.copy;
+				sig[0] = sig[0] / frameRate;
+				delayPhase = delayPhase + (0 .. (sig.size-1));
+				prev = Demand.kr(trig, 0, Dbufrd(delayBuf, delayPhase));
+				sigdiff = sig - prev;
+				sum = Select.kr(initTrig, [LocalIn.kr(delayChan), 0]);
+				sum = Latch.kr(sum + (trig * sigdiff), trig);
+				writer = Demand.kr(trig <! prev[0], 0, Dbufwr(sig, delayBuf, delayPhase));
+				LocalOut.kr(sum);
+				sum = sum.copy.add(sum[3] - sum[2])
+					// these make nan's and don't add anything that couldn't be done in the client
+					//.add((sum[4] - sum[2]) / sum[10])
+					.add(sum[6] - sum[5]);
+					//.add((sum[7] - sum[5]) / sum[12]);
+				sum = sum / avgSamps;
+				slopePrev = Demand.kr(trig, 0, Dbufrd(slopeBuf, (0 .. (sum.size-1))));
+				sig = sum ++ ((sum - slopePrev) / trigTime);
+				Demand.kr(trig <! slopePrev[0], 0, Dbufwr(sum, slopeBuf, (0 .. (sum.size-1))));
+				FreeSelf.kr(stop);
+				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6] ++ (8..(~outCh-1))]);
+			}).add;
+*/
 			if(~showViz) { ~visualizer.() };
 			~upd = Updater(~bus, e { |obj, data|
 				var tv, uv, vs, ds, mins, secs;
@@ -1152,9 +1216,10 @@ make: { |name|
 				topEnvironment[\seq].addDependant(currentEnvironment)
 			};
 		},
-		// oh HELL - the stupid @#$@$# mac refreshes a userview on creation
-		// while Swing doesn't - @#$@$# @#$@$# @#$@$# @#$@$# @#$@$#
 		latestData: 0 ! ~outCh,
+		velSizeSpec: #[1, 8, -2].asSpec,
+		maxExpectedVel: 1.2,
+		calcVelSize: { |vel| ~velSizeSpec.map(vel / ~maxExpectedVel) },
 		visualizer: {
 			~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
 			~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
@@ -1169,7 +1234,8 @@ make: { |name|
 					.background_(~uvBackColor)
 					.drawFunc_(e { |view|
 						var	data = ~latestData.copy,
-							velSize = data[8] * 2 + 3;  // max approx = 18
+							// velSize = data[9] * 2 + 3;  // max approx = 18
+							velSize = ~calcVelSize.(data[9]);
 						(5..7).do { |i| data[i] = data[i].neg };
 						Pen.color_(~boundsColor)
 							.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
@@ -1192,7 +1258,7 @@ make: { |name|
 		userfree: {
 			KrBusWatcher.unregister(~bus);
 			~upd.remove;
-			[~buf, ~maxVel, ~maxRatio/*, ~recvBus, ~bus*/].free;
+			[~buf, ~maxVel, ~maxRatio, ~trigbus/*, ~recvBus, ~bus*/].free;
 			topEnvironment[\seq] !? {
 				topEnvironment[\seq].removeDependant(currentEnvironment)
 			};
@@ -1235,6 +1301,7 @@ make: { |name|
 					recvBus: ~recvBus, bus: ~bus, avgTime: ~avgTime ? 0.2,
 					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
 					bufnum: ~buf, frameRate: ~frameRate,
+					trigbus: ~trigbus, useTrigBus: ~playTestFile.binaryValue,
 					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
 				),
 				Pfuncn({
@@ -1242,7 +1309,7 @@ make: { |name|
 						(
 							instrument: ("data" ++ ~numCh).asSymbol,
 							buf: ~buf, bus: ~recvBus, loop: 0,
-							delta: ~buf.numFrames / ~frameRate,
+							delta: ~buf.numFrames / ~frameRate, trigbus: ~trigbus,
 							startFrame: ~startFrame, frameRate: ~frameRate,
 							target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
 						).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
@@ -2624,3 +2691,163 @@ PR(\abstractProcess).clone {
 		});
 	};
 } => PR(\bAnacrusis);
+
+
+
+// lsolo arpeg dispatcher
+(
+make: { |name|
+	BP(name).free;
+	PR(\dataReader).chuck(BP(name), nil, (
+		rbufSize: 11,
+		makeDef: {
+			SynthDef(\yx, { |bus, useTrigBus, recvBus, trigbus, thresh = 4, timeThresh = 0.12,
+				countThresh = 4, meanSamps = 11|
+				var	sig = In.kr(bus + 12, 2),  // +12 = xspan
+				yx = sig[1] / max(sig[0], 0.01) * sig.sum,
+				bufsecs = In.kr(bus, 1),
+				trigIn = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0,  // force trig to be exactly 0 or 1
+				trig = Trig1.kr(trigIn, ControlDur.ir),
+				median = MedianTriggered.kr(yx, trig, meanSamps),
+				// dbuf = LocalBuf(~rbufSize),
+				// dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, ~rbufSize)], inf)),
+				// writer = Demand.kr(trig, 0, Dbufwr(median, dbuf, dphase)),
+				// all = Demand.kr(trig <! writer, 0, Dbufrd(dbuf, (0 .. ~rbufSize-1))),
+				// count = (all > thresh).sum,
+				// no MovingSumTriggered...
+				count = MeanTriggered.kr(median > thresh, trig, meanSamps) * meanSamps,
+				lastTrigTime = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
+				timer = Sweep.kr(1),
+				timeSince = timer - lastTrigTime,
+				realTrig = trig * (median > thresh) * (count < countThresh) * (timeSince > timeThresh);
+				LocalOut.kr(Latch.kr(timer, realTrig));
+				SendReply.kr(realTrig, '/yxtrig', [yx, timeSince, timer]);
+				SendReply.kr(trig, '/yxraw', yx);
+			}).add;
+		},
+		makeResponder: { |node|
+			var	self = currentEnvironment;
+			[
+				OSCpathResponder(s.addr, ['/yxtrig', node.nodeID], { |time, resp, msg|
+					msg = msg[3..];
+					BP(self[\collIndex]).changed(\yxtrig, msg[3..]);
+					self.doTrig(msg);
+				}).add,
+				OSCpathResponder(s.addr, ['/yxraw', node.nodeID], { |time, resp, msg|
+					self[\median] = msg[3];
+				}).add
+			]
+		},
+		thresh: 4.0,
+		timeThresh: 0.12,
+		countThresh: 4,
+		meanSamps: 11,
+		synthEventParms: { (
+			thresh: ~thresh,
+			timeThresh: ~timeThresh,
+			countThresh: ~countThresh,
+			meanSamps: ~meanSamps
+		) },
+		doTrig: ~doTrig
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\lsoloTrig);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~trigKey = \lsyx;
+	~dataKey = \dr;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.035).put(\distFar, 45);
+	};
+
+	~preparePlay = {
+		~noteRoutine = ~noteStrm.();
+	};
+	~stopCleanup = {
+		~esp.stop;
+	};
+	~nextNoteNow = {
+		if(~isPlaying) {
+			~esp.stop;
+			~event[\voicer].releaseAll;
+			~esp = EventStreamPlayer(~noteRoutine, ~event).play;
+		} { "BP(%) can't go, not playing".format(~collIndex.asCompileString).warn; };
+	};
+
+	~degrees = Pclutch(
+		Pn(Pwhile1({ |in, next| next <= 53 },
+			Pseries(
+				\patRejectLastN.eval(Pwhite(19, 25, inf), 3).asStream,
+				Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf
+			)
+		).clump(500), inf).collect { |degs| ~degArray = degs },
+		Pkey(\newesp)
+	);
+	~mode = \g0;
+	~yx = Pfunc({ BP(~trigKey).median.clip(0, 12) });
+	~attackTimeScale = Pif(Pkey(\newesp), 0.1, 1);
+	// ~randomizer = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, 5));
+	// ~base = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 })));
+	~randomizer = Pkey(\yx).linlin(0, 12, 0, 5);
+	~base = Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }));
+	~iok = Pfunc({ |ev|
+		var	i, rand, base = ev[\base], randTop = ev[\randomizer],
+			test = { |hz| ev[\voicer].nodes.any { |n| n.isPlaying and: { n.frequency == hz } } };
+		block { |break|
+			3.do {
+				rand = randTop.rand;
+				i = (base + rand).round;
+				if(test.(Mode(ev[\mode]).cps(ev[\degrees][i])).not) {
+					// ev[\i] = (ev[\base] + rand).round;
+					break.([i, true])
+				};
+			};
+			[-1, false]
+		}
+	});
+	// #[] == rest
+	~freq = Pif(Pkey(\ok), Pindex(Pkey(\degrees), Pfinval(1, Pkey(\i)), inf), #[]);
+	~dur = Pkey(\yx).linexp(0, 12, 0.5, 0.1) * Pexprand(3/4, 4/3, inf);
+	~length = Pkey(\dur) * Pkey(\yx).linlin(0, 20, 8, 6);
+	~gate = Pwhite(0, 1, inf).linexp(0, 1, 0.2, Pkey(\yx).linlin(0, 12, 0.2, 0.8));
+	// random around xavg
+	~pan = Pfunc({ BP(\dr).latest[3] + (0.5.rand2 * BP(\dr).latest[12]) });
+	~distance = Pfunc({ BP(\dr).latest[13].linlin(0, 1, 45, 5) });
+
+	~noteStrm = {
+		CleanupStream(Pbind(
+			\esphash, Pfunc({ ~esp.hash }),
+			\lasthash, Pdelay(Pkey(\esphash), 1),
+			\newesp, Pseq([true, Pbinop('!=', Pkey(\esphash), Pkey(\lasthash))], 1),
+			\degrees, BPStream(\degrees, resetSource: true),
+			\mode, BPStream(\mode, resetSource: true),
+			\yx, BPStream(\yx, resetSource: true),
+			\attackTimeScale, BPStream(\attackTimeScale, resetSource: true),
+			\randomizer, BPStream(\randomizer, resetSource: true),
+			\base, BPStream(\base, resetSource: true),
+			#[i, ok], BPStream(\iok, resetSource: true),
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev| ~esp.changed(\event, ev); 0 }), 0)
+		).asStream, { ~preparePlay.() });  // rebuild stream if it runs out of events
+	};
+
+	~asPattern = {
+		var	self = currentEnvironment;
+		Pseq([
+			(play: { self.nextNoteNow }, dur: 4),
+			Pn((freq: #[], dur: 4, length: 1, gate: 1), inf)
+		], 1)
+	};
+} => PR(\yxswirls);

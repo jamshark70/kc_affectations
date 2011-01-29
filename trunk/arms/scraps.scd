@@ -428,3 +428,64 @@ PR(\abstractProcess).clone {
 		}
 	)),
 
+
+
+f = SoundFile.openRead(BP(\di).buf.path);
+f.seek((15*60 + 19) * 30);
+f.readData(d = FloatArray.newClear(10*30 * f.numChannels));
+
+e = d.clump(12).flop;
+e[9].plot
+[e[9].minItem, e[9].maxItem]
+
+w = Window("test", Rect(5, 50, 600, 400));
+
+w.drawHook = {
+	var	data = e[9];
+	Pen.color_(Color.black)
+		.moveTo(Point(0, (1 - data[0]) * 400));
+	data.doAdjacentPairs { |y0, y1, i|
+		Pen.lineTo(Point((i+1) * 2, (1 - y1) * 400));
+	};
+	Pen.stroke;
+	Pen.color_(Color.red)
+		.line(Point(1.52*2*30, 0), Point(1.52*2*30, 400))
+		.line(Point(2.42*2*30, 0), Point(2.42*2*30, 400))
+		.stroke;
+};
+
+w.front;
+
+w.refresh;
+
+w.close;
+
+f = SoundFile.openRead(BP(\di).buf.path);
+f.seek((15*60 + 7) * 30);
+f.readData(d = FloatArray.newClear(10*30 * f.numChannels));
+
+g = d.clump(12).flop;
+e[9].plot
+[e[9].minItem, e[9].maxItem]
+
+v = Window("test", Rect(5, 50, 600, 400));
+
+v.drawHook = {
+	var	data = g[9];
+	Pen.color_(Color.black)
+		.moveTo(Point(0, (1 - data[0]) * 400));
+	data.doAdjacentPairs { |y0, y1, i|
+		Pen.lineTo(Point((i+1) * 2, (1 - y1) * 400));
+	};
+	Pen.stroke;
+	Pen.color_(Color.red)
+		.line(Point(1.08*2*30, 0), Point(1.08*2*30, 400))
+		.line(Point(1.64*2*30, 0), Point(1.64*2*30, 400))
+		.stroke;
+};
+
+v.front;
+
+v.refresh;
+
+w.close;

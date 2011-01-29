@@ -1746,8 +1746,149 @@ BP(\di).use {
 
 BP(\di).visualizer;
 
+// look at velocity slope for L's solo
+BP(\di).visualizer = {
+	~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
+	~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
+	~uvBackColor = ~uvBackColor ?? { Color.gray(0.9) };
+	~velSpec = ~velSpec ?? { #[3, 18, -4].asSpec };
+	defer(e {
+		~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
+		.onClose_(e { ~closeWin.() });
+		~uv = UserView(~win, 200@200)
+		.background_(~uvBackColor)
+		.drawFunc_(e { |view|
+			var	data = ~latestData.copy,
+			// velSize = data[8] * 2 + 3;  // max approx = 18
+			velSize = ~velSizeSpec.map(data[8]);
+			(5..7).do { |i| data[i] = data[i].neg };
+			Pen.color_(~boundsColor)
+			.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
+			.color_(~velColor)
+			.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100)),
+				velSize, velSize));
+		});
+		~win.startRow;
+		~tv = StaticText(~win, 200@30)
+		.font_(Font.default.copy.size_(18))
+		.align_(\center)
+		.background_(Color.white);
+		~win.startRow;
+		~vs = EZSlider(~win, 200@30, "velocity", #[0, 8]);
+		~win.startRow;
+		~vsl = EZSlider(~win, 200@30, "vel slope", #[-10, 10]);
+		~win.startRow;
+		~yx = EZSlider(~win, 200@30, "y/x", #[0.01, 100, \exp]);
+		~win.recursiveResize.front;
+
+		KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
+	});
+};
+
+BP(\di).upd.remove;
+BP(\di).use {
+	~upd = Updater(~bus, e { |obj, data|
+		var tv, uv, vs, ds, vsl, yx, mins, secs;
+		~latestData = data;
+		~win !? {
+			tv = ~tv; uv = ~uv; vs = ~vs; vsl = ~vsl; yx = ~yx; ds = ~dataSpecs;
+			defer {
+				vs.value = data[8];
+				vsl.value = data[25];
+				yx.value = (data[13] / max(data[12], 0.01)).abs;
+				uv.refresh;
+				mins = data[0] div: 60;
+				secs = (data[0] % 60).trunc;
+				tv.string = "%%:%%".format(
+					if(mins < 10) { $0 } { "" },
+					mins,
+					if(secs < 10) { $0 } { "" },
+					secs
+				);
+			};
+		};
+	});
+};
+
+BP(\di).visualizer;
+
+BP(\di).free;
+Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true, readFrame: 138));
+Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true, readFrame: 138, frameRate: 44100/1024));
+
 BP(\di).setStartTime(14, 57);  // L's solo
 BP(\di).setStartTime(15, 23);
+
+BP(\di).play;
+Server.killAll;
+
+BP(\di).fixer.trace;
+
+BP(\di).stop;
+
+// states:
+// tall, decreasing velocity
+// tall, increasing velocity
+// squat, low vel
+// squat, high vel
+
+u.remove;
+u = Updater(BP(\di), { |obj, what, more|
+	if(more == \stopped) { a.free }
+});
+
+// velocity is wiggly; how often does its slope switch sign?
+// sometimes 2 1's or 2 0's in a row??
+a = {
+	var vslope = In.kr(BP(\di).busIndex(\vavg) + 14, 1),
+		sign = vslope.sign,
+		// sign changed, and is non-zero
+		trig = (sign * HPZ1.kr(sign)).abs > 0,
+		rawtime = Timer.kr(trig),
+		longtrig = trig * (rawtime > 0.12),
+		// apparently this is the ONLY FUCKING WAY to remember previous values on demand
+		membuf = LocalBuf(1),
+		prevSign = Demand.kr(longtrig, 0, Dbufrd(membuf, 0)),
+		thisSign = Latch.kr(sign, longtrig);
+	Demand.kr(longtrig <! prevSign, 0, Dbufwr(thisSign, membuf, 0));
+	longtrig = longtrig * BinaryOpUGen('!=', prevSign, thisSign);
+	//Poll.kr(longtrig, Timer.kr(longtrig));
+	SendReply.kr(longtrig, '/timer', [Timer.kr(longtrig), sign, thisSign, prevSign]);
+	//SendReply.kr(trig, '/timer', [rawtime, sign]);
+	//Poll.kr(trig, rawtime);
+	0
+}.play(addAction: \addToTail);
+
+a.free;
+
+a.trace;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/timer', { |t, r, m| m.postln }).add;
+
+o = OSCresponderNode(s.addr, '/timer', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+s.sendMsg(\n_free, 1024);
+
+BP(\di).latestData[9+16];
+
+(
+w = ResizeFlowWindow("temp", Rect(10, 50, 150, 100));
+Button(w, 60@20)
+.states_([["GO"]])
+.action_({ BP(\acDisp).spawnChild(0) });
+w.recursiveResize.front;
+)
+
+p = BP(\acDisp);
+p.row.postcs;
+
+p.row = Plazy({
+	(/*Pwhite(0, 1, inf) +*/ Pkey(\yxRatio).linlin(0, BP(\di).maxRatio, 0, 2.99)).trunc
+});
+
+BP(BP(\acDisp).lastSpawned).yxRatio.autoSynth.trace;
+
 
 (
 fork {
@@ -1913,7 +2054,7 @@ p.numDecays = Pif(0.2.asPattern.coin, Pwhite(3, 7, inf), 0);
 
 p.top = Pseq([
 		(
-			Pseries({ |ev| ~startDegStream.next(ev) }, 
+			Pseries({ |ev| ~startDegStream.next(ev) },
 				Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
 				.collect { |bot| if(bot >= 28) { ~bot = bot } { nil } }
 			+.x
@@ -1975,3 +2116,270 @@ BP(\bmel).use {
 		};
 };
 
+
+
+// find extra points at right edge
+a = {
+	var	buses = BP(\di).recvBus.index + #[0, 3],
+	sig = In.kr(buses, 1),  // [phase, xmax]
+	realTime = Index.kr(BP(\di).buf, sig[0].trunc * BP(\di).buf.numChannels);
+	SendReply.kr(sig[1] > 0.95, '/highx', [realTime, sig[1]]);
+	0
+}.play(addAction: \addToTail);
+
+a.trace;
+a.free;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/highx', { |t, r, m| m.postln }).add;
+
+BP(\di).buf.get(0, { |d| x = d });
+x
+
+BP(\di).buf.get(935*12, { |d| [d, d-x].postln });
+
+
+Proto { ~dataAt = { 20.0.rand } } => BP(\yxtrk);
+
+// forget velocity, use y/x ratio
+z = Pwhile1({ |in, next| next <= 53 }, Pseries(21, Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf)).asStream.all;
+
+s.latency = 0.075;
+
+BP(\di).setStartTime(14, 50);
+
+(
+// counterintuitively, if thresh is too low (1.0-2.0), it is NOT more sensitive
+// because it's more likely to have recent values above the threshold
+var	lastTrigTime = 0, esp, thresh = 4,
+	protoEv = ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto.copy.put(\lcrvbamt, 0.035).put(\distFar, 45)),
+	modes = Mode.keys.select { |key| key != \g0 and: { key.asString.last == $0 } }.asArray;
+BP(\di).play;
+p = Pbind(
+	\voicer, VC(\ac).v,
+	\esphash, Pfunc({ esp.hash }),
+	\lasthash, Pdelay(Pkey(\esphash), 1),
+	\newesp, Pseq([true, Pbinop('!=', Pkey(\esphash), Pkey(\lasthash))], 1),
+	\degrees, Pclutch(
+		Pn(Pwhile1({ |in, next| next <= 53 },
+			Pseries(
+				\patRejectLastN.eval(Pwhite(19, 25, inf), 3).asStream,
+				Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf
+			)
+		).clump(500), inf),
+		Pkey(\newesp)
+	),
+	\mode, \g0,
+	\yx, Pfunc({ BP(\yxtrk).dataAt(0).clip(0, 12) }),
+	\attackTimeScale, Pif(Pkey(\newesp), 0.1, 1),
+	\randomizer, Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, 5)),
+	\base, Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }))),
+	#[i, ok], Pfunc({ |ev|
+		var	i, rand, base = ev[\base], randTop = ev[\randomizer],
+			test = { |hz| ev[\voicer].nodes.any { |n| n.isPlaying and: { n.frequency == hz } } };
+		block { |break|
+			3.do {
+				rand = randTop.rand;
+				i = (base + rand).round;
+				if(test.(Mode(ev[\mode]).cps(ev[\degrees][i])).not) {
+					// ev[\i] = (ev[\base] + rand).round;
+					break.([i, true])
+				};
+			};
+			[-1, false]
+		}
+	}),
+	\freq, Pif(Pkey(\ok), Pindex(Pkey(\degrees), Pfinval(1, Pkey(\i)), inf), #[]),  // #[] == rest
+	\dur, Pkey(\yx).linexp(0, 20, 0.5, 0.1) * Pexprand(3/4, 4/3, inf),
+	\length, Pkey(\dur) * Pkey(\yx).linlin(0, 20, 8, 3) * Pexprand(3/4, 4/3, inf),
+	\gate, Pif(Pkey(\newesp), 0.8, Pexprand(0.2, 0.4, inf)),
+	// random around xavg
+	\pan, Pfunc({ BP(\dr).latest[3] + (0.5.rand2 * BP(\dr).latest[12]) }),
+	\distance, Pfunc({ BP(\dr).latest[13].linlin(0, 1, 45, 5) }),
+	\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev| esp.changed(\event, ev); 0 }), 0)
+).asStream;
+
+u.remove;
+u = Updater(BP(\yxtrk), { |obj, what, median|
+	var	espUpd;
+	switch(what) { \yxraw } {
+		if(median > thresh and: { esp.clock.beats - lastTrigTime > 0.12 and: {
+			BP(\yxtrk).rbuf.count(_ > thresh) < 4
+		} }) {
+			lastTrigTime = esp.clock.beats;
+			esp.stop;
+			VC(\ac).releaseAll(s.latency);
+			esp = EventStreamPlayer(p, protoEv).play;
+			espUpd = Updater(esp, { |obj, what, event|
+				if(what == \event) {
+					espUpd.remove;
+					(	voicer: VC(\abs).v,
+						mode: event[\mode],
+						freq: event[\degrees][0],
+						delta: 1,
+						length: rrand(2.5, 5.5),
+						gate: 0.9
+					).parent_(protoEv.parent)
+					.play;
+				}
+			});
+		};
+	}
+	{ \stop } { esp.stop }
+});
+
+esp = EventStreamPlayer(p, protoEv).play;
+)
+
+BP(\di).stop;
+
+BP(\di).setStartTime(14, 0);
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~trigKey = \lsyx;
+	~dataKey = \dr;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.035).put(\distFar, 45);
+	};
+
+	~preparePlay = {
+		~noteRoutine = ~noteStrm.();
+	};
+	~stopCleanup = {
+		~esp.stop;
+	};
+	~nextNoteNow = {
+		if(~isPlaying) {
+			~esp.stop;
+			~event[\voicer].releaseAll;
+			~esp = EventStreamPlayer(~noteRoutine, ~event).play;
+		} { "BP(%) can't go, not playing".format(~collIndex.asCompileString).warn; };
+	};
+
+	~degrees = Pclutch(
+		Pn(Pwhile1({ |in, next| next <= 53 },
+			Pseries(
+				\patRejectLastN.eval(Pwhite(19, 25, inf), 3).asStream,
+				Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf
+			)
+		).clump(500), inf).collect { |degs| ~degArray = degs },
+		Pkey(\newesp)
+	);
+	~mode = \g0;
+	~yx = Pfunc({ BP(~trigKey).median.clip(0, 12) });
+	~attackTimeScale = Pif(Pkey(\newesp), 0.1, 1);
+	// ~randomizer = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, 5));
+	// ~base = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 })));
+	~randomizer = Pkey(\yx).linlin(0, 12, 0, 5);
+	~base = Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }));
+	~iok = Pfunc({ |ev|
+		var	i, rand, base = ev[\base], randTop = ev[\randomizer],
+			test = { |hz| ev[\voicer].nodes.any { |n| n.isPlaying and: { n.frequency == hz } } };
+		block { |break|
+			3.do {
+				rand = randTop.rand;
+				i = (base + rand).round;
+				if(test.(Mode(ev[\mode]).cps(ev[\degrees][i])).not) {
+					// ev[\i] = (ev[\base] + rand).round;
+					break.([i, true])
+				};
+			};
+			[-1, false]
+		}
+	});
+	// #[] == rest
+	~freq = Pif(Pkey(\ok), Pindex(Pkey(\degrees), Pfinval(1, Pkey(\i)), inf), #[]);
+	~dur = Pkey(\yx).linexp(0, 12, 0.5, 0.1) * Pexprand(3/4, 4/3, inf);
+	~length = Pkey(\dur) * Pkey(\yx).linlin(0, 20, 8, 6);
+	~gate = Pif(Pkey(\newesp), 0.8, Pexprand(0.2, 0.4, inf));
+	// random around xavg
+	~pan = Pfunc({ BP(\dr).latest[3] + (0.5.rand2 * BP(\dr).latest[12]) });
+	~distance = Pfunc({ BP(\dr).latest[13].linlin(0, 1, 45, 5) });
+
+	~noteStrm = {
+		CleanupStream(Pbind(
+			\esphash, Pfunc({ ~esp.hash }),
+			\lasthash, Pdelay(Pkey(\esphash), 1),
+			\newesp, Pseq([true, Pbinop('!=', Pkey(\esphash), Pkey(\lasthash))], 1),
+			\degrees, BPStream(\degrees, resetSource: true),
+			\mode, BPStream(\mode, resetSource: true),
+			\yx, BPStream(\yx, resetSource: true),
+			\attackTimeScale, BPStream(\attackTimeScale, resetSource: true),
+			\randomizer, BPStream(\randomizer, resetSource: true),
+			\base, BPStream(\base, resetSource: true),
+			#[i, ok], BPStream(\iok, resetSource: true),
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev| ~esp.changed(\event, ev); 0 }), 0)
+		).asStream, { ~preparePlay.() });  // rebuild stream if it runs out of events
+	};
+
+	~asPattern = {
+		var	self = currentEnvironment;
+		Pseq([
+			(play: { self.nextNoteNow }, dur: 4),
+			Pn((freq: #[], dur: 4, length: 1, gate: 1), inf)
+		], 1)
+	};
+} => PR(\yxswirls);
+)
+
+BP(\dr).free;
+PR(\dataReader) => BP(\dr);
+0 => BP(\dr);
+
+BP(\lsyx).free;
+Fact(\lsoloTrig) => BP(\lsyx);
+
+BP(\yxsw).free;
+PR(\yxswirls) => BP(\yxsw);
+VC(\ac) => BP(\yxsw);
+0 => BP(\yxsw);
+
+s.latency = 0.075;
+
+u.remove;
+u = Updater(BP(\lsyx), { |obj, what, more|
+	case { what == \play } { BP(\yxsw).play }
+		{ more == \stopped } { BP(\yxsw).stop };
+});
+
+BP(\lsyx).doTrig = {
+	var espUpd;
+	BP(\yxsw).nextNoteNow;
+	espUpd = Updater(BP(\yxsw).esp, { |obj, what, event|
+		if(what == \event) {
+			espUpd.remove;
+			(	voicer: VC(\abs).v,
+				mode: event[\mode],
+				freq: event[\degrees][0] - 7,
+				delta: 1,
+				length: rrand(3.5, 5.5),
+				gate: 0.4
+			).parent_(ProtoEvent(\voicerNote).v.parent)
+			.play;
+		}
+	});
+};
+
+VC(\abs).portaTime = 0.8;
+
+p = BP(\yxsw);
+
+p.dur = Pkey(\yx).linexp(0, 12, 0.5, 0.1) * Pexprand(3/4, 4/3, inf);
+p.length = Pkey(\dur) * Pkey(\yx).linlin(0, 20, 8, 6); // * Pexprand(3/4, 4/3, inf);
+
+p.randomizer = Pkey(\yx).linlin(0, 12, 0, 5);
+p.base = Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }));
+
+p.length = Pwhite(1.5, 2.5, inf);
+
+Object.dependantsDictionary.keys.select(_.isKindOf(EventStreamPlayer)).copy.do(_.releaseDependants);

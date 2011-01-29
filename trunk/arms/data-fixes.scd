@@ -144,7 +144,7 @@ f = { |n = 5|
 
 // data.poll(Impulse.kr(0), "2");
 //data.debug("data");
-	
+
 		Out.kr(outbus, data);
 //		FreeSelf.kr(notLoop * (ph >= fr));
 	}).add;
@@ -152,7 +152,7 @@ f = { |n = 5|
 	SynthDef("datafixer" ++ n, { |bus, avgTime = 0.2|
 		var	data = In.kr(bus, n),
 			avgSize = (avgTime * ControlRate.ir).trunc;
-	
+
 		data[n-1] = RunningSum.kr(data[n-1], avgSize) / avgSize / 20;
 
 		(n-1).do { |i| data[i] = data[i].madd(0.5, 0.5) };
@@ -206,7 +206,7 @@ Proto {
 		if(~iMadeBus) { ~bus.free };
 		~userfree.();
 	};
-	
+
 	~asPattern = {
 		~userPat.() <> ~busyWaitPat.()
 	};
@@ -247,7 +247,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		#[-1, 1],
 		#[-1, 1],
 		#[0, 8],
-		#[0, 2]		
+		#[0, 2]
 	].collect(_.asSpec),
 	// path: topEnvironment[\sampleDir] +/+ "arms/NACL_Arms.wav", // "arms/hands-1_data2.wav",
 	// path: topEnvironment[\sampleDir] +/+ "arms/hand_stack-100930.wav",
@@ -268,7 +268,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 				stopper = Line.kr(0, 1, dur, doneAction: notLoop*2),
 				ph = Phasor.kr(0, frameRate * ControlDur.ir, start: startFrame, end: end),
 				data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
-	
+
 			Out.kr(outbus, data);
 		}).add;
 
@@ -288,7 +288,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		// 	var	data = In.kr(bus, ~numCh),
 		// 		avgSize = (avgTime * ControlRate.ir).trunc,
 		// 		peak;
-		
+
 		// 	data[~numCh-1] = RunningSum.kr(data[~numCh-1], avgSize) / avgSize / maxVel;
 		// 	FreeSelf.kr(stop);
 
@@ -299,7 +299,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 		// 	data = data.add(data[6] / max(data[5], 0.01) / maxRatio);
 		// 	// peak = Peak.kr(data.last);
 		// 	// peak.poll(stop, "peak was");
-			
+
 		// 	ReplaceOut.kr(bus, data);
 		// }).add;
 
@@ -330,7 +330,7 @@ PR(\dataIn).chuck(BP(\di), nil, (
 			~win.startRow;
 			~vs = EZSlider(~win, 200@30, "velocity", ~dataSpecs[8]);
 			~win.recursiveResize.front;
-			
+
 			KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
 			~upd = Updater(~bus, e { |obj, data|
 				var tv = ~tv, uv = ~uv, vs = ~vs, ds = ~dataSpecs, mins, secs;
@@ -537,3 +537,595 @@ var	chanI = (0 .. (b.numChannels - 1));
 [ 0, 1.65159, 0.0412316 ]
 
 b.free;
+
+
+
+// exploratory
+
+MIDIPort.init(#[3]);
+
+BP.loadGui;
+
+MT(1).gui;
+
+ChuckableBrowser.newWindow;
+\makeEmptyMixer8.eval;
+
+// (Document.current.path.dirname.dirname +/+ "common/common-defs.scd").loadPath;
+(Document.current.path.dirname +/+ "arms-defs1.scd").loadPath;
+
+
+~master => MCG(7);
+~glrvbmc => MCG(5);
+~lcrvbmc => MCG(6);
+
+[~glrvb, ~lcrvb].do(_.run(false)); [~glrvbmc, ~lcrvbmc].do(_.mute(true));
+[~glrvb, ~lcrvb].do(_.run(true)); [~glrvbmc, ~lcrvbmc].do(_.mute(false));
+
+
+BP(\di).free;
+Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true, readFrame: 138));
+
+BP(\di).setStartTime(14, 57);  // L's solo
+BP(\di).setStartTime(15, 23);  // rise up
+BP(\di).setStartTime(15, 07);  // just before
+
+BP(\di).play;
+Server.killAll;
+
+BP(\di).fixer.trace;
+
+BP(\di).stop;
+
+
+// move data to lang
+(
+PR(\abstractProcess).clone {
+	~alwaysReset = true;
+	~autoPlay = true;
+	~event = (eventKey: \singleSynthPlayNotify);
+	~dk = \di;
+	~prep = {
+		if(BP.exists(~dk).not) {
+			"Load BP(%) first.".format(~dk.asCompileString).warn
+		} {
+			#[bus, trigbus, recvBus, numCh, outCh].do { |key| key.envirPut(BP(~dk)[key]) };
+		};
+
+		~def = ~makeDef.();
+		~userprep.();
+
+		BP(~dk).addDependant(currentEnvironment);
+	};
+	~freeCleanup = {
+		BP(~dk).removeDependant(currentEnvironment);
+		~userfree.();
+	};
+	~update = { |obj, what, more|
+		case
+		{ obj.tryPerform(\collIndex) == ~dk } {
+			case { ~autoPlay and: { what == \play } } { BP(~collIndex).play }
+				{ more == \stopped } { BP(~collIndex).stop }
+		}
+	};
+
+	~makeDef = {
+		SynthDef(("datafetcher" ++ ~outCh).asSymbol, { |bus, useTrigBus, recvBus, trigbus,
+			replyID|
+			var	sig = In.kr(bus, ~outCh),
+				trig = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0;  // force trig to be exactly 0 or 1
+			SendReply.kr(trig, '/datafetch', sig, replyID);
+		}).add
+	};
+	~makeResponder = { |node|
+		var	self = currentEnvironment;
+		OSCpathResponder(s.addr, ['/datafetch', (node ?? { ~node }).nodeID], { |time, resp, msg|
+			self[\latest] = msg[3..];
+			BP(self[\collIndex]).changed(\data, self[\latest]);
+		}).add;
+	};
+
+	// ~preparePlay = {
+	// };
+	~stopCleanup = {
+		~node !? { ~node.free; ~node = nil };
+		~resp.do(_.remove); ~resp = nil;
+	};
+	~recvEventNotify = { |node|
+		~node = node;
+		~resp = ~makeResponder.(node);
+	};
+	~asPattern = {
+		Pseq([
+			(instrument: ~def.name,
+				bus: ~bus, useTrigBus: BP(~dk).playTestFile.binaryValue, recvBus: ~recvBus,
+				trigbus: ~trigbus, replyID: ~replyID ? 0, addAction: \addToTail,
+				delta: 2
+			).putAll(~synthEventParms.()),
+			Pn((instrument: \rest, delta: 2), inf)
+		])
+	};
+	~synthEventParms = ();
+} => PR(\dataReader);
+)
+
+BP(\dr).free;
+PR(\dataReader) => BP(\dr);
+0 => BP(\dr);
+
+u.remove;
+u = Updater(BP(\dr), { |obj, what, data|
+	data.postln;
+});
+
+
+n = 15;
+n = 7;  // c 1/4 sec
+
+(
+w = ResizeFlowWindow(\velsum, Rect(5, 50, 300, 100));
+z = EZSlider(w, 290@20, "vel sign", #[-1, 1] /*[n.neg, n]*/, initVal: 0);
+w.recursiveResize.front;
+)
+
+p = Pbind(
+	// \type, \setProperties,
+	\time, Ptime(),
+	\delayed, Pdelay(Pkey(\vel), n),
+	\subtract, Pif(Pseries(0, 1, inf) < n, 0, Pkey(\delayed)),
+	\value, Paccum(-inf, inf, Pkey(\vel) - Pkey(\subtract), inf, 0).drop(1)
+	// \args, #[value],
+	// \defer, true,
+	// \receiver, z
+).asStream;
+
+n = 11;
+p = Pbind(
+	\time, Ptime(),
+	\delayed, Pdelay(Pkey(\vel), 3),
+	\subtract, Pif(Pseries(0, 1, inf) < 3, 0, Pkey(\delayed)),
+	\diff, Pkey(\vel) - Pkey(\subtract),
+	\sign, (Pkey(\diff)).sign,
+	\signDly, Pdelay(Pkey(\sign), n),
+	\sub2, Pif(Pseries(0, 1, inf) < n, 0, Pkey(\signDly)),
+	\value, (Paccum(-inf, inf, Pkey(\sign) - Pkey(\sub2), inf, 0).drop(1) / n),
+//	* (Pkey(\vel) / 1.5),
+	// \value, Pkey(\diff),
+	\colors, [Color.new255(255, 180, 180), Color.new255(180, 255, 180)],
+	\play, {
+		var ev = currentEnvironment;
+		defer {
+			z.value = ev[\value]; // * ev[\vel] / 1.5;
+			w.view.background = ev[\colors][0].blend(ev[\colors][1], ev[\value]*0.5 + 0.5);
+		};
+	}
+).asStream;
+
+z.sliderView.background = Color.clear;
+w.refresh;
+
+w.view.background = Color.clear;
+
+BP(\di).setStartTime(15, 7);  // just before
+
+BP(\di).buf.get(BP(\di).startFrame * BP(\di).buf.numChannels, _.postln);
+
+// p.next((vel: 1)).play;
+// p.next((vel: -1)).play;
+
+// problem here is, increasing velocity from near-zero reads the same as big velocity
+
+p.reset;
+t = nil;
+d = nil;
+
+u.remove;
+u = Updater(BP(\dr), { |obj, what, data|
+	p.next((vel: data[9 /*23*/])).play;
+	// var e = p.next((vel: data[23].sign));  // 23 == 9+14
+	// if(t.isNil) { t = e[\time] };
+	// if(e[\value].abs > 10 and: { d.isNil or: { d[\value].abs <= 10 } }) {
+	// 	[e[\time] - t, data[23].sign, e[\value]].postln;
+	// 	t = e[\time];
+	// };
+	// d = e;
+});
+
+f = { |y0, y1, y2, y3, mu|
+   var a0,a1,a2,a3,mu2;
+
+   mu2 = mu*mu;
+   a0 = y3 - y2 - y0 + y1;
+   a1 = y0 - y1 - a0;
+   a2 = y2 - y0;
+   a3 = y1;
+
+   (a0*mu*mu2)+(a1*mu2)+(a2*mu)+a3;
+};
+
+f.(0, 1, 2, 3, (0, 0.1 .. 2.0));
+
+BP(\di).play;
+BP(\di).player.trace;
+BP(\di).fixer.trace;
+BP(\di).stop;
+
+SynthDef(\acceldecel, { |bus, useTrigBus, recvBus, trigbus, upThresh = 0.8, downThresh = 0.15, delaySamps = 3, meanSamps = 11|
+	var	sig = In.kr(bus + 9, 1),  // +9 = vavg
+		bufsecs = In.kr(bus, 1),
+		trigIn = Select.kr(useTrigBus, [
+			InTrig.kr(recvBus, 1),
+			In.kr(trigbus, 1)
+		]) > 0,  // force trig to be exactly 0 or 1
+		trig = Trig1.kr(trigIn, ControlDur.ir),
+		// demand-rate delay AGAIN
+		dbuf = LocalBuf(delaySamps),
+		dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
+		prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
+		diff = sig - prev,
+		writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
+		signmean = MeanTriggered.kr(diff.sign, trig, meanSamps),
+		threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
+		threshTrig = HPZ1.kr(threshDetect).abs,
+		oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
+	SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, (bufsecs / 60).trunc, (bufsecs % 60).round(0.01)]);
+	SendReply.kr(trig, '/accelraw', signmean);
+}).add;
+
+q.remove; BP(\di).uv.background_(Color.clear);
+q = OSCresponderNode(s.addr, '/acceldecel', { |t, r, m|
+	// ~incr = (m[4].abs > 0).binaryValue * m[3].sign;
+	// ~prevIncr = ~incr;
+	~incr = m[4] * m[3].sign;
+	m.postln;
+	defer {
+		BP(\di).uv.background_(
+			switch(~incr.asInteger)
+			{ -1 } { Color.gray(0.6) }
+			{ 0 } { Color.clear }
+			{ 1 } { Color.white }
+		)
+	};
+}).add;
+
+(
+var colors = [Color.new255(255, 180, 180), Color.new255(180, 255, 180)];
+o.remove;
+o = OSCresponderNode(s.addr, '/accelraw', { |t, r, m|
+	defer {
+		z.value = m[3];
+		w.view.background = colors[0].blend(colors[1], m[3]*0.5 + 0.5);
+	};
+}).add;
+)
+
+u.remove;
+u = Updater(BP(\di), { |obj, what, more|
+	case { more == \stopped } { a.free; a = nil }
+		{ what == \play } {
+			a = Synth(\acceldecel, [bus: BP(\di).bus, useTrigBus: 1, recvBus: BP(\di).recvBus,
+				trigbus: BP(\di).trigbus, upThresh: 0.5, downThresh: 0.1], addAction: \addToTail);
+		};
+});
+
+a.free;
+a = Synth(\acceldecel, [bus: BP(\di).bus, useTrigBus: 1, recvBus: BP(\di).recvBus, trigbus: BP(\di).trigbus, downThresh: 0.1], addAction: \addToTail);
+
+BP(\di).play;
+
+BP(\di).setStartTime(15, 18);
+
+a.trace;
+a.free;
+
+SynthDef(\singrain, { |freq = 440, amp = 0.1, sustain = 0.1, out|
+	Out.ar(out, (SinOsc.ar(freq, 0, amp)
+		* EnvGen.kr(Env.perc(0.05, 0.95), timeScale: sustain, doneAction: 2)) ! 2);
+}).add;
+
+~incr = 0;
+p = ~master.play(Penvir((prevIncr: 0, sideEffect: { |value| value }), Pbind(
+	\instrument, \singrain,
+	\dur, Pswitch([
+		Plazy({ Env([rrand(0.07, 0.09), rrand(0.4, 0.45)], [rrand(0.4, 0.75)], \exp).asPseg }),
+		Plimitsum({ rrand(0.4, 0.75) }, Pswitch([
+			Pwhite(0.35, 0.45, inf),
+			Pwhite(0.07, 0.1, inf)
+		], Pfunc({ (~prevIncr > 0).binaryValue }))),
+		Plazy({ Env([rrand(0.4, 0.45), rrand(0.07, 0.09)], [rrand(0.4, 0.75)], \exp).asPseg })
+	], Pfunc({
+		~sideEffect.(topEnvironment[\incr] + 1, ~prevIncr = topEnvironment[\incr])
+	})),
+	\fmul, Pgbrown(3/4, 4/3, 0.1, inf),
+	\freq, 440 * pow(Pkey(\dur).linlin(0.07, 0.45, Pkey(\fmul), 1), Prand(#[-1, 1], inf)),
+	\legato, 0.7
+)));
+
+p.stop;
+
+(
+BP(\actrk).free;
+PR(\dataReader).chuck(BP(\actrk), nil, (
+	rbufProto: (val: 0, sign: 0, dur: 0),
+	rbufSize: 10,
+	userprep: {
+		~rbuf = { ~rbufProto.copy } ! ~rbufSize;
+		~rbufIndex = 0;
+	},
+	// increasing 'i' goes backward in time
+	dataAt: { |i = 0| ~rbuf.wrapAt(~rbufIndex - i) },
+	makeDef: {
+		SynthDef(\acceldecel, { |bus, useTrigBus, recvBus, trigbus, upThresh = 0.8, downThresh = 0.15, delaySamps = 3, meanSamps = 11|
+			var	sig = In.kr(bus + 9, 1),  // +9 = vavg
+			bufsecs = In.kr(bus, 1),
+			trigIn = Select.kr(useTrigBus, [
+				InTrig.kr(recvBus, 1),
+				In.kr(trigbus, 1)
+			]) > 0,  // force trig to be exactly 0 or 1
+			trig = Trig1.kr(trigIn, ControlDur.ir),
+			// demand-rate delay AGAIN
+			dbuf = LocalBuf(delaySamps),
+			dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
+			prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
+			diff = sig - prev,
+			writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
+			signmean = MeanTriggered.kr(diff.sign, trig, meanSamps),
+			threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
+			threshTrig = HPZ1.kr(threshDetect).abs,
+			oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
+			SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, bufsecs]);
+			SendReply.kr(trig, '/accelraw', signmean);
+		}).add;
+	},
+	makeResponder: { |node|
+		var	self = currentEnvironment;
+		[
+			OSCpathResponder(s.addr, ['/acceldecel', node.nodeID], e { |t, r, m|
+				~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
+				~rbuf[~rbufIndex].put(\sign, m[4] * m[3].sign)
+					.put(\value, m[3])
+					.put(\dur, m[5])
+					.put(\time, m[6]);
+				BP(~collIndex).changed(\accel, ~rbuf[~rbufIndex]);
+			}).add,
+			OSCpathResponder(s.addr, ['/accelraw', node.nodeID], { |t, r, m|
+				self[\mean] = m[3];
+			}).add
+		]
+	},
+	upThresh: 0.5,
+	downThresh: 0.1,
+	delaySamps: 3,
+	meanSamps: 11,
+	synthEventParms: { (
+		upThresh: ~upThresh,
+		downThresh: ~downThresh,
+		delaySamps: ~delaySamps,
+		meanSamps: ~meanSamps
+	) }
+));
+0 => BP(\actrk);
+)
+
+u.remove;
+u = Updater(BP(\actrk), { |obj, what, data|
+	if(what == \accel) { data.postln };
+});
+
+
+BP(\actrk).dataAt([0, 1]).postln; "\n"
+
+
+BP(\actrk).dataAt(0).sign;
+
+
+// check height
+#[yspan, xspan].collect { |key| BP(\di).dataNames.indexOf(key) };
+
+~yx = Array(600);
+u.remove;
+u = Updater(BP(\dr), e { |obj, what, data|
+	var	yx = data[13] / max(data[12], 0.01) * (data[13] + data[12]);
+	~yx.add(yx);
+	if(~yx.size == 600) { u.remove; "done".postln };
+});
+
+~yx.plot
+
+(
+w = ResizeFlowWindow(\velsum, Rect(5, 50, 300, 100));
+z = EZSlider(w, 290@20, "yx", #[0, 100], initVal: 0);
+w.recursiveResize.front;
+)
+
+u.remove;
+u = Updater(BP(\dr), e { |obj, what, data|
+	var	yx = data[13] / max(data[12], 0.01) * (data[13] + data[12]);
+	defer { z.value = yx };
+});
+
+(
+w = Window(\velsum, Rect(5, 50, 620, 400));
+w.drawHook = {
+	if(~yx.notEmpty) { Pen.moveTo(Point(0, 399 - (~yx[0] * 12))) };
+	~yx.doAdjacentPairs { |y0, y1, x|
+		Pen.lineTo(Point(x+1, 399 - (y1 * 12)));
+	};
+	Pen.stroke;
+};
+w.front;
+)
+
+w.close
+
+~yx = Array(600);
+u.remove;
+u = Updater(BP(\dr), e { |obj, what, data|
+	var	yx = data[13] / max(data[12], 0.01) * (data[13] + data[12]);
+	if(~yx.size == 600) {
+		~yx = ~yx.rotate(-1).put(599, yx);
+	} {
+		~yx.add(yx);
+	};
+	defer { w.refresh };
+	// if(~yx.size == 600) { u.remove; "done".postln };
+});
+
+
+(
+BP(\yxtrk).free;
+PR(\dataReader).chuck(BP(\yxtrk), nil, (
+	rbufProto: 0,
+	rbufSize: 11,
+	userprep: {
+		~rbuf = { ~rbufProto.copy } ! ~rbufSize;
+		~rbufIndex = 0;
+	},
+	// increasing 'i' goes backward in time
+	dataAt: { |i = 0| ~rbuf.wrapAt(~rbufIndex - i) },
+	makeDef: {
+		SynthDef(\yx, { |bus, useTrigBus, recvBus, trigbus, meanSamps = 11|
+			var	sig = In.kr(bus + 12, 2),  // +12 = xspan
+			yx = sig[1] / max(sig[0], 0.01) * sig.sum,
+			bufsecs = In.kr(bus, 1),
+			trigIn = Select.kr(useTrigBus, [
+				InTrig.kr(recvBus, 1),
+				In.kr(trigbus, 1)
+			]) > 0,  // force trig to be exactly 0 or 1
+			trig = Trig1.kr(trigIn, ControlDur.ir),
+			// demand-rate delay AGAIN
+			// dbuf = LocalBuf(delaySamps),
+			// dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
+			// prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
+			// diff = sig - prev,
+			// writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
+			median = MedianTriggered.kr(yx, trig, meanSamps); //,
+			// threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
+			// threshTrig = HPZ1.kr(threshDetect).abs,
+			// oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
+			// SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, bufsecs]);
+			SendReply.kr(trig, '/yxraw', median);
+		}).add;
+	},
+	makeResponder: { |node|
+		var	self = currentEnvironment;
+		[
+			// OSCpathResponder(s.addr, ['/acceldecel', node.nodeID], e { |t, r, m|
+			// 	~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
+			// 	~rbuf[~rbufIndex].put(\sign, m[4] * m[3].sign)
+			// 		.put(\value, m[3])
+			// 		.put(\dur, m[5])
+			// 		.put(\time, m[6]);
+			// 	BP(~collIndex).changed(\accel, ~rbuf[~rbufIndex]);
+			// }).add,
+			OSCpathResponder(s.addr, ['/yxraw', node.nodeID], e { |t, r, m|
+				self[\median] = m[3];
+			 	~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
+			 	~rbuf[~rbufIndex] = m[3];
+				BP(~collIndex).changed(\yxraw, m[3]);
+			}).add
+		]
+	},
+	// upThresh: 0.5,
+	// downThresh: 0.1,
+	// delaySamps: 3,
+	meanSamps: 11,
+	synthEventParms: { (
+		// upThresh: ~upThresh,
+		// downThresh: ~downThresh,
+		// delaySamps: ~delaySamps,
+		meanSamps: ~meanSamps
+	) }
+));
+0 => BP(\yxtrk);
+)
+
+~yx = Array(600);
+u.remove;
+u = Updater(BP(\yxtrk), e { |obj, what, yx|
+	if(what == \yxraw) {
+		if(~yx.size == 600) {
+			~yx = ~yx.rotate(-1).put(599, yx);
+		} {
+			~yx.add(yx);
+		};
+		defer { w.refresh };
+		// if(~yx.size == 600) { u.remove; "done".postln };
+	};
+});
+
+BP(\yxtrk).meanSamps = 11;
+
+BP(\yxtrk).rbuf
+
+y = BP(\yxtrk).dataAt((0..10));
+y.differentiate.sum.abs / (y[0..9] absdif: y[1..10]).sum
+
+
+(
+(
+make: { |name|
+	BP(name).free;
+	PR(\dataReader).chuck(BP(name), nil, (
+		rbufSize: 11,
+		makeDef: {
+			SynthDef(\yx, { |bus, useTrigBus, recvBus, trigbus, thresh = 4, timeThresh = 0.12,
+				countThresh = 4, meanSamps = 11|
+				var	sig = In.kr(bus + 12, 2),  // +12 = xspan
+				yx = sig[1] / max(sig[0], 0.01) * sig.sum,
+				bufsecs = In.kr(bus, 1),
+				trigIn = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0,  // force trig to be exactly 0 or 1
+				trig = Trig1.kr(trigIn, ControlDur.ir),
+				median = MedianTriggered.kr(yx, trig, meanSamps),
+				// dbuf = LocalBuf(~rbufSize),
+				// dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, ~rbufSize)], inf)),
+				// writer = Demand.kr(trig, 0, Dbufwr(median, dbuf, dphase)),
+				// all = Demand.kr(trig <! writer, 0, Dbufrd(dbuf, (0 .. ~rbufSize-1))),
+				// count = (all > thresh).sum,
+				// no MovingSumTriggered...
+				count = MeanTriggered.kr(median > thresh, trig, meanSamps) * meanSamps,
+				lastTrigTime = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
+				timer = Sweep.kr(1),
+				timeSince = timer - lastTrigTime,
+				realTrig = trig * (median > thresh) * (count < countThresh) * (timeSince > timeThresh);
+				LocalOut.kr(Latch.kr(timer, realTrig));
+				SendReply.kr(realTrig, '/xytrig', [yx, timeSince, timer]);
+			}).add;
+		},
+		makeResponder: { |node|
+			var	self = currentEnvironment;
+			OSCpathResponder(s.addr, ['/xytrig', node.nodeID], { |time, resp, msg|
+				msg = msg[3..];
+				BP(self[\collIndex]).changed(\xytrig, msg[3..]);
+				self.doTrig(msg);
+			}).add;
+		},
+		thresh: 4.0,
+		timeThresh: 0.12,
+		countThresh: 4,
+		meanSamps: 11,
+		synthEventParms: { (
+			thresh: ~thresh,
+			timeThresh: ~timeThresh,
+			countThresh: ~countThresh,
+			meanSamps: ~meanSamps
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\lsoloTrig);
+)
+
+BP(\lsyx).free;
+Fact(\lsoloTrig) => BP(\lsyx);
+
+BP(\lsyx).doTrig = { |data| data.postln };
+
+BP(\di).setStartTime(14, 50);
+
+BP(\lsyx).node.trace
