@@ -399,3 +399,27 @@ PR(\busLock).clone {
 	}
 ))) => ProtoEvent(\polySynthFxPatLock);
 */
+
+
+
+BP:stop
+if(#[drum7, drum8].includes(collIndex)) {
+	"\n\n\nSTOPPED %\n".postf(collIndex);
+	this.dumpBackTrace;
+	"^^ This is a DEBUG backtrace; don't panic.".postln;
+};
+
+stopNow
+if(#[drum7, drum8].includes(collIndex)) {
+	"\n\n\nSTOPPED NOW %\n".postf(collIndex);
+	this.dumpBackTrace;
+	"^^ This is a DEBUG backtrace; don't panic.".postln;
+};
+
+streamCleanupFunc
+if(#[drum7, drum8].includes(collIndex)) {
+	"\n\n\nSTOPPED BY CLEANUP %\n".postf(collIndex);
+	this.dumpBackTrace;
+	"^^ This is a DEBUG backtrace; don't panic.".postln;
+};
+
