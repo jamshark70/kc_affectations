@@ -629,7 +629,7 @@ make: { |name|
 	};
 	SynthDescLib.at(~defname).msgFuncKeepGate = true;
 
-	out = Voicer(25, ~defname, target: ~target);
+	out = Voicer(50, ~defname, target: ~target);
 
 	if(~globalFilter) {
 		out.mapGlobal(\ffreq, nil, 14000, \freq);
@@ -2700,9 +2700,11 @@ make: { |name|
 	BP(name).free;
 	PR(\dataReader).chuck(BP(name), nil, (
 		rbufSize: 11,
+		autoPlay: ~autoPlay ? true,
+		doTrig: ~doTrig,
 		makeDef: {
 			SynthDef(\yx, { |bus, useTrigBus, recvBus, trigbus, thresh = 4, timeThresh = 0.12,
-				countThresh = 4, meanSamps = 11|
+				countThresh = 4, meanSamps = 11, lowThresh = 0.6, lowSamps = 16|
 				var	sig = In.kr(bus + 12, 2),  // +12 = xspan
 				yx = sig[1] / max(sig[0], 0.01) * sig.sum,
 				bufsecs = In.kr(bus, 1),
@@ -2712,20 +2714,20 @@ make: { |name|
 				]) > 0,  // force trig to be exactly 0 or 1
 				trig = Trig1.kr(trigIn, ControlDur.ir),
 				median = MedianTriggered.kr(yx, trig, meanSamps),
-				// dbuf = LocalBuf(~rbufSize),
-				// dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, ~rbufSize)], inf)),
-				// writer = Demand.kr(trig, 0, Dbufwr(median, dbuf, dphase)),
-				// all = Demand.kr(trig <! writer, 0, Dbufrd(dbuf, (0 .. ~rbufSize-1))),
-				// count = (all > thresh).sum,
 				// no MovingSumTriggered...
-				count = MeanTriggered.kr(median > thresh, trig, meanSamps) * meanSamps,
+				overThresh = median > thresh,
+				count = MeanTriggered.kr(overThresh, trig, meanSamps) * meanSamps,
 				lastTrigTime = Select.kr(Impulse.kr(0), [LocalIn.kr(1), 0]),
 				timer = Sweep.kr(1),
 				timeSince = timer - lastTrigTime,
-				realTrig = trig * (median > thresh) * (count < countThresh) * (timeSince > timeThresh);
+				realTrig = trig * overThresh * (count < countThresh) * (timeSince > timeThresh),
+				underThresh = median < lowThresh,
+				lowCount = MeanTriggered.kr(underThresh, trig, lowSamps) * lowSamps,
+				lowTrig = trig * underThresh * (lowCount >= (lowSamps-0.01));
+				lowTrig = lowTrig * (Timer.kr(lowTrig) > 0.5);
 				LocalOut.kr(Latch.kr(timer, realTrig));
-				SendReply.kr(realTrig, '/yxtrig', [yx, timeSince, timer]);
-				SendReply.kr(trig, '/yxraw', yx);
+				SendReply.kr(realTrig + lowTrig, '/yxtrig', [median, timeSince, timer]);
+				SendReply.kr(trig, '/yxraw', median);
 			}).add;
 		},
 		makeResponder: { |node|
@@ -2733,11 +2735,12 @@ make: { |name|
 			[
 				OSCpathResponder(s.addr, ['/yxtrig', node.nodeID], { |time, resp, msg|
 					msg = msg[3..];
-					BP(self[\collIndex]).changed(\yxtrig, msg[3..]);
+					NotificationCenter.notify(self[\collIndex], \yxtrig, msg);
 					self.doTrig(msg);
 				}).add,
 				OSCpathResponder(s.addr, ['/yxraw', node.nodeID], { |time, resp, msg|
 					self[\median] = msg[3];
+					NotificationCenter.notify(self[\collIndex], \yxraw, msg[3]);
 				}).add
 			]
 		},
@@ -2745,13 +2748,16 @@ make: { |name|
 		timeThresh: 0.12,
 		countThresh: 4,
 		meanSamps: 11,
+		lowThresh: 1.8,
+		lowSamps: 7,
 		synthEventParms: { (
 			thresh: ~thresh,
 			timeThresh: ~timeThresh,
 			countThresh: ~countThresh,
-			meanSamps: ~meanSamps
-		) },
-		doTrig: ~doTrig
+			meanSamps: ~meanSamps,
+			lowThresh: ~lowThresh,
+			lowSamps: ~lowSamps
+		) }
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\lsoloTrig);
@@ -2793,13 +2799,16 @@ PR(\abstractProcess).clone {
 	~mode = \g0;
 	~yx = Pfunc({ BP(~trigKey).median.clip(0, 12) });
 	~attackTimeScale = Pif(Pkey(\newesp), 0.1, 1);
+	~decayTimeScale = Pkey(\freq).linlin(19, 53, 1, 3.5);
 	// ~randomizer = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, 5));
 	// ~base = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 })));
 	~randomizer = Pkey(\yx).linlin(0, 12, 0, 5);
 	~base = Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }));
 	~iok = Pfunc({ |ev|
 		var	i, rand, base = ev[\base], randTop = ev[\randomizer],
-			test = { |hz| ev[\voicer].nodes.any { |n| n.isPlaying and: { n.frequency == hz } } };
+			test = { |hz| ev[\voicer].nodes.any { |n|
+				n.isPlaying and: { n.isReleasing.not and: { n.frequency == hz } } 
+			} };
 		block { |break|
 			3.do {
 				rand = randTop.rand;
@@ -2829,7 +2838,6 @@ PR(\abstractProcess).clone {
 			\degrees, BPStream(\degrees, resetSource: true),
 			\mode, BPStream(\mode, resetSource: true),
 			\yx, BPStream(\yx, resetSource: true),
-			\attackTimeScale, BPStream(\attackTimeScale, resetSource: true),
 			\randomizer, BPStream(\randomizer, resetSource: true),
 			\base, BPStream(\base, resetSource: true),
 			#[i, ok], BPStream(\iok, resetSource: true),
@@ -2839,7 +2847,12 @@ PR(\abstractProcess).clone {
 			\gate, BPStream(\gate, resetSource: true),
 			\pan, BPStream(\pan, resetSource: true),
 			\distance, BPStream(\distance, resetSource: true),
-			\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev| ~esp.changed(\event, ev); 0 }), 0)
+			\attackTimeScale, BPStream(\attackTimeScale, resetSource: true),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev|
+				NotificationCenter.notify(~esp, \event, ev);
+				0
+			}), 0)
 		).asStream, { ~preparePlay.() });  // rebuild stream if it runs out of events
 	};
 
@@ -2851,3 +2864,245 @@ PR(\abstractProcess).clone {
 		], 1)
 	};
 } => PR(\yxswirls);
+
+
+// lsolo bells+pad dispatcher
+(
+make: { |name|
+	BP(name).free;
+	PR(\dataReader).chuck(BP(name), nil, (
+		rbufProto: (val: 0, sign: 0, dur: 0),
+		rbufSize: 10,
+		autoPlay: ~autoPlay ? true,
+		doTrig: ~doTrig,
+		userprep: {
+			~rbuf = { ~rbufProto.copy } ! ~rbufSize;
+			~rbufIndex = 0;
+		},
+		// increasing 'i' goes backward in time
+		dataAt: { |i = 0| ~rbuf.wrapAt(~rbufIndex - i) },
+		makeDef: {
+			SynthDef(\acceldecel, { |bus, useTrigBus, recvBus, trigbus, upThresh = 0.8, downThresh = 0.15, delaySamps = 3, meanSamps = 11|
+				var	sig = In.kr(bus + 9, 1),  // +9 = vavg
+				bufsecs = In.kr(bus, 1),
+				trigIn = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0,  // force trig to be exactly 0 or 1
+				trig = Trig1.kr(trigIn, ControlDur.ir),
+				// demand-rate delay AGAIN
+				dbuf = LocalBuf(delaySamps),
+				dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
+				prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
+				diff = sig - prev,
+				writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
+				signmean = MeanTriggered.kr(diff.sign, trig, meanSamps),
+				threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
+				threshTrig = HPZ1.kr(threshDetect).abs,
+				oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
+				SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, bufsecs]);
+				SendReply.kr(trig, '/accelraw', signmean);
+			}).add;
+		},
+		makeResponder: { |node|
+			var	self = currentEnvironment;
+			[
+				OSCpathResponder(s.addr, ['/acceldecel', node.nodeID], e { |t, r, m|
+					~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
+					~rbuf[~rbufIndex].put(\sign, m[4] * m[3].sign)
+						.put(\value, m[3])
+						.put(\dur, m[5])
+						.put(\time, m[6]);
+					NotificationCenter.notify(~collIndex, \accel, ~rbuf[~rbufIndex]);
+					~doTrig.(~rbuf[~rbufIndex]);
+				}).add,
+				OSCpathResponder(s.addr, ['/accelraw', node.nodeID], { |t, r, m|
+					self[\mean] = m[3];
+					NotificationCenter.notify(~collIndex, \accelraw, m[3]);
+				}).add
+			]
+		},
+		upThresh: 0.5,
+		downThresh: 0.1,
+		delaySamps: 3,
+		meanSamps: 11,
+		synthEventParms: { (
+			upThresh: ~upThresh,
+			downThresh: ~downThresh,
+			delaySamps: ~delaySamps,
+			meanSamps: ~meanSamps
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\acceltrig);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~makeStreamForKey.(\top);
+	};
+
+	~mode = \g0;
+	~freq = Pseq([
+		Pfuncn({ BP(\bfl).chordNotes }, 1),
+		Pn(Pseries(
+			Pwhite(40, 53, inf).asStream,
+			Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf),
+			{ rrand(3, 6) }
+		).clump(500), inf)
+	], 1);
+	~dur = Pwhite(3.5, 6.5, inf);
+	~length = Pwhite(3.0, 7.0, inf);
+	~gate = 0.8;
+	~pan = Pseq([
+		Pfuncn({ |ev| (-1.0, (ev[\freq].size - 1).reciprocal - 1 .. 1.0).scramble }),
+		Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf)
+	], 1);
+	~distance = Pwhite(5.0, 20.0, inf);
+	~ffreq = Pexprand(400, 1200, inf);
+	~fenvpeak = (14000 / Pkey(\ffreq)) - 1;
+	~finalAmp = 0.4;
+	~attackTimeScale = Pseq([4.5, Pwhite(1.0, 1.6, inf)], 1);
+	~decayTimeScale = 4;
+	~rq = 0.3;
+
+	~asPattern = {
+		Pbind(
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\finalAmp, BPStream(\finalAmp),
+			\mode, BPStream(\mode),
+			\ffreq, BPStream(\ffreq),
+			\fenvpeak, BPStream(\fenvpeak),
+			\attackTimeScale, BPStream(\attackTimeScale, resetSource: true),
+			\decayTimeScale, BPStream(\decayTimeScale, resetSource: true),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\quietChords);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~makeStreamForKey.(\top);
+	};
+
+	~top = \patRejectLastN.eval(Pwhite(47, 53, inf), 3);
+	~freq = Plazy({
+		~chordNotes = Pwhile1({ |in, next| next >= 25 },
+			Pseries(
+				{ |ev| ~topStream.next(ev) },
+				Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf), inf
+			)
+		).asStream.all;
+		Pseq(~chordNotes, 1)
+	});
+	~dur = max(0.1, Pgeom({ rrand(0.25, 0.35) }, Pstutter(200, Pwhite(0.84, 0.9, inf)), inf));
+	~length = 7;
+	~gate = 0.6;
+	~pan = Plazy({
+		var	start = BP(\di).latestData[3];
+		Pseries.fromEndpoints(start, start.sign.neg, ~chordNotes.size);
+	});
+	~distance = Plazy({ Pseries.fromEndpoints(5, 40, ~chordNotes.size) });
+	~ampMul = 2.2;
+	~mode = \g0;
+
+	~asPattern = {
+		Pbind(
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\ampMul, BPStream(\ampMul),
+			\mode, BPStream(\mode)
+		)
+	};
+} => PR(\bellFlourish);
+
+
+(make: { |name|
+	BP(name).free;
+	PR(\locoMel).chuck(BP(name), nil, (
+		numDescents: 4,
+		scaleLen: Pwhite(2, 5, inf),
+		numDecays: Pwhite(2, 3, inf),
+		startDeg: Pwhite(41, 48, inf),
+		freq: Pseq([
+			(
+				Pseries({ |ev| ~startDegStream.next(ev) }, 
+					Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+					.collect { |bot| ~bot = bot }
+				+.x
+				Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+					.collect { |scale| ~scale = scale }
+			)
+			+.x
+			Pif(
+				Pfunc({ ~scale < (~scaleSize - 1) }),
+				Pn(0, 1),
+				Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+			),
+			Plazy({ |ev|
+				var	num = ~numDecaysStream.next(ev);
+				~decay = num * 2;
+				(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 0 /* 2.rand */)
+			})
+		], 1),
+		preparePlay: {
+			~decay = nil;
+			#[numDescents, scaleLen, numDecays, startDeg].do { |key|
+				if((key ++ "Stream").asSymbol.envirGet.isNil) {
+					~makeStreamForKey.(key)
+				};
+			};
+			~clock.schedAbs(~eventSchedTime, e {
+				~event[\voicer].globalControls[\distance].automate(\ctlEnv, [
+					env: Env(#[5, 25], [rrand(12.0, 19.0)], rrand(1.0, 2.2)),
+					connect: 0
+				], addAction: \addToHead);
+			});
+		},
+		dur: Pswitch([Pn(0.25, 2), 0.5, 0.75, 1, Pwhite(4, 7, 1) * 0.5],
+			Penvir((prev: -1, count: 0, countLimits: #[2, 3, 2, 1, 1],
+				collIndex: name,  // tricky! no good way to get this after-the-fact
+				sideEffect: { |x| x }),
+				Pseq([
+					Pwhite(1, 3, 1),
+					Pwrand([0, 1, 2, 3, 4], #[3, 9, 15, 12, 5].normalizeSum, inf)
+					.reject { |index| (index == 4) and: { BP(~collIndex)[\decay].notNil } }
+				])
+				.select { |val|
+					~sideEffect.(~prev != val or: { ~count < ~countLimits[val] }, (
+						if(~prev != val) {
+							~prev = val;
+							~count = 1;
+						} {
+							~count = ~count + 1
+						};
+					))
+				}
+			)
+		),
+		length: Pif(
+			(Pkey(\dur) > 1),
+			min(Pkey(\dur) - 0.5, Pwhite(1.75, 2.75, inf)),
+			Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf)
+		)
+		));
+	0 => BP(name);
+}, type: \bp) => Fact(\lsoloMel);

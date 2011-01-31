@@ -2383,3 +2383,369 @@ p.base = Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 }));
 p.length = Pwhite(1.5, 2.5, inf);
 
 Object.dependantsDictionary.keys.select(_.isKindOf(EventStreamPlayer)).copy.do(_.releaseDependants);
+
+// flourish when laura goes to the floor
+
+v = VC(\bmel).v;
+
+(type: \voicerNote, voicer: v, scale: Mode(\g0).scale, octave: 0,
+degree: Pwhile1({ |in, next| next <= 53 },
+	Pseries(
+		\patRejectLastN.eval(Pwhite(26, 31, inf), 3).asStream,
+		Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf
+	)
+).clump(500).asStream.next, gate: 0.1, length: 5, strum: 0.05).play;
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~makeStreamForKey.(\top);
+	};
+
+	~top = \patRejectLastN.eval(Pwhite(47, 53, inf), 3);
+	~freq = Plazy({
+		~chordNotes = Pwhile1({ |in, next| next >= 25 },
+			Pseries(
+				{ |ev| ~topStream.next(ev) },
+				Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf), inf
+			)
+		).asStream.all;
+		Pseq(~chordNotes, 1)
+	});
+	~dur = max(0.1, Pgeom({ rrand(0.25, 0.35) }, Pstutter(200, Pwhite(0.84, 0.9, inf)), inf));
+	~length = 7;
+	~gate = 0.6;
+	~pan = Plazy({
+		var	start = BP(\di).latestData[3];
+		Pseries.fromEndpoints(start, start.sign.neg, ~chordNotes.size);
+	});
+	~distance = Plazy({ Pseries.fromEndpoints(5, 40, ~chordNotes.size) });
+	~ampMul = 2.2;
+	~mode = \g0;
+
+	~asPattern = {
+		Pbind(
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\ampMul, BPStream(\ampMul),
+			\mode, BPStream(\mode)
+		)
+	};
+} => PR(\bellFlourish);
+)
+
+BP(\bfl).free;
+PR(\bellFlourish) => BP(\bfl);
+VC(\bmel) => BP(\bfl);
+0 => BP(\bfl);
+
+BP(\bfl).gate = 0.6;
+
+// shorten dur
+BP(\bfl).dur = max(0.1, Pgeom({ rrand(0.25, 0.35) }, Pstutter(200, Pwhite(0.84, 0.9, inf)), inf));
+
+BP(\bfl).freq = Plazy({
+	~chordNotes = Pwhile1({ |in, next| next >= 25 },
+		Pseries(
+			{ |ev| ~topStream.next(ev) },
+			Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf), inf
+		)
+	).asStream.all;
+	Pseq(~chordNotes, 1)
+});
+
+BP(\bfl).pan = Plazy({
+	var	start = BP(\di).latestData[3];
+	Pseries.fromEndpoints(start, start.sign.neg, ~chordNotes.size);
+});
+BP(\bfl).distance = Plazy({ Pseries.fromEndpoints(5, 40, ~chordNotes.size) });
+
+BP(\bfl).printStopMsg = false;
+
+BP(\bfl).event.proto.put(\lcrvbamt, 0.015);
+
+VC(\sp).free;
+Fact(\shimmerpad).chuck(VC(\sp), nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: {
+		var	peak = NamedControl.kr(\fenvpeak, 1);
+		Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: peak, bias: 1)
+	},
+	globalFilter: false
+));
+
+
+(type: \voicerNote, voicer: VC(\sp).v, scale: Mode(\g0).scale, octave: 0,
+degree: Pwhile1({ |in, next| next <= 53 },
+	Pseries(
+		\patRejectLastN.eval(Pwhite(26, 31, inf), 3).asStream,
+		Pwrand(#[1, 2, 3], #[0.1, 0.5, 0.4], inf), inf
+	)
+).clump(500).asStream.next, gate: 0.8, finalAmp: 0.05,
+attackTimeScale: 3, decayTimeScale: 7, ffreq: 800, fenvpeak: 14000/800 - 1, rq: 0.3, sustain: 5)
+.proto_(~rvbEvent.proto)
+.play;
+
+VC(\sp).v.nodes.detect(_.isPlaying).synth.trace;
+
+p = (Pbind(
+	\voicer, VC(\sp).v,
+	\mode, \g0,
+	\freq, Pn(Pseries(
+		Pwhite(40, 53, inf).asStream,
+		Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf),
+		{ rrand(4, 7) }
+	).clump(500), inf),
+	\dur, Pwhite(3.5, 6.5, inf),
+	\length, Pwhite(3.0, 7.0, inf),
+	\gate, 0.8,
+	\pan, Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf),
+	\distance, Pwhite(5.0, 20.0, inf),
+	\ffreq, Pexprand(400, 1200, inf),
+	\fenvpeak, (14000 / Pkey(\ffreq)) - 1
+) <> (finalAmp: 0.05, attackTimeScale: 2.5, decayTimeScale: 4, rq: 0.3))
+.trace
+.play(protoEvent: ProtoEvent(\voicerNote).copy.proto_(~rvbEvent.proto));
+
+p.stop;
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \voicerNote);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~makeStreamForKey.(\top);
+	};
+
+	~mode = \g0;
+	~freq = Pseq([
+		Pfuncn({ BP(\bfl).chordNotes }, 1),
+		Pn(Pseries(
+			Pwhite(40, 53, inf).asStream,
+			Pwrand(#[-1, -2, -3], #[0.1, 0.5, 0.4], inf),
+			{ rrand(4, 7) }
+		).clump(500), inf)
+	], 1);
+	~dur = Pwhite(3.5, 6.5, inf);
+	~length = Pwhite(3.0, 7.0, inf);
+	~gate = 0.8;
+	~pan = Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf);
+	~distance = Pwhite(5.0, 20.0, inf);
+	~ffreq = Pexprand(400, 1200, inf);
+	~fenvpeak = (14000 / Pkey(\ffreq)) - 1;
+	~finalAmp = 0.4;
+	~attackTimeScale = 4.5;
+	~decayTimeScale = 4;
+	~rq = 0.3;
+
+	~asPattern = {
+		Pbind(
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\length, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\finalAmp, BPStream(\finalAmp),
+			\mode, BPStream(\mode),
+			\ffreq, BPStream(\ffreq),
+			\fenvpeak, BPStream(\fenvpeak),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\quietChords);
+)
+
+BP(\qc).free;
+PR(\quietChords) => BP(\qc);
+VC(\sp) => BP(\qc);
+0 => BP(\qc);
+
+BP(\qc).reset;
+BP(\qc).triggerOneEvent(0);
+
+BP(\qc).finalAmp = 0.6;
+BP(\qc).attackTimeScale = 4.5;
+
+BP(\qc).pan = Pseq([
+		Pfuncn({ |ev| (-1.0, (ev[\freq].size - 1).reciprocal - 1 .. 1.0).scramble }),
+		Pwhite(0.5, 1.0, inf) * Pseq(#[-1, 1], inf, { 2.rand })
+], 1).trace(prefix: "pan: ");
+
+
+// lsolo melody
+BP(\lm).free;
+
+(
+(make: { |name|
+	BP(name).free;
+	PR(\locoMel).chuck(BP(name), nil, (
+		numDescents: 4,
+		scaleLen: Pwhite(2, 5, inf),
+		numDecays: Pwhite(2, 3, inf),
+		startDeg: Pwhite(41, 48, inf),
+		freq: Pseq([
+			(
+				Pseries({ |ev| ~startDegStream.next(ev) }, 
+					Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+					.collect { |bot| ~bot = bot }
+				+.x
+				Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+					.collect { |scale| ~scale = scale }
+			)
+			+.x
+			Pif(
+				Pfunc({ ~scale < (~scaleSize - 1) }),
+				Pn(0, 1),
+				Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+			),
+			Plazy({ |ev|
+				var	num = ~numDecaysStream.next(ev);
+				~decay = num * 2;
+				(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 0 /* 2.rand */)
+			})
+		], 1),
+		preparePlay: {
+			~decay = nil;
+			~clock.schedAbs(~eventSchedTime, e {
+				~event[\voicer].globalControls[\distance].automate(\ctlEnv, [
+					env: Env(#[5, 25], [rrand(12.0, 19.0)], rrand(1.0, 2.2)),
+					connect: 0
+				], addAction: \addToHead);
+			});
+		},
+		dur: Pswitch([Pn(0.25, 2), 0.5, 0.75, 1, Pwhite(4, 7, 1) * 0.5],
+			Penvir((prev: -1, count: 0, countLimits: #[2, 3, 2, 1, 1],
+				collIndex: name,  // tricky! no good way to get this after-the-fact
+				sideEffect: { |x| x }),
+				Pseq([
+					Pwhite(1, 3, 1),
+					Pwrand([0, 1, 2, 3, 4], #[3, 9, 15, 12, 5].normalizeSum, inf)
+					.reject { |index| (index == 4) and: { BP(~collIndex)[\decay].notNil } }
+				])
+				.select { |val|
+					~sideEffect.(~prev != val or: { ~count < ~countLimits[val] }, (
+						if(~prev != val) {
+							~prev = val;
+							~count = 1;
+						} {
+							~count = ~count + 1
+						};
+					))
+				}
+			)
+		),
+		length: Pif(
+			(Pkey(\dur) > 1),
+			min(Pkey(\dur) - 0.5, Pwhite(1.75, 2.75, inf)),
+			Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf)
+		)
+		));
+	0 => BP(name);
+}, type: \bp) => Fact(\lsoloMel);
+)
+
+
+VC(\lm) => BP(\lsm);
+
+p = BP(\lsm);
+
+p.numDescents = 4;
+p.scaleLen = Pwhite(2, 5, inf);
+p.numDecays = Pwhite(2, 3, inf);
+p.startDeg = Pwhite(47, 51, inf);
+
+p.startDeg = Pwhite(41, 48, inf);
+
+#[numDescents, scaleLen, numDecays, startDeg].do { |key| p.makeStreamForKey(key) };
+
+p.startDegStream.next
+
+p.freq = Pseq([
+	(
+		Pseries({ |ev| ~startDegStream.next(ev) }, 
+			Pwhite(-4, -2, { |ev| ~numDescentsStream.next(ev) }))
+			.collect { |bot| ~bot = bot }
+		+.x
+		Pseries(0, 1, { |ev| ~scaleSize = ~scaleLenStream.next(ev) })
+			.collect { |scale| ~scale = scale }
+	)
+	+.x
+	Pif(
+		Pfunc({ ~scale < (~scaleSize - 1) }),
+		Pn(0, 1),
+		Pwrand([0, Pseq([0, Pwhite(-6, -3, 1), -1], 1)], [0.6, 0.4], 1)
+	),
+	Plazy({ |ev|
+		var	num = ~numDecaysStream.next(ev);
+		~decay = num * 2;
+		(~bot + ~scaleSize) + Pseq([0, #[-6, -5/*, -3*/].choose], num, 0 /* 2.rand */)
+	})
+], 1);
+
+p.length.postcs
+p.dur.postcs
+
+// well THAT'S just a bit obscure...
+p.dur.which.pattern.pattern.weights_(#[1, 3, 5, 4].normalizeSum);
+p.dur = p.dur;
+
+p.preparePlay = {
+	~decay = nil;
+	~clock.schedAbs(~eventSchedTime, e {
+		~event[\voicer].globalControls[\distance].automate(\ctlEnv, [
+			env: Env(#[5, 25], [rrand(12.0, 19.0)], rrand(1.0, 2.2)),
+			connect: 0
+		], addAction: \addToHead);
+	});
+};
+
+p.dur = Pswitch([Pn(0.25, 2), 0.5, 0.75, 1, Pwhite(4, 7, 1) * 0.5],
+	Penvir((prev: -1, count: 0, countLimits: #[2, 3, 2, 1, 1], sideEffect: { |x| x }),
+		Pseq([
+			Pwhite(1, 3, 1),
+			Pwrand([0, 1, 2, 3, 4], #[3, 9, 15, 12, 5].normalizeSum, inf)
+			.reject { |index| (index == 4) and: { BP(~collIndex)[\decay].notNil } }
+		])
+		.select { |val|
+			~sideEffect.(~prev != val or: { ~count < ~countLimits[val] }, (
+				if(~prev != val) {
+					~prev = val;
+					~count = 1;
+				} {
+					~count = ~count + 1
+				};
+			))
+		}
+	)
+);
+
+p.dur.which.envir.put(\collIndex, \lm);
+
+p.length = Pif(
+	(Pkey(\dur) > 1),
+	min(Pkey(\dur) - 0.5, Pwhite(1.75, 2.75, inf)),
+	Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf)
+);
+
+VC(\lsm).v.nodes[0].initArgs
+VC(\lsm).v.setArgDefaults([distFar: 40, lcrvbamt: 0.016]);
+VC(\lsm).v.gui;
+
+VC(\lsm).v.globalControls[\distance].spec = #[5, 40];
+VC(\lsm).v.globalControls[\distance].watch;
+VC(\lsm).v.globalControls[\distance].stopWatching;
+
+BP(\lsm).event.mainAmp = BP(\lsm).event.mainAmp * 12.dbamp;

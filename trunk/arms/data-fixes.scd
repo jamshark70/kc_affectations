@@ -847,73 +847,87 @@ p = ~master.play(Penvir((prevIncr: 0, sideEffect: { |value| value }), Pbind(
 p.stop;
 
 (
-BP(\actrk).free;
-PR(\dataReader).chuck(BP(\actrk), nil, (
-	rbufProto: (val: 0, sign: 0, dur: 0),
-	rbufSize: 10,
-	userprep: {
-		~rbuf = { ~rbufProto.copy } ! ~rbufSize;
-		~rbufIndex = 0;
-	},
-	// increasing 'i' goes backward in time
-	dataAt: { |i = 0| ~rbuf.wrapAt(~rbufIndex - i) },
-	makeDef: {
-		SynthDef(\acceldecel, { |bus, useTrigBus, recvBus, trigbus, upThresh = 0.8, downThresh = 0.15, delaySamps = 3, meanSamps = 11|
-			var	sig = In.kr(bus + 9, 1),  // +9 = vavg
-			bufsecs = In.kr(bus, 1),
-			trigIn = Select.kr(useTrigBus, [
-				InTrig.kr(recvBus, 1),
-				In.kr(trigbus, 1)
-			]) > 0,  // force trig to be exactly 0 or 1
-			trig = Trig1.kr(trigIn, ControlDur.ir),
-			// demand-rate delay AGAIN
-			dbuf = LocalBuf(delaySamps),
-			dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
-			prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
-			diff = sig - prev,
-			writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
-			signmean = MeanTriggered.kr(diff.sign, trig, meanSamps),
-			threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
-			threshTrig = HPZ1.kr(threshDetect).abs,
-			oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
-			SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, bufsecs]);
-			SendReply.kr(trig, '/accelraw', signmean);
-		}).add;
-	},
-	makeResponder: { |node|
-		var	self = currentEnvironment;
-		[
-			OSCpathResponder(s.addr, ['/acceldecel', node.nodeID], e { |t, r, m|
-				~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
-				~rbuf[~rbufIndex].put(\sign, m[4] * m[3].sign)
-					.put(\value, m[3])
-					.put(\dur, m[5])
-					.put(\time, m[6]);
-				BP(~collIndex).changed(\accel, ~rbuf[~rbufIndex]);
-			}).add,
-			OSCpathResponder(s.addr, ['/accelraw', node.nodeID], { |t, r, m|
-				self[\mean] = m[3];
-			}).add
-		]
-	},
-	upThresh: 0.5,
-	downThresh: 0.1,
-	delaySamps: 3,
-	meanSamps: 11,
-	synthEventParms: { (
-		upThresh: ~upThresh,
-		downThresh: ~downThresh,
-		delaySamps: ~delaySamps,
-		meanSamps: ~meanSamps
-	) }
-));
-0 => BP(\actrk);
+(
+make: { |name|
+	BP(name).free;
+	PR(\dataReader).chuck(BP(name), nil, (
+		rbufProto: (val: 0, sign: 0, dur: 0),
+		rbufSize: 10,
+		userprep: {
+			~rbuf = { ~rbufProto.copy } ! ~rbufSize;
+			~rbufIndex = 0;
+		},
+		// increasing 'i' goes backward in time
+		dataAt: { |i = 0| ~rbuf.wrapAt(~rbufIndex - i) },
+		makeDef: {
+			SynthDef(\acceldecel, { |bus, useTrigBus, recvBus, trigbus, upThresh = 0.8, downThresh = 0.15, delaySamps = 3, meanSamps = 11|
+				var	sig = In.kr(bus + 9, 1),  // +9 = vavg
+				bufsecs = In.kr(bus, 1),
+				trigIn = Select.kr(useTrigBus, [
+					InTrig.kr(recvBus, 1),
+					In.kr(trigbus, 1)
+				]) > 0,  // force trig to be exactly 0 or 1
+				trig = Trig1.kr(trigIn, ControlDur.ir),
+				// demand-rate delay AGAIN
+				dbuf = LocalBuf(delaySamps),
+				dphase = Demand.kr(trig, 0, Dseq([Dseries(0, 1, delaySamps)], inf)),
+				prev = Demand.kr(trig, 0, Dbufrd(dbuf, dphase)),
+				diff = sig - prev,
+				writer = Demand.kr(trig <! prev, 0, Dbufwr(sig, dbuf, dphase)),
+				signmean = MeanTriggered.kr(diff.sign, trig, meanSamps),
+				threshDetect = Schmidt.kr(signmean.abs, downThresh, upThresh),
+				threshTrig = HPZ1.kr(threshDetect).abs,
+				oldTime = Latch.kr(bufsecs, Delay1.kr(threshTrig));
+				SendReply.kr(HPZ1.kr(threshTrig).abs, '/acceldecel', [signmean, threshDetect, bufsecs - oldTime, bufsecs]);
+				SendReply.kr(trig, '/accelraw', signmean);
+			}).add;
+		},
+		makeResponder: { |node|
+			var	self = currentEnvironment;
+			[
+				OSCpathResponder(s.addr, ['/acceldecel', node.nodeID], e { |t, r, m|
+					~rbufIndex = (~rbufIndex + 1) % ~rbuf.size;
+					~rbuf[~rbufIndex].put(\sign, m[4] * m[3].sign)
+						.put(\value, m[3])
+						.put(\dur, m[5])
+						.put(\time, m[6]);
+					NotificationCenter.notify(~collIndex, \accel, ~rbuf[~rbufIndex]);
+				}).add,
+				OSCpathResponder(s.addr, ['/accelraw', node.nodeID], { |t, r, m|
+					self[\mean] = m[3];
+					NotificationCenter.notify(~collIndex, \accelraw, m[3]);
+				}).add
+			]
+		},
+		upThresh: 0.5,
+		downThresh: 0.1,
+		delaySamps: 3,
+		meanSamps: 11,
+		synthEventParms: { (
+			upThresh: ~upThresh,
+			downThresh: ~downThresh,
+			delaySamps: ~delaySamps,
+			meanSamps: ~meanSamps
+		) }
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\acceltrig);
 )
 
-u.remove;
-u = Updater(BP(\actrk), { |obj, what, data|
-	if(what == \accel) { data.postln };
+// change to NotificationCenter
+// u.remove;
+// u = Updater(BP(\actrk), { |obj, what, data|
+// 	if(what == \accel) { data.postln };
+// });
+
+
+NotificationCenter.register(\actrk, \accel, 0, { |data|
+	if(data[\sign] > 0) {
+		data.postln
+	};
 });
+
+NotificationCenter.unregister(\actrk, \accel, 0);
 
 
 BP(\actrk).dataAt([0, 1]).postln; "\n"
@@ -950,29 +964,30 @@ u = Updater(BP(\dr), e { |obj, what, data|
 (
 w = Window(\velsum, Rect(5, 50, 620, 400));
 w.drawHook = {
-	if(~yx.notEmpty) { Pen.moveTo(Point(0, 399 - (~yx[0] * 12))) };
-	~yx.doAdjacentPairs { |y0, y1, x|
-		Pen.lineTo(Point(x+1, 399 - (y1 * 12)));
+	if(~yx.size > 0) {
+		Pen.moveTo(Point(0, 399 - (~yx[0] * 12)));
+		~yx.doAdjacentPairs { |y0, y1, x|
+			Pen.lineTo(Point(x+1, 399 - (y1 * 12)));
+		};
 	};
 	Pen.stroke;
 };
 w.front;
 )
 
-w.close
+w.close;
 
 ~yx = Array(600);
-u.remove;
-u = Updater(BP(\dr), e { |obj, what, data|
-	var	yx = data[13] / max(data[12], 0.01) * (data[13] + data[12]);
+NotificationCenter.register(\lsyx, \yxraw, 0, { |median|
 	if(~yx.size == 600) {
-		~yx = ~yx.rotate(-1).put(599, yx);
+		~yx = ~yx.rotate(-1).put(599, median);
 	} {
-		~yx.add(yx);
+		~yx.add(median);
 	};
 	defer { w.refresh };
-	// if(~yx.size == 600) { u.remove; "done".postln };
 });
+
+NotificationCenter.unregister(\lsyx, \yxraw, 0);
 
 
 (
@@ -1044,18 +1059,17 @@ PR(\dataReader).chuck(BP(\yxtrk), nil, (
 )
 
 ~yx = Array(600);
-u.remove;
-u = Updater(BP(\yxtrk), e { |obj, what, yx|
-	if(what == \yxraw) {
-		if(~yx.size == 600) {
-			~yx = ~yx.rotate(-1).put(599, yx);
-		} {
-			~yx.add(yx);
-		};
-		defer { w.refresh };
-		// if(~yx.size == 600) { u.remove; "done".postln };
+NotificationCenter.register(\lsyx, \yxraw, 0, { |median|
+	if(~yx.size == 600) {
+		~yx = ~yx.rotate(-1).put(599, median);
+	} {
+		~yx.add(median);
 	};
+	defer { w.refresh };
 });
+
+NotificationCenter.unregister(\lsyx, \yxraw, 0);
+
 
 BP(\yxtrk).meanSamps = 11;
 
@@ -1124,8 +1138,18 @@ make: { |name|
 BP(\lsyx).free;
 Fact(\lsoloTrig) => BP(\lsyx);
 
-BP(\lsyx).doTrig = { |data| data.postln };
+();
+BP(\lsyx).doTrig = { |data|
+	"%: %\n".postf(if(data[0] > 4) { "high" } { " low" }, data);
+	if(data[0] < 4) { BP(\lsyx).node.trace };
+};
 
 BP(\di).setStartTime(14, 50);
 
 BP(\lsyx).node.trace
+
+p = BP(\lsyx);
+p.lowThresh = 1.8;
+p.lowSamps = 6;
+
+p.node.trace;

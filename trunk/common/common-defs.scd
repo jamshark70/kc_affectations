@@ -1067,7 +1067,7 @@ PR(\abstractProcess).clone {
 		var	self = currentEnvironment;
 		OSCpathResponder(s.addr, ['/datafetch', (node ?? { ~node }).nodeID], { |time, resp, msg|
 			self[\latest] = msg[3..];
-			BP(self[\collIndex]).changed(\data, self[\latest]);
+			NotificationCenter.notify(self[\collIndex], \data, self[\latest]);
 		}).add;
 	};
 
