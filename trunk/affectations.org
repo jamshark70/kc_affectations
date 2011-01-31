@@ -108,6 +108,8 @@
 ***** Extend axial notes into locomotive texture - big sweeps going way up!
 ****** Reuse melody, but faster
 ***** Design gestures to follow movement
+***** Balances
+***** Melody!!!!!
 ***** Rhythm?
 ***** As she leaves, push sounds into distance
 *** TODO Head [0/2] <2010-12-23 Thu>
