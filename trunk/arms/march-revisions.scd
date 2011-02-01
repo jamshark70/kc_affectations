@@ -2657,7 +2657,8 @@ BP(\lm).free;
 }, type: \bp) => Fact(\lsoloMel);
 )
 
-
+BP(\lsm).free;
+Fact(\lsoloMel) => BP(\lsm);
 VC(\lm) => BP(\lsm);
 
 p = BP(\lsm);
@@ -2702,12 +2703,25 @@ p.dur.postcs
 p.dur.which.pattern.pattern.weights_(#[1, 3, 5, 4].normalizeSum);
 p.dur = p.dur;
 
+SynthDef(\lsmPanAuto, { |outbus, freqStart = 0.8, freqEnd = 0.1, time = 1|
+	Out.kr(outbus, SinOsc.kr(
+		Line.kr(freqStart, freqEnd, time),
+		Rand(0, 2pi),
+		Line.kr(1.0, 0.05, time, doneAction: 2)
+	))
+}).add;
+
+
 p.preparePlay = {
 	~decay = nil;
 	~clock.schedAbs(~eventSchedTime, e {
+		var	time = rrand(12.0, 19.0);
 		~event[\voicer].globalControls[\distance].automate(\ctlEnv, [
-			env: Env(#[5, 25], [rrand(12.0, 19.0)], rrand(1.0, 2.2)),
+			env: Env(#[5, 25], [time], 4.5 /* rrand(1.0, 2.2) */),
 			connect: 0
+		], addAction: \addToHead);
+		~event[\voicer].globalControls[\pan].automate(\lsmPanAuto, [
+			time: time, freqStart: rrand(0.4, 0.6), freqEnd: 0.05
 		], addAction: \addToHead);
 	});
 };
@@ -2731,8 +2745,7 @@ p.dur = Pswitch([Pn(0.25, 2), 0.5, 0.75, 1, Pwhite(4, 7, 1) * 0.5],
 		}
 	)
 );
-
-p.dur.which.envir.put(\collIndex, \lm);
+p.dur.which.envir.put(\collIndex, \lsm);
 
 p.length = Pif(
 	(Pkey(\dur) > 1),
@@ -2740,12 +2753,50 @@ p.length = Pif(
 	Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf)
 );
 
-VC(\lsm).v.nodes[0].initArgs
-VC(\lsm).v.setArgDefaults([distFar: 40, lcrvbamt: 0.016]);
-VC(\lsm).v.gui;
+VC(\lm).v.nodes[0].initArgs
+VC(\lm).v.setArgDefaults([distFar: 40, lcrvbamt: 0.016]);
+VC(\lm).v.gui;
 
-VC(\lsm).v.globalControls[\distance].spec = #[5, 40];
-VC(\lsm).v.globalControls[\distance].watch;
-VC(\lsm).v.globalControls[\distance].stopWatching;
+VC(\lm).v.globalControls[\distance].spec = #[5, 40];
+VC(\lm).v.globalControls[\distance].watch;
+VC(\lm).v.globalControls[\distance].stopWatching;
 
-BP(\lsm).event.mainAmp = BP(\lsm).event.mainAmp * 12.dbamp;
+VC(\lm).v.globalControls[\pan].watch;
+VC(\lm).v.globalControls[\pan].stopWatching;
+
+BP(\lsm).event.mainAmp = (-12.5.dbamp) * 3.dbamp;
+
+q = VC(\lm).env.target.playfx(Instr("busfx.chorus"), [0, 2]); q.gui;
+FxPatch(
+	[ 'busfx', 'chorus' ], [ 22, 2, 0.047017811977867, 0.15505157392993, 0.0037810721153976, 1.0471975824055, 1.0 ]
+)
+
+q = VC(\lm).env.target.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3]); q.gui;
+
+p.event.putAll((glrvbamt: 0.5, lcrvbamt: 0.1));
+
+q.synth.trace
+
+VC(\lm).env.target.play { SinOsc.ar(440, 0, EnvGen.kr(Env.perc(0.01, 0.08), doneAction: 2)) ! 2 };
+
+p.play;
+q.run(false);
+q.run(true);
+
+BP(\qc).triggerOneEvent(0);
+VC(\sp).v.nodes.detect(_.isPlaying).synth.trace;
+
+// who has eq?
+MixerChannel.servers[s].detect({ |mc| mc.fadergroup.nodeID == 18 });
+
+p.gate = 0.3;
+
+MultiEQ(2).edit(VC(\lm).env.target);
+MultiEQ(2).edit(VC(\sp).env.target);
+
+BP(\qc).pan = BP(\qc).pan.trace(prefix: "pan: ");
+
+BP(\qc).pan = Pseq([
+		Pfuncn({ |ev| (-1.0, (ev[\freq].size - 1).reciprocal - 1 .. 1.0).scramble }),
+		Pwhite(0.5, 1.0, inf) * Pseq(#[-1, 1], inf, { 2.rand })
+	], 1);

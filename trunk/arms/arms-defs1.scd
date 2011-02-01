@@ -554,7 +554,8 @@ make: { |name|
 		patch.doWhenPlaying({
 			patch.synth.moveToTail(chan.effectgroup);
 		});
-		// EQ?
+		MultiEQ(2, \eq, 449.278, -5.036.dbamp, 1.599/*, \eq, 5270.139, 1.583.dbamp, 1*/)
+		.play(chan);
 	});
 	[~glrvbmc, ~lcrvbmc].do { |mc|
 		mc.tryPerform(\receivesSignalFrom, ~target);
@@ -2216,7 +2217,12 @@ make: { |name|
 	~cb = Buffer.allocConsecutive(8, s, 1024, 1, { |buf, i|
 		buf.sine1Msg(((0..i) + 1).reciprocal)
 	});
-	~target = MixerChannel(name, s, 2, 2, outbus: ~master);
+	~target = MixerChannel(name, s, 2, 2, outbus: ~master, completionFunc: { |chan|
+		var patch = chan.playfx(Instr("busfx.chorus2"), [0, 2, 2, 3, 0.022797048571861,
+			0.12451974102528, 0.005, 4.0391905011144, 1.0]);
+		MultiEQ(2, \eq, 2705.317, 3.597.dbamp, 1).play(chan);
+		patch.doWhenPlaying { patch.synth.moveToHead(chan.effectgroup) };
+	});
 	[~glvrbmc, ~lcrvbmc].do { |mc| mc.tryPerform(\receivesSignalFrom, ~target) };
 
 	WrapInstr("osc2.fm10mod", { |freq, gate, car_env, mod_env, mod_lev, mod_ratio,
@@ -2960,7 +2966,7 @@ PR(\abstractProcess).clone {
 	~gate = 0.8;
 	~pan = Pseq([
 		Pfuncn({ |ev| (-1.0, (ev[\freq].size - 1).reciprocal - 1 .. 1.0).scramble }),
-		Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf)
+		Pwhite(0.5, 1.0, inf) * Pseq(#[-1, 1], inf, { 2.rand })
 	], 1);
 	~distance = Pwhite(5.0, 20.0, inf);
 	~ffreq = Pexprand(400, 1200, inf);
@@ -2968,7 +2974,7 @@ PR(\abstractProcess).clone {
 	~finalAmp = 0.4;
 	~attackTimeScale = Pseq([4.5, Pwhite(1.0, 1.6, inf)], 1);
 	~decayTimeScale = 4;
-	~rq = 0.3;
+	~rq = 0.8;
 
 	~asPattern = {
 		Pbind(
@@ -3035,6 +3041,14 @@ PR(\abstractProcess).clone {
 } => PR(\bellFlourish);
 
 
+SynthDef(\lsmPanAuto, { |outbus, freqStart = 0.8, freqEnd = 0.1, time = 1|
+	Out.kr(outbus, SinOsc.kr(
+		Line.kr(freqStart, freqEnd, time),
+		Rand(0, 2pi),
+		Line.kr(1.0, 0.05, time, doneAction: 2)
+	))
+}).add;
+
 (make: { |name|
 	BP(name).free;
 	PR(\locoMel).chuck(BP(name), nil, (
@@ -3071,9 +3085,13 @@ PR(\abstractProcess).clone {
 				};
 			};
 			~clock.schedAbs(~eventSchedTime, e {
+				var	time = rrand(12.0, 19.0);
 				~event[\voicer].globalControls[\distance].automate(\ctlEnv, [
-					env: Env(#[5, 25], [rrand(12.0, 19.0)], rrand(1.0, 2.2)),
+					env: Env(#[5, 25], [time], 4.5 /* rrand(1.0, 2.2) */),
 					connect: 0
+				], addAction: \addToHead);
+				~event[\voicer].globalControls[\pan].automate(\lsmPanAuto, [
+					time: time, freqStart: rrand(0.4, 0.6), freqEnd: 0.05
 				], addAction: \addToHead);
 			});
 		},
@@ -3102,7 +3120,9 @@ PR(\abstractProcess).clone {
 			(Pkey(\dur) > 1),
 			min(Pkey(\dur) - 0.5, Pwhite(1.75, 2.75, inf)),
 			Pkey(\dur) * Pwrand(#[0.7, 0.98, 1.01], #[0.1, 0.1, 0.8], inf)
-		)
-		));
+		),
+		gate: 0.3
+	));
+	BP(name).event.putAll((glrvbamt: 0.5, lcrvbamt: 0.1));
 	0 => BP(name);
 }, type: \bp) => Fact(\lsoloMel);

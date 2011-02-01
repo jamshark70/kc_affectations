@@ -94,7 +94,7 @@ BP(\bfl).printStopMsg = false;
 BP(\lsm).free;
 Fact(\lsoloMel) => BP(\lsm);
 VC(\lm) => BP(\lsm);
-BP(\lsm).event.mainAmp = BP(\lsm).event.mainAmp * 12.dbamp;
+BP(\lsm).event.mainAmp = -9.5.dbamp; // orig == -12.5, +3
 
 s.latency = 0.075;
 
@@ -115,7 +115,7 @@ BP(\di).play;
 BP(\di).stop;
 
 // cleanup
-BP(#[lsac, qc, bfl, yxsw, lsyx, dr, di]).free;
+BP(#[lsm, lsac, qc, bfl, yxsw, lsyx, dr, di]).free;
 VC.all.free;
 
 Object.dependantsDictionary.keys.select(_.isMemberOf(BP))
@@ -179,3 +179,5 @@ BP(\yxsw).iok = Pfunc({ |ev|
 			[-1, false]
 		}
 	});
+
+BP(\lsm).event.mainAmp = BP(\lsm).event.mainAmp * 3.neg.dbamp;
