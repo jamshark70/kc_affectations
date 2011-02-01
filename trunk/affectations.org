@@ -169,9 +169,10 @@
 *** F20-slinky (backstage, moving closer and further apart)
     1. Three or four event cues as desired
 *** F30-Restart Ilana's pattern
-*** F40-3 poses
-    1. Second of 3 poses
-    2. Third of 3
+*** F40-Restart Laura's pattern + 3 poses
+    1. First of 3 poses
+    2. Second of 3
+    3. Third of 3
 *** F50-changing speeds
 *** F55-3 patterns in counterpoint
     (As far as I can see, the hop is gone)
