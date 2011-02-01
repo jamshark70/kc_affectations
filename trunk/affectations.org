@@ -159,18 +159,22 @@
   Event cues in a segment are numbered
 ** Feet
 *** F1-Bang!
-*** F10-3 poses + hop
+*** -Ilana joins
+*** -Laura joins
+*** F10-3 poses
     1. Second of 3 poses
     2. Third of 3
-    3. Hop
+*** -Stephen's pattern (@2:45 in 12-01-10_walking?)
+    1. Hop
 *** F20-slinky (backstage, moving closer and further apart)
     1. Three or four event cues as desired
-*** F30-normal walking
+*** F30-Restart Ilana's pattern
 *** F40-3 poses
     1. Second of 3 poses
     2. Third of 3
 *** F50-changing speeds
-*** F55-hop!
+*** F55-3 patterns in counterpoint
+    (As far as I can see, the hop is gone)
 *** F60-stop(short) when they come to a line and all stop moving
 *** F70-axial -- head bowing or just before is a good spot
 *** F80-walking(swinging)
@@ -183,7 +187,7 @@
     Note, this advanced automatically in the first version but is now
     cued
     1. Event cue on second turn
-*** F115-small leans back and forth (see 7:26 in residency video)
+*** F115-small leans back and forth (see 8:36 in 12-01-10_walking)
 *** F116-military turns
 *** F120-falling - start with Ilana's fall
     This is a more complicated cue.
@@ -192,7 +196,7 @@
     3. When they start trading places falling down
     4. When Stephen goes into a handstand with just the feet illuminated
 *** F130-military turns
-*** F140-normal+inversions - when they start walking normally
+*** F140-normal+inversions - when the military turns stop
     1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
     2. When they scatter to the three corners - next segment cue
        comes quickly!
