@@ -1,5 +1,54 @@
 // Affectations: Feet controller sequence
 
+// hakkity-hakk-hakk-hakk
+// this must be a function because we can't evaluate this until BP(\st) exists
+var lwpLoopParms = { (
+	// dur: 35,
+	// // fine print: ~doneSignal is non-nil by default, preventing 'dur' from being used
+	// setDoneSignal: { ~doneSignal = nil },
+	lwpParms: (
+		gest: \klankMachineLWp,
+		instr: Pwrand(#[bufGrainPanKlankDist, bufGrainPanKlRingDist], #[0.4, 0.6], inf),
+		numEv: inf, //numEv,
+		newDelta: Pseg(
+			Pser([Pwhite(0.4, 0.7, 1), Pwhite(0.12, 0.18, 1)], 3,
+				#[0, 1].wchoose(#[0.7, 0.3])),
+			Pwhite(2.5, 4.5, inf),
+			\exp
+		),
+		timeMul: Pif(
+			(Plazy({ Pseries.fromEndpoints(1, BP(\st).pitchProbCtl.value, rrand(4, 7)) }) ++ BP(\st).pitchProbCtl.asPattern).coin,
+			Pwhite(0.15, 0.35, inf),
+			0.01
+		) / Pkey(\delta),
+		// oh, it gets uglier!
+		filtAttackRatio: Pif(
+			(Pkey(\filtDecay) * Pkey(\delta)) >= 0.011,
+			Pwhite(0.9, 0.98, inf),
+			1
+		),
+		chorusAmps: #[[0, 0, 0]],
+		// pull pitch only if you'll hear it
+		freq: Pif(
+			(Pkey(\filtDecay) * Pkey(\delta)) >= 0.011,
+			BPStream(("laurawp" ++ BP(\st).lauraWpPitchPoolStream.next).asSymbol, envir: BP(\st).v),
+			Pwhite(28, 42, inf).collect { |degree| Mode(\g).cps(degree) }
+		),
+		mainAmp: 1,
+		kAmp: 2,
+		harm: Pstutter(Pwhite(6, 15, inf), Pseq([
+			Pexprand(0.98, 0.98.reciprocal, inf).clump(5) * [1, 2, 3, 4, 5],
+			Pexprand(0.98, 0.98.reciprocal, inf).clump(5) * [1, 3, 5, 7, 9]
+		], inf).collect([_]))  // polySynthPlayer: wrap array arg in another array
+	),
+	cmds: [
+		{
+			BP(\st).runLauraWp(~lwpParms, true);
+			rrand(5.0, 9.0)
+		}
+	]
+) };
+
 (Document.current.path.dirname.dirname +/+ "/feet/feet-defs.scd")/*.debug*/.loadPath;
 
 [
@@ -55,72 +104,30 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F10-3 poses + hop",
+		name: "F10-Ilana joins",
 		segID: 10,
-		// initProcesses: {},
-		// unloadProcesses: {},
-		hasChangedSteps: false,
-		changeSteps: {
-			var	bp = BP(\st);
-			bp.chordN = 0;
-			bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[86], 7));
-			bp.gest = Pswitch1([
-				Pseq([
-					Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
-						#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
-					\slowStepStretch
-				], inf),
-				Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf)
-			], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 0.8], #[120])).collect(_.binaryValue));
-			bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
-			bp.numEv = Pwhite(6, 14, inf);
+		initProcesses: {
+			\chuckIf.eval(Fact(\ilanaSteps), BP, \is, nil, Library.at(\rvbs));
 		},
+		unloadProcesses: {},
 		seqPattern: {
 			Pn((
 				sequence: [
-					// I have a sneaky feeling I oughtn't do it this way...
-					funcCmd: (func: {
-						// ~sequencer is the tlsAff Proto
-						// reinit in case it's replaying
-						~sequencer.hasChangedSteps = false;
-					}),
-					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					{ BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3)); 0 },
-					loopCmd: (repeats: 3,
-						cmds: [
-							{	if(~repeats < 3) {
-									PR(\funcCmd).copy.putAll(topEnvironment[\trigParms])
-								} {
-									PR(\funcCmd).copy.putAll((dur: 0.01))
-								}
-							},
-							\cmdSync,
-							{	BP(\st).runGesture((gest: \oneKlank, numEv: rrand(10, 20)));
-								0
-							},
-						]
-					),
-					\cmdSync,
-					[	5,
-						funcCmd: (func: {
-							if(~sequencer.hasChangedSteps.not) {
-								~sequencer.changeSteps;
-								~sequencer.hasChangedSteps = true;
-							};
-						})
-					],
-					funcCmd: topEnvironment[\trigParms],
-					\cmdSync,
-					{	BP(\st).runGesture((gest: \klankHrmSteps.debug("running khsteps"), kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
+					{ BP(\st).stop; 0 },
+					bpCmd: (name: \is, dur: 40, prepareBP: { |bp|
+						bp.rate1 = Pwhite(1.3, 1.9, inf);
+						bp.rate2 = Pkey(\rate1) * Pwhite(2.0, 3.2, inf);
+						bp.maxSynthsCtl.value = 2;
+						bp.decayCtl.value = 2;
+						bp.delta = Plazy({ Pbeta(1, 4.8, ~deltaDistribCtl, 1, inf) });
+					}, clearDoneSignal: { BP(\is).stopNodes(-1) }),
+					20, // really?
+					{	BP(\is).delta = Plazy({ Pbeta(0.6, 2.0, ~deltaDistribCtl, 1, inf) });
+						BP(\is).maxSynthsCtl.value = 3;
 						0
 					}
 				],
-				onStop: {
-					if(~hasChangedSteps.not) {
-						~changeSteps.();
-						~hasChangedSteps = true;
-					};
-				},
+				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 20,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -130,15 +137,114 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F20-slinky",
+		name: "F20-Laura joins",
 		segID: 20,
+		initProcesses: {},
+		unloadProcesses: {},
+		seqPattern: {
+			if(lwpLoopParms.isFunction) { lwpLoopParms = lwpLoopParms.value };
+			Pn((
+				sequence: [
+					{ BP(\is).stop; 0 },
+					bpCmd: (name: \st, prepareBP: { |bp|
+						bp.autoRun = false;
+						bp.pitchProbCtl.value = 0.08;
+						bp.setLauraWps(Mode(\g).cps(#[22, 28, 31, 33, 34, 37, 39, 40, 43, 46]));
+					}),
+					0.01,  // a RACE condition? Ya gotta be kidding me!
+					TLSequenceIterator([
+						15,
+						gcAutoSynthCmd: (gc: BP(\st).pitchProbCtl, name: \ctlPoint, outName: \outbus,
+							value: 0.27, time: 33, curve: 5.4)
+					]).shouldSync_(false),
+					loopCmd: lwpLoopParms.copy.put(\id, \lwp1),
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: {
+						~iterator.findActive(\lwp1).stop;
+						BP(\st).stopSavedStreams;
+						BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3));
+						0
+					}),
+					loopCmd: (repeats: 3,
+						cmds: [
+							{	BP(\st).runGesture((gest: \oneKlank, numEv: 2));
+								if(~repeats > 1) {
+									PR(\funcCmd).copy.putAll(topEnvironment[\trigParms])
+								} {
+									rrand(1.5, 2.5)
+								}
+							}
+						]
+					),
+					\cmdSync,
+					loopCmd: lwpLoopParms.copy, //.shouldSync_(false),
+				],
+				// onStop: {},
+				dur: \trigger,  // or \sync
+				id: 30,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "F30-Stephen pattern",
+		segID: 30,
+		// initProcesses: {},
+		// unloadProcesses: {},
+		hasChangedSteps: false,
+		seqPattern: {
+			Pn((
+				sequence: [
+					bpCmd: (name: \st, shouldSync: false, playWarning: false, prepareBP: { |bp|
+						bp.autoRun = false;  // just in case... prevent warning in next thing
+					}),
+					0.01,
+					{
+						var	bp = BP(\st);
+						bp.chordN = 0;
+						bp.kdecay = (Pwhite(0.1, 0.3, inf) * Env(#[0.1, 0.25], #[86], 7));
+						bp.gest = Pswitch1([
+							Pseq([
+								Pwrand(#[clatter, oneKlankSteps, clatterDecay, klankDecay, slowSteps],
+									#[4, 2, 3, 1, 1].normalizeSum, { rrand(3, 6) }),
+								\slowStepStretch
+							], inf),
+							Prand(#[oneKlankSteps, klankDecay, klankHarmonize, klankHrmSteps], inf)
+						], (Pwhite(0.0, 1.0, inf) < Env(#[0.0, 0.5], #[120])).collect(_.binaryValue));
+						bp.gDelta = Pwhite(1.5, 3.0, inf) * Env(#[1, 0.36], #[90]);
+						bp.numEv = Pwhite(6, 14, inf);
+						bp.addAutoRun;
+						0
+					}
+				],
+				onStop: {
+					// if(~hasChangedSteps.not) {
+					// 	~changeSteps.();
+					// 	~hasChangedSteps = true;
+					// };
+				},
+				dur: \trigger,  // or \sync
+				id: 40,  // trig id
+				init: Func(\nextThingTrig).v,
+				clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+	PR(\tlsAff).copy.putAll((
+		name: "F40-slinky",
+		segID: 40,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					// { BP(\st).removeAutoRun; 0 },
+					0.01,
+					{ BP(\st).removeAutoRun; 0 },
 					loopCmd: (
 						cmds: [
 							{
@@ -172,7 +278,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 30,  // trig id
+				id: 50,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -180,19 +286,23 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F30-normal",
-		segID: 30,
-		// initProcesses: {},
-		// unloadProcesses: {},
+		name: "F50-Ilana pattern",
+		segID: 50,
+		initProcesses: {},
+		unloadProcesses: {},
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					// { BP(\st).addAutoRun; 0 }
+					{ BP(\st).stop; 0.4 },
+					bpCmd: (name: \is, dur: 20, prepareBP: { |bp|
+						bp.maxSynthsCtl.value = 8;
+						bp.decayCtl.value = 2;
+						bp.delta = Plazy({ Pbeta(0.6, 2.0, ~deltaDistribCtl, 1, inf) });
+					} /*, clearDoneSignal: { BP(\is).stopNodes(-1) }*/),
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 40,  // trig id
+				id: 60,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -200,16 +310,30 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F40-3 poses",
-		segID: 40,
-		// initProcesses: {},
-		// unloadProcesses: {},
+		name: "F60-Laura pattern",
+		segID: 60,
+		initProcesses: {},
+		unloadProcesses: {},
 		seqPattern: {
+			if(lwpLoopParms.isFunction) { lwpLoopParms = lwpLoopParms.value };
 			Pn((
 				sequence: [
-					bpCmd: (name: \st, shouldSync: false, playWarning: false),
-					0.05,
-					{ BP(\st).removeAutoRun; 0 },
+					bpCmd: (name: \st, prepareBP: { |bp|
+						bp.autoRun = false;
+						bp.pitchProbCtl.value = 0.36;
+						bp.setLauraWps(Mode(\g).cps(#[22, 28, 31, 33, 34, 37, 39, 40, 43, 46]));
+					}),
+					0.01,
+					gcAutoSynthCmd: (gc: BP(\st).pitchProbCtl, name: \ctlEnv, outName: \outbus,
+						env: Env(#[0.36, 0.6], #[1], 4), time: 18, connect: 0),
+					loopCmd: lwpLoopParms.copy.put(\id, \lwp3),
+					funcCmd: topEnvironment[\trigParms],
+					\cmdSync,
+					funcCmd: (func: {
+						BP(\st).removeAutoRun;
+						~iterator.findActive(\lpw3).stop;
+						0
+					}),
 					loopCmd: (repeats: 3,
 						cmds: [
 							{	if(~repeats < 3) {
@@ -225,20 +349,41 @@
 						]
 					),
 					\cmdSync,
-					{ BP(\st).addAutoRun; 0 }
+					// { BP(\st).addAutoRun; 0 },
+					loopCmd: lwpLoopParms.copy.put(\id, \lwp3)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 50,  // trig id
+				id: 70,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
 		}
 	)),
 
+	// PR(\tlsAff).copy.putAll((
+	// 	name: "F30-normal",
+	// 	segID: 30,
+	// 	// initProcesses: {},
+	// 	// unloadProcesses: {},
+	// 	seqPattern: {
+	// 		Pn((
+	// 			sequence: [
+	// 				bpCmd: (name: \st, shouldSync: false, playWarning: false),
+	// 				// { BP(\st).addAutoRun; 0 }
+	// 			],
+	// 			// onStop: {},
+	// 			dur: \trigger,  // or \sync
+	// 			id: 40,  // trig id
+	// 			init: Func(\nextThingTrig).v,
+	// 			clear: Func(\clearNextTrig).v
+	// 		), 1)
+	// 	}
+	// )),
+
 	PR(\tlsAff).copy.putAll((
-		name: "F50-multispeed",
-		segID: 50,
+		name: "F70-multispeed",
+		segID: 70,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -254,7 +399,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 55,  // trig id
+				id: 80,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -262,29 +407,42 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F55-hop!",
-		segID: 55,
+		name: "F80-3 pattern counterpoint",
+		segID: 80,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+					bpCmd: (name: \op, dur: 35, /* shouldSync: false, */ prepareBP: { |bp|
+						bp.ampCtl.value = 0.68;
+						// if(d.class == DDWTimer) { d.reset };
+					}),
+
 					{	BP(\st).stopSavedStreams;
-						0.05
-					},
-					{
-						BP(\st).runGesture((gest: \klankHrmSteps, kdecay: rrand(0.14, 0.22), numEv: rrand(10, 20)));
 						BP(\st).addAutoRun;
 						BP(\st).autoRunMultiSpeed(false);
-						// should be lots of activity!
-						BP(\st).gDelta = Pwhite(0.35, 0.8, inf);
-						0
-					}
+						0.05
+					},
+					bpCmd: (name: \st, shouldSync: false, playWarning: false),
+
+					loopCmd: (
+						actions: [
+							{ BP(\st).runGesture },
+							{ BP(\is).triggerOneEvent(0) },
+							{ BP(\st).runLauraWp(lwpLoopParms[\lwpParms], true); }
+						],
+						cmds: [
+							{
+								~actions.choose.value;
+								exprand(0.6, 2.6)
+							}
+						]
+					)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 60,  // trig id
+				id: 90,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -292,8 +450,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F60-stop(short)",
-		segID: 60,
+		name: "F90-stop(short)",
+		segID: 90,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -311,7 +469,7 @@
 					{ BP(\st).stop }.defer(12)
 				},
 				dur: \trigger,  // or \sync
-				id: 70,  // trig id
+				id: 100,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -319,8 +477,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F70-axial",
-		segID: 70,
+		name: "F100-axial",
+		segID: 100,
 		initProcesses: {
 			\chuckIf.eval(Fact(\waterpad), VC, \wp, nil, Library.at(\rvbs));
 			Fact(\feetChordBP) => BP(\fc);
@@ -336,7 +494,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 80,  // trig id
+				id: 110,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -344,8 +502,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F80-walking(swinging)",
-		segID: 80,
+		name: "F110-walking(swinging)",
+		segID: 110,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -357,7 +515,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 90,  // trig id
+				id: 120,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -365,8 +523,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F90-3 inversions",
-		segID: 90,
+		name: "F120-3 inversions",
+		segID: 120,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -402,7 +560,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 100,  // trig id
+				id: 130,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -410,8 +568,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F100-hop/lean",
-		segID: 1,
+		name: "F130-hop/lean",
+		segID: 130,
 		initProcesses: {
 			\chuckIf.eval(PR(\leaning), BP, \ln);
 			VC(\wp) => BP(\ln);
@@ -448,7 +606,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 110,  // trig id
+				id: 140,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -456,8 +614,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F110-Conflict",
-		segID: 110,
+		name: "F140-Conflict",
+		segID: 140,
 		initProcesses: {
 			// what an obscene hack, but my framework is too complicated
 			var numEvStream = Pwhile1({ |ev, next| next < 25 },
@@ -524,7 +682,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 115,  // trig id
+				id: 150,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -532,8 +690,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F115-small leans",
-		segID: 115,
+		name: "F150-small leans",
+		segID: 150,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -548,7 +706,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 116,  // trig id
+				id: 160,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -556,11 +714,11 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F116-military turns",
-		segID: 116,
+		name: "F160-military turns",
+		segID: 160,
 		initProcesses: {
 			// another hack: refactor after premiere to move these into BP(\st)
-			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 110 };
+			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 140 };
 			if(conflict.notNil and: { conflict[\multiSnareParms].notNil }) {
 				// this should reuse function scope from the other section
 				// (I said this is a hack...)
@@ -588,7 +746,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 120,  // trig id
+				id: 170,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -596,8 +754,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F120-falling",
-		segID: 120,
+		name: "F170-falling",
+		segID: 170,
 		fallRatios: #[0.4, 0.7, 0.86], // reverse order
 		initProcesses: {
 			Fact(\fallingBP) => BP(\fall);
@@ -672,7 +830,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 130,  // trig id
+				id: 180,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -680,11 +838,11 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F130-military turns",
-		segID: 130,
+		name: "F180-military turns",
+		segID: 180,
 		tempo: 60/104,
 		initProcesses: {
-			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 110 };
+			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 180 };
 			if(conflict.notNil and: { conflict[\multiSnareParms].notNil }) {
 				~multiSnareParms = conflict.multiSnareParms;
 			} {
@@ -720,7 +878,7 @@
 					};
 				},
 				dur: \trigger,  // or \sync
-				id: 140,  // trig id
+				id: 190,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -728,8 +886,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F140-normal+inversions",
-		segID: 140,
+		name: "F190-normal+inversions",
+		segID: 190,
 		// initProcesses: {},
 		// unloadProcesses: {},
 		seqPattern: {
@@ -769,7 +927,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 150,  // trig id
+				id: 200,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -777,8 +935,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F150-multispeed",
-		segID: 150,
+		name: "F200-multispeed",
+		segID: 200,
 		initProcesses: {
 			~baseMSpeedParms = BP(\st).use {
 				// "I AM MAKING MSPARMS NOW!".debug;
@@ -836,7 +994,7 @@
 				],
 				onStop: { BP(\st).stopSavedStreams; BP(\st).autoRunMultiSpeed(false); },
 				dur: \trigger,  // or \sync
-				id: 160,  // trig id
+				id: 210,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
@@ -844,8 +1002,8 @@
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F160-Partnering",
-		segID: 160,
+		name: "F210-Partnering",
+		segID: 210,
 		initProcesses: {
 			~cmdPool = [
 				{	var	stream, cmd = currentEnvironment;
