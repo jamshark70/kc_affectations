@@ -2750,6 +2750,7 @@ make: { |name|
 				}).add
 			]
 		},
+		median: 5,
 		thresh: 4.0,
 		timeThresh: 0.12,
 		countThresh: 4,
@@ -3040,14 +3041,15 @@ PR(\abstractProcess).clone {
 	};
 } => PR(\bellFlourish);
 
-
-SynthDef(\lsmPanAuto, { |outbus, freqStart = 0.8, freqEnd = 0.1, time = 1|
-	Out.kr(outbus, SinOsc.kr(
-		Line.kr(freqStart, freqEnd, time),
-		Rand(0, 2pi),
-		Line.kr(1.0, 0.05, time, doneAction: 2)
-	))
-}).add;
+s.waitForBoot {
+	SynthDef(\lsmPanAuto, { |outbus, freqStart = 0.8, freqEnd = 0.1, time = 1|
+		Out.kr(outbus, SinOsc.kr(
+			Line.kr(freqStart, freqEnd, time),
+			Rand(0, 2pi),
+			Line.kr(1.0, 0.05, time, doneAction: 2)
+		))
+	}).add;
+}
 
 (make: { |name|
 	BP(name).free;
