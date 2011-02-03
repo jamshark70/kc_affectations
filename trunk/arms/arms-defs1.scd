@@ -3049,7 +3049,7 @@ s.waitForBoot {
 			Line.kr(1.0, 0.05, time, doneAction: 2)
 		))
 	}).add;
-}
+};
 
 (make: { |name|
 	BP(name).free;

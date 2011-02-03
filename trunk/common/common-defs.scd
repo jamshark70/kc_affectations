@@ -1028,6 +1028,7 @@ PR(\abstractProcess).clone {
 	~autoPlay = true;
 	~event = (eventKey: \singleSynthPlayNotify);
 	~dk = \di;
+	~latest = 0 ! 28;
 	~prep = {
 		if(BP.exists(~dk).not) {
 			"Load BP(%) first.".format(~dk.asCompileString).warn

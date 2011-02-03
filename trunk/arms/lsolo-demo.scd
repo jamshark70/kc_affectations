@@ -23,7 +23,10 @@ Fact(\armsmelVC).chuck(VC(\bmel), nil, (
 VC(\bmel).v.setArgDefaults([ffreq: 12258]);
 Fact(\locomoLead) => VC(\lm);
 
-Fact(\dataIn).chuck(BP(\di), nil, (playTestFile: true, readFrame: 138));
+Fact(\dataIn).chuck(BP(\di), nil, (
+	playTestFile: true, readFrame: 138,
+	recvBus: Bus(\control, 4082, 12, s)
+));
 BP(\di).setStartTime(14, 54);
 
 BP(\dr).free;
