@@ -432,7 +432,8 @@
  	  tar -xvzf sc-private-extensions.tar.gz
        2. mkdir ~/share/SuperCollider/Extensions/PrivateExtensions
        3. cp *.sc ~/share/SuperCollider/Extensions/PrivateExtensions
+       4. cp WrappableInstr ~/share/SuperCollider/Extensions
 	  - Steps related to the old fixes.tar.gz should NO LONGER be needed.
-       4. Edit ~/.sclang.sc to specify the actual location of trunk/Instr for Instr.dir.
+       5. Edit ~/.sclang.sc to specify the actual location of trunk/Instr for Instr.dir.
    11. Restart sc interpreter.
 ** DONE Check all private-extensions into git.
