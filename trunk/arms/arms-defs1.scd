@@ -1134,7 +1134,7 @@ make: { |name|
 			
 				trig = Trig1.kr(trig, ControlDur.ir);
 			
-				sig[0] = sig[0] / frameRate;
+				sig[0] = Select.kr(useTrigBus, [sig[0], sig[0] / frameRate]);
 				// delayPhase = delayPhase + (0 .. (sig.size-1));
 				// prev = Demand.kr(trig, 0, Dbufrd(delayBuf, delayPhase));
 				// sigdiff = sig - prev;
