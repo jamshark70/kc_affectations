@@ -1358,6 +1358,9 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| r.remove; s.sendMsg(\n_trace, 
 
 
 BP(\bana).freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
+BP(\bana).freq = 59.midicps * Plazy({ Env(#[1, 1.04], [rrand(10, 20)], 1.2).asStream.collect { |range| 1.0.rand.linexp(0, 1, range.reciprocal, range) } });
+
+ Pexprand(1.007.reciprocal, 1.007, inf);
 
 BP(\bana).event.lcrvbamt = 0.1;
 
