@@ -2632,7 +2632,7 @@ PR(\abstractProcess).clone {
 	~event = (eventKey: \default, distFar: 100);
 	~alwaysReset = true;
 	~printStopMsg = false;
-	~vcKey = \lm;  // change to lcm later
+	~vcKey = \lcm;
 
 	~prep = {
 		if(~iMadeMixer = ~chan.isNil) {
@@ -2653,7 +2653,7 @@ PR(\abstractProcess).clone {
 		~mainAmpCtl.free
 	};
 
-	~freq = 59.midicps * Pexprand(1.007.reciprocal, 1.007, inf);
+	~freq = 59.midicps * Plazy({ Env(#[1, 1.03], [rrand(10, 20)], 1.2).asStream.collect { |range| 1.0.rand.linexp(0, 1, range.reciprocal, range) } });
 	~car_buf = Plazy({ Prand(VC(~vcKey).env.cb, inf) });
 	~mod_lev = Pexprand(7, 25, inf);
 	~mod_ratio = Pwhite(2, 7, inf);

@@ -7,14 +7,6 @@
 		name: "A500-axial",
 		segID: 500,
 		initProcesses: {
-			\chuckIf.eval(Fact(\dataIn), BP, \di, nil/*, (
-				filename: "arms/hands-1_data2.wav" //"arms/NACL_Arms.wav"
-			)*/);
-			BP(\di).put(\update, { |obj, what|
-				if(what == \stop and: { obj === topEnvironment[\seq] }) {
-					BP(~collIndex).stop;
-				};
-			});
 			\chuckIf.eval(PR(\armsSkidMel), BP, \am, nil, (
 				glrvbmc: topEnvironment[\glrvbmc],
 				lcrvbmc: topEnvironment[\lcrvbmc],
@@ -29,7 +21,8 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{ "///// 10:05 -- axial".debug; 0 },
+					{ BP(\di).setStartTime(9, 20); 0 },
+					bpCmd: Library.at(\diparms),
 					// bpCmd: (id: \lc_data, name: \di, quant: 0, shouldSync: false),
 					loopCmd: (
 						id: \am1,
@@ -73,7 +66,7 @@
 			p.fullCh.removeAt(\diss2);
 			p.amp = -20.dbamp;
 
-			BP(\di).playTestFile = false;
+			BP(\di).playTestFile = Library.at(\isJamesBox);
 
 			\chuckIf.eval(Fact(\locomoLead), VC, \lcm, nil, Library.at(\rvbs));
 			// VC(\lcm).env.target.level = -19.dbamp;
@@ -86,9 +79,8 @@
 			// var	sect = currentEnvironment;
 			Pn((
 				sequence: [
-					bpCmd: Library.at(\diparms).copy.put(\prepareBP, { |bp|
-						bp.startFrame = (10 * 60 + 6) * 30;
-					}),
+					{ BP(\di).setStartTime(9, 46); 0 },
+					bpCmd: Library.at(\diparms),
 					[
 						loopCmd: (
 							id: \lc1,
@@ -152,6 +144,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(10, 21); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (name: \sr),
 					\cmdSync,
@@ -217,9 +210,8 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: Library.at(\diparms).copy.put(\prepareBP, { |bp|
-						bp.startFrame = (10 * 60 + 51) * 30;
-					}),
+					{ BP(\di).setStartTime(10, 31); 0 },
+					bpCmd: Library.at(\diparms),
 					bpCmd: (id: \stack, name: \stack)
 				],
 				dur: \trigger,  // or \sync
@@ -247,6 +239,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(10, 48); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (id: \ai, name: \ai,
 						// TEST
@@ -297,6 +290,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(11, 4); 0 },
 					bpCmd: Library.at(\diparms),
 					loopCmd: (
 						id: \shiva,
@@ -326,7 +320,7 @@
 				env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
 				// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
 				isMono: false
-			));
+			).putAll(Library.at(\rvbs)));
 			VC(\bmel).v.setArgDefaults([ffreq: 12258]);
 
 			\chuckIf.eval(Fact(\bmelBP), BP, \bmel);
@@ -346,6 +340,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(11, 44); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (name: \ai, quant: 0, prepareBP: { |bp|
 						bp.eventStream = nil;
@@ -446,6 +441,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(12, 7); 0 },
 					bpCmd: Library.at(\diparms),
 					loopCmd: (
 						id: \threelev,
@@ -488,6 +484,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(12, 54); 0 },
 					bpCmd: Library.at(\diparms),
 					{	// var	self = currentEnvironment;
 						PR(\bpCmd).copy.putAll((name: \abs, quant: 0, prepareBP: { |bp|
@@ -584,6 +581,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(13, 30); 0 },
 					bpCmd: Library.at(\diparms),
 					loopCmd: (
 						id: \lauraManip,
@@ -608,11 +606,17 @@
 	PR(\tlsAff).copy.putAll((
 		name: "A610-loco-prep",
 		segID: 610,
-		// initProcesses: {},
-		// unloadProcesses: {},
+		initProcesses: {
+			\chuckIf.eval(PR(\bAnacrusis), BP, \bana);
+			0 => BP(\bana);
+		},
+		unloadProcesses: {
+			BP(\bana).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
+					bpCmd: (name: \bana)
 				],
 				onStop: {},
 				dur: \trigger,  // or \sync
@@ -631,6 +635,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(13, 57); 0 },
 					bpCmd: Library.at(\diparms),
 					loopCmd: (
 						id: \lc2,
@@ -663,6 +668,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
+					{ BP(\di).setStartTime(14, 6); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (id: \rc, name: \rc,
 						// TEST
@@ -684,87 +690,89 @@
 		name: "A640-Laura solo",
 		segID: 640,
 		initProcesses: {
-			var p = BP(\acDisp);
-			SynthDef(\rotSpeedAuto2, { |outbus, time = 1, proportion = 0.5, speedMul = 1,
-				topSpeed = 1|
-				ReplaceOut.kr(outbus,
-					LFNoise1.kr(Rand(0.5, 1.0) * speedMul).linlin(-1, 1, 0.1, topSpeed)
-					* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
-						timeScale: time, doneAction: 2)
-				);
-			}).add;
+			\chuckIf.eval(PR(\dataReader), BP, \dr, nil, (autoPlay: false));
+			0 => BP(\dr);
 
-			p[\saveStartAuto] ?? { p.saveStartAuto = p[\startAuto] };
-			p.startAuto = {
-				var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
-				~procTime = time;
-				s.makeBundle(nil, {
-					~rotSpeed.automate(\rotSpeedAuto2,
-						[time: time, proportion: proportion /*, topSpeed: 2 */],
-						~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
-						\addToHead);
-					~angle.automate(\angleAuto,
-						[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
-						~rotSpeed.autoSynth, \addAfter);
-					~yxRatio.automate({
-							EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
-						},
-						nil,
-						~rotSpeed.autoSynth, \addAfter);
-					// ~yxRatio.automate(\yxRatioAuto, 
-					// 	[inbus: BP(\di).bus.index + 7],
-					// 	~rotSpeed.autoSynth, \addAfter);
-				});
-				OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
-					resp.remove;
-					if(BP.exists(~collIndex)) {
-						BP(~collIndex).stop(0);
+			\chuckIf.eval(Fact(\lsoloTrig), BP, \lsyx, nil, (
+				autoPlay: false,
+				doTrig: { |data|
+					case { data[0] > ~thresh } {
+						~hasFiredHigh = true;
+						BP(#[qc, lsac]).stop;
+						// if(BP.exists(\lsm)) { BP(\lsm).stop };
+						BP(\yxsw).nextNoteNow;
+						NotificationCenter.registerOneShot(BP(\yxsw).esp, \event, \bass, { |event|
+							(	voicer: VC(\abs).v,
+								mode: event[\mode],
+								freq: event[\degrees][0] - 7,
+								delta: 1,
+								length: rrand(3.5, 5.5),
+								gate: 0.4
+							).parent_(ProtoEvent(\voicerNote).v.parent)
+							.play;
+						});
+					}
+					{ data[0] < ~lowThresh and: { #[nil, true].includes(~hasFiredHigh) } } {
+						~hasFiredHigh = false;
+						~lowThreshTime = ~clock.beats;
+						if(BP(\bfl).isPlaying.not) { BP(\bfl).play };
+						BP(\lsac).play;
+						BP(\qc).reset;
+						BP(\qc).triggerOneEvent(DelayTimeSpec(0.4));
 					};
-				}).add;
-			};
+				}
+			));
 
-			p[\saveRow] ?? { p.saveRow = p.row };
-			p.row = Plazy({
-				var	proportion = rrand(0.3, 0.8);
-				Env(#[0.0, 2.12, 0.0], [proportion, 1 - proportion] * ~procTime, \sin).asStream
-			});
+			\chuckIf.eval(Fact(\acceltrig), BP, \lsac, nil, (
+				autoPlay: false,
+				doTrig: { |latest|
+					if(latest.sign > 0 and: { (BP(\qc).clock.beats - BP(\qc).v[\eventSchedTime]) > 1.0 }) {
+						BP(\qc).triggerOneEvent(0);
+						if(BP.exists(\lsm) and: { BP(\lsm).isPlaying.not and: {
+							(BP(\lsyx).clock.beats - BP(\lsyx).lowThreshTime) > 2.0
+						} }) {
+							BP(\lsm).play(DelayTimeSpec(rrand(0.7, 1.5)));
+						};
+					};
+				},
+				autoPlay: false
+			));
 
-			p.addChord(\diss1, #[g, 39, 47, 52, 57, 60, 62, 68, 75, 85]);
-			p.addChord(\diss2, #[g, 42, 49, 52, 60, 65, 71, 73, 79, 89]);
+			\chuckIf.eval(PR(\yxswirls), BP, \yxsw);
+			VC(\ac) => BP(\yxsw);
+			0 => BP(\yxsw);
 
-			p[\saveChord] ?? { p.saveChord = p.chord };
-			p.chord = Pif(Pwhite(0.0, 1.0, inf) < Env(#[0, 1], #[50]),
-				Pseq(#[diss1, diss2], inf),
-				Pxrand(#[c_ish, em, g, am], inf)
-			);
-			if(p.bpsKeys.includes(\chordTime).not) {
-				p.bpsKeys = p.bpsKeys ++ #[chordTime];
-			};
+			\chuckIf.eval(PR(\quietChords), BP, \qc);
+			VC(\sp) => BP(\qc);
+			0 => BP(\qc);
+
+			\chuckIf.eval(PR(\bellFlourish), BP, \bfl);
+			VC(\bmel) => BP(\bfl);
+			0 => BP(\bfl);
+			BP(\bfl).printStopMsg = false;
+
+			\chuckIf.eval(Fact(\lsoloMel), BP, \lsm);
+			VC(\lcm) => BP(\lsm);
+			BP(\lsm).event.mainAmp = -9.5.dbamp; // orig == -12.5, +3
+
+			// BP(\yxsw).update = { |obj, what, more|
+			// 	case { what == \play } { BP(\yxsw).play(DelayTimeSpec(0.1)) }
+			// 		{ more == \stopped } { BP(\yxsw).stop };
+			// };
+			// BP(\lsyx).addDependant(BP(\yxsw).v);
 		},
-		unloadProcesses: {},
+		unloadProcesses: {
+			// BP(\lsyx).removeDependant(BP(\yxsw).v);
+			BP(#[lsm, lsac, qc, bfl, yxsw, lsyx]).free;
+		},
 		seqPattern: {
-			var	playfunc = Pwrand([
-				{ BP(\acDisp).spawnChild(0) },
-				{ 2.do { BP(\ssol).triggerOneEvent(0) } },
-				{ BP(\ai).runGesture }
-			], #[4, 1, 3].normalizeSum, inf).asStream;
 			Pn((
 				sequence: [
-					bpCmd: (name: \ai),
-					0.1,
-					loopCmd: (
-						cmds: [
-							{	
-								PR(\funcCmd).copy.putAll((
-									func: playfunc.next,
-									dur: if(0.3.coin) { rrand(2.0, 3.5) } { rrand(5.0, 8.0) }
-								))
-							},
-							\cmdSync
-						]
-					),
+					{ BP(\di).setStartTime(14, 57); 0 },
+					bpCmd: Library.at(\diparms),
+					bpCmd: (name: #[dr, lsyx, yxsw])
 				],
-				// onStop: {},
+				onStop: { BP(#[yxsw, lsyx, dr]).stop(0) },
 				dur: \trigger,  // or \sync
 				id: 650,  // trig id
 				init: Func(\nextThingTrig).v,
