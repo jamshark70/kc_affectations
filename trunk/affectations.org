@@ -36,7 +36,7 @@
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
 ** Musical edits [0/5]
-*** TODO Feet [1/2] <2010-12-05 Sun>
+*** TODO Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
 ***** Ilana: Quick direction changes - basicSynthChooser; parm groups
@@ -62,8 +62,8 @@
       5. I - basically straight thru
       6. L - pause, poses, multispeed
       7. To corners, all 3 together
-**** TODO Phrasing!!!
-*** TODO Arms [0/2] <2010-12-15 Sun>
+**** DONE Phrasing!!!
+*** TODO Arms [1/3] <2010-12-15 Sun>
 **** New sequence
 ***** +Axial
 ***** +Locomotive + mel
@@ -101,10 +101,12 @@
 ****** Locomotive: Coordinate some notes into rhythm
 ****** Rhythm 4 stacking?
 ****** Rocking
-**** Work on Laura's solo, then foreshadow
-**** TODO Revisit thin sections
+**** TODO Revisit thin sections: Cradling (use data here!)
 ***** Need bass
-**** TODO Rewrite Laura's solo
+**** TODO Fixes [0/2]
+***** TODO Levels: anacrusis too loud, lsolo too loud
+***** TODO VC(\sp) stuck notes
+**** DONE Rewrite Laura's solo
 ***** Extend axial notes into locomotive texture - big sweeps going way up!
 ****** Reuse melody, but faster
 ***** Design gestures to follow movement
