@@ -489,3 +489,85 @@ v.front;
 v.refresh;
 
 w.close;
+
+
+
+
+// laura solo seq stuff
+
+			SynthDef(\rotSpeedAuto2, { |outbus, time = 1, proportion = 0.5, speedMul = 1,
+				topSpeed = 1|
+				ReplaceOut.kr(outbus,
+					LFNoise1.kr(Rand(0.5, 1.0) * speedMul).linlin(-1, 1, 0.1, topSpeed)
+					* EnvGen.kr(Env(#[1, 1, 0.1], [proportion, 1 - proportion]),
+						timeScale: time, doneAction: 2)
+				);
+			}).add;
+
+			p[\saveStartAuto] ?? { p.saveStartAuto = p[\startAuto] };
+			p.startAuto = {
+				var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
+				~procTime = time;
+				s.makeBundle(nil, {
+					~rotSpeed.automate(\rotSpeedAuto2,
+						[time: time, proportion: proportion /*, topSpeed: 2 */],
+						~event[\voicer].tryPerform(\bus).tryPerform(\asMixer).tryPerform(\fadergroup),
+						\addToHead);
+					~angle.automate(\angleAuto,
+						[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
+						~rotSpeed.autoSynth, \addAfter);
+					~yxRatio.automate({
+							EnvGen.kr(Env([Rand(0, 2.5), Rand(3.5, 5), Rand(0, 2.5)], [proportion, 1 - proportion], \sine))
+						},
+						nil,
+						~rotSpeed.autoSynth, \addAfter);
+					// ~yxRatio.automate(\yxRatioAuto, 
+					// 	[inbus: BP(\di).bus.index + 7],
+					// 	~rotSpeed.autoSynth, \addAfter);
+				});
+				OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
+					resp.remove;
+					if(BP.exists(~collIndex)) {
+						BP(~collIndex).stop(0);
+					};
+				}).add;
+			};
+
+			p[\saveRow] ?? { p.saveRow = p.row };
+			p.row = Plazy({
+				var	proportion = rrand(0.3, 0.8);
+				Env(#[0.0, 2.12, 0.0], [proportion, 1 - proportion] * ~procTime, \sin).asStream
+			});
+
+			p.addChord(\diss1, #[g, 39, 47, 52, 57, 60, 62, 68, 75, 85]);
+			p.addChord(\diss2, #[g, 42, 49, 52, 60, 65, 71, 73, 79, 89]);
+
+			p[\saveChord] ?? { p.saveChord = p.chord };
+			p.chord = Pif(Pwhite(0.0, 1.0, inf) < Env(#[0, 1], #[50]),
+				Pseq(#[diss1, diss2], inf),
+				Pxrand(#[c_ish, em, g, am], inf)
+			);
+			if(p.bpsKeys.includes(\chordTime).not) {
+				p.bpsKeys = p.bpsKeys ++ #[chordTime];
+			};
+
+
+			var	playfunc = Pwrand([
+				{ BP(\acDisp).spawnChild(0) },
+				{ 2.do { BP(\ssol).triggerOneEvent(0) } },
+				{ BP(\ai).runGesture }
+			], #[4, 1, 3].normalizeSum, inf).asStream;
+
+					bpCmd: (name: \ai),
+					0.1,
+					loopCmd: (
+						cmds: [
+							{	
+								PR(\funcCmd).copy.putAll((
+									func: playfunc.next,
+									dur: if(0.3.coin) { rrand(2.0, 3.5) } { rrand(5.0, 8.0) }
+								))
+							},
+							\cmdSync
+						]
+					),
