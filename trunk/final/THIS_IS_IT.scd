@@ -25,6 +25,18 @@
 var	mypath = thisProcess.nowExecutingPath, indices;
 if(BP.exists(\transports)) { BP(\transports).free };
 
+Library.at(\isJamesBox) ?? {
+	try {
+		var p = Pipe("hostname", "r"), l;
+		if(p.isOpen) {
+			l = p.getLine;
+			if(l.notNil) { Library.put(\isJamesBox, l.contains("dlm")) }
+				{ Library.put(\isJamesBox, false) };
+		};
+		p.close;
+	} { p.tryPerform(\close) };  // make sure pipe gets closed even on error
+};
+
 s = Server.local;
 s.waitForBoot {
 	var	cond = Condition.new;
@@ -85,8 +97,9 @@ MT(1).gui;
 BP.all.stop;
 
 // if you need to clear everything, do this:
-BP.all.do { |bp| if(bp.collIndex != \mstClock) { bp.free } }; VC.all.free;
+BP.all.do { |bp| if(#[mstClock, di].includes(bp.collIndex).not) { bp.free } }; VC.all.free;
 if(BP.exists(\mstClock)) { BP(\mstClock).free };
+if(BP.exists(\di)) { BP(\di).free };
 
 ~seq.sections.do(_.prUnload);
 
