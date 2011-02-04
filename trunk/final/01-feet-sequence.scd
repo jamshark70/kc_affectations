@@ -56,6 +56,18 @@ var lwpLoopParms = { (
 		name: "F1-Bang!",
 		segID: 1,
 		initProcesses: {
+			\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
+				// filename: "arms/hands-1_data2.wav" //"arms/NACL_Arms.wav"
+				readFrame: 138,
+				recvBus: Bus(\control, 4082, 12, s)
+			));
+			// addDependant is in BP(\di).prep
+			BP(\di).put(\update, { |obj, what|
+				if(what == \stop and: { obj === topEnvironment[\seq] }) {
+					BP(~collIndex).stop;
+				};
+			});
+
 			\chuckIf.eval(PR(\trajectories), BP, \traj);
 			\chuckIf.eval(Fact(\opening), BP, \op, nil, Library.at(\rvbs));
 			\chuckIf.eval(Fact(\openingSteps), BP, \st, nil, Library.at(\rvbs));
