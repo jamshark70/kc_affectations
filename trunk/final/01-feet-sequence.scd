@@ -59,7 +59,7 @@ var lwpLoopParms = { (
 			\chuckIf.eval(Fact(\dataIn), BP, \di, nil, (
 				// filename: "arms/hands-1_data2.wav" //"arms/NACL_Arms.wav"
 				readFrame: 138,
-				recvBus: Bus(\control, 4082, 12, s)
+				recvBus: Bus(\control, 4000, 12, s)
 			));
 			// addDependant is in BP(\di).prep
 			BP(\di).put(\update, { |obj, what|
@@ -73,7 +73,7 @@ var lwpLoopParms = { (
 			\chuckIf.eval(Fact(\openingSteps), BP, \st, nil, Library.at(\rvbs));
 		},
 		unloadProcesses: {
-			BP(#[traj, op, st]).free;
+			BP(#[op, st]).free;
 		},
 		seqPattern: {
 			Pn((
@@ -854,7 +854,7 @@ var lwpLoopParms = { (
 		segID: 180,
 		tempo: 60/104,
 		initProcesses: {
-			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 180 };
+			var	conflict = topEnvironment[\seq].sections.detect { |sct| sct.segID == 140 };
 			if(conflict.notNil and: { conflict[\multiSnareParms].notNil }) {
 				~multiSnareParms = conflict.multiSnareParms;
 			} {
