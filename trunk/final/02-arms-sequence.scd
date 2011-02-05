@@ -64,7 +64,7 @@
 			p.chord = p[\saveChord] ? p[\chord];
 			p.fullCh.removeAt(\diss1);
 			p.fullCh.removeAt(\diss2);
-			p.amp = -20.dbamp;
+			p.amp = -11.dbamp;
 
 			BP(\di).playTestFile = Library.at(\isJamesBox);
 
@@ -129,7 +129,7 @@
 		segID: 520,
 		initProcesses: {
 			\chuckIf.eval(PR(\sunrise), BP, \sr);
-			BP(\sr).ampCtl.value = -23.dbamp;
+			BP(\sr).ampCtl.value = -20.5.dbamp;
 			VC(\ac) => BP(\sr);
 			0 => BP(\sr);
 
@@ -205,6 +205,7 @@
 			BP(\stack).attackTimeScale = Pkey(\length).linlin(0.2, 3.0, 0.1, 1, \minmax);
 			BP(\stack).decayTimeScale = Pkey(\length).linlin(0.2, 3.0, 0.1, 1, \minmax);
 			BP(\stack).mod_lev = Pkey(\length).linlin(0.2, 3.0, Pwhite(4.5, 8.0, inf), 2.5, \minmax);
+			BP(\stack).ampCtl.value = -14.5.dbamp;
 		},
 		unloadProcesses: { BP(\stack).free },
 		seqPattern: {
@@ -230,8 +231,10 @@
 				env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
 				fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
 			).putAll(Library.at(\rvbs)));
+			// I got stuck nodes on this a LOT, so, disable voice stealing
+			VC(\sp).v.steal = false;
 			\chuckIf.eval(PR(\armsInv), BP, \ai);
-			BP(\ai).ampCtl.value = 0.115; // 0.045;
+			BP(\ai).ampCtl.value = -16.5.dbamp; // 0.115; // 0.045;
 			VC(\sp) => BP(\ai);
 			0 => BP(\ai);
 		},
@@ -279,10 +282,6 @@
 			BP(\tc) => VC(\btp);
 			\chuckIf.eval(PR(\shivaTrig), BP, \shivaTrig);
 			BP(#[am0, am1, am2]).do { |bp| bp.amp = -4.dbamp };
-			BP(#[am0, am1, am2, tc]).do({ |bp|
-				bp.prepareForPlay;
-				bp.v.reset
-			});
 		},
 		unloadProcesses: {
 			BP(#[am0, am1, am2, tc, shivaTrig]).free; VC(#[am, btp]).free;
@@ -292,6 +291,14 @@
 				sequence: [
 					{ BP(\di).setStartTime(11, 4); 0 },
 					bpCmd: Library.at(\diparms),
+					{
+						BP(\shivaTrig).v.reset;
+						BP(#[am0, am1, am2, tc]).do({ |bp|
+							bp.prepareForPlay;
+							bp.v.reset
+						});
+						0
+					},
 					loopCmd: (
 						id: \shiva,
 						autoSync: false,
@@ -361,7 +368,7 @@
 					\cmdSync,
 					funcCmd: (func: {
 						~iterator.findActive(\pt1).stop;
-						BP(#[am, am0, am1, am2]).do { |bp| bp.reset; bp.v.reset };
+						BP(#[am, am0, am1, am2, shivaTrig]).do { |bp| bp.reset; bp.v.reset };
 					}),
 					{ PR(\loopCmd).copy.putAll((
 						id: \pt2,
@@ -512,7 +519,13 @@
 								}))
 							},
 							\cmdSync,
-							funcCmd: topEnvironment[\trigParms],
+							{
+								if(~repeats > 1) {
+									PR(\funcCmd).copy.putAll(topEnvironment[\trigParms])
+								} {
+									PR(\funcCmd).copy
+								};
+							},
 							\cmdSync
 						]
 					),
@@ -541,10 +554,10 @@
 						],
 						cmds: [
 							{	var delays = [0, rrand(0.5, 2.5)];
-								[delays, ~bpCmdArray.rotate(2.rand)].flop.flat.debug("add TLSeq")
+								[delays, ~bpCmdArray.rotate(2.rand)].flop.flat
 							},
 							\cmdSync,
-							{ rrand(0.8, 2.5).debug("wait") }  // rrand(3.5, 6.0)
+							{ rrand(0.8, 2.5) }  // rrand(3.5, 6.0)
 						]
 					),
 					{	BP(\bmel).numDescents = Pwhite(5, 9, inf);
@@ -574,7 +587,7 @@
 		segID: 600,
 		initProcesses: {
 			\chuckIf.eval(Fact(\lauraManip), BP, \lm, nil, Library.at(\rvbs));
-			BP(\lm).amp = 0.45;
+			BP(\lm).amp = -1.dbamp;
 			BP(\lm).v.reset;
 		},
 		unloadProcesses: { BP(\lm).free },
@@ -609,6 +622,7 @@
 		initProcesses: {
 			\chuckIf.eval(PR(\bAnacrusis), BP, \bana);
 			0 => BP(\bana);
+			BP(\bana).mainAmpCtl.value = -17.dbamp;
 		},
 		unloadProcesses: {
 			BP(\bana).free;
@@ -616,9 +630,9 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \bana)
+					bpCmd: (name: \bana, shouldSync: false)
 				],
-				onStop: {},
+				onStop: { BP(\bana).stop(DelayTimeSpec(3.0)) },
 				dur: \trigger,  // or \sync
 				id: 620,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -662,7 +676,7 @@
 		initProcesses: {
 			\chuckIf.eval(PR(\rockingChords), BP, \rc);
 			VC(\sp) => BP(\rc);
-			BP(\rc).finalAmp = 0.05;
+			BP(\rc).finalAmp = -19.dbamp;
 		},
 		unloadProcesses: { BP(\rc).free },
 		seqPattern: {
@@ -745,15 +759,17 @@
 			\chuckIf.eval(PR(\quietChords), BP, \qc);
 			VC(\sp) => BP(\qc);
 			0 => BP(\qc);
+			BP(\qc).finalAmp = -16.dbamp;
 
 			\chuckIf.eval(PR(\bellFlourish), BP, \bfl);
 			VC(\bmel) => BP(\bfl);
 			0 => BP(\bfl);
 			BP(\bfl).printStopMsg = false;
+			BP(\bfl).ampMul = -5.dbamp;
 
 			\chuckIf.eval(Fact(\lsoloMel), BP, \lsm);
 			VC(\lcm) => BP(\lsm);
-			BP(\lsm).event.mainAmp = -9.5.dbamp; // orig == -12.5, +3
+			BP(\lsm).event.mainAmp = -17.5.dbamp; // orig == -12.5, +3
 
 			// BP(\yxsw).update = { |obj, what, more|
 			// 	case { what == \play } { BP(\yxsw).play(DelayTimeSpec(0.1)) }

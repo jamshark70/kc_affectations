@@ -1853,6 +1853,7 @@ PR(\abstractProcess).clone {
 
 	~reset = {
 		BP(#[am0, am1, am2, tc]).do(_.reset);
+		~makeStreamForKey.(\i);
 	};
 } => PR(\shivaTrig);
 
@@ -2665,7 +2666,8 @@ PR(\abstractProcess).clone {
 		], inf)
 	], 1);
 	~gate = 0.8;
-	~mainAmp = -12.5.dbamp;
+
+	~waitTime = Pseq([0, Pwhite(5, 10, inf) * 0.25], 1);
 
 	~reset = Func(\resetBPStreams);
 
@@ -2687,12 +2689,13 @@ PR(\abstractProcess).clone {
 		var	tdur;
 		~totalDurStream ?? { ~makeStreamForKey.(\totalDur) };
 		~thisTotalDur = tdur = ~totalDurStream.next;
+		~makeStreamForKey.(\waitTime);
 
 		Pspawner({ |sp|
 			var fmul = Pstutter(Pwhite(3, 5, inf), Pseries(1, 1, inf)).asStream;
 			loop {
 				sp.par(~onePattern.(fmul.next));
-				sp.wait(rrand(5, 10) * 0.25);
+				sp.wait(~waitTimeStream.next);
 			}
 		});
 	};
@@ -2778,7 +2781,9 @@ PR(\abstractProcess).clone {
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto.copy
 			.put(\lcrvbamt, 0.035).put(\distFar, 45);
+		~ampCtl = GenericGlobalControl(\finalAmp, nil, -12.5.dbamp);
 	};
+	~freeCleanup = { ~ampCtl.free };
 
 	~preparePlay = {
 		~noteRoutine = ~noteStrm.();
@@ -2859,7 +2864,8 @@ PR(\abstractProcess).clone {
 			\eventTransmit, Pif(Pkey(\newesp), Pfunc({ |ev|
 				NotificationCenter.notify(~esp, \event, ev);
 				0
-			}), 0)
+			}), 0),
+			\finalAmp, ~ampCtl.asMap
 		).asStream, { ~preparePlay.() });  // rebuild stream if it runs out of events
 	};
 
@@ -2972,7 +2978,7 @@ PR(\abstractProcess).clone {
 	~distance = Pwhite(5.0, 20.0, inf);
 	~ffreq = Pexprand(400, 1200, inf);
 	~fenvpeak = (14000 / Pkey(\ffreq)) - 1;
-	~finalAmp = 0.4;
+	~finalAmp = -16.dbamp;
 	~attackTimeScale = Pseq([4.5, Pwhite(1.0, 1.6, inf)], 1);
 	~decayTimeScale = 4;
 	~rq = 0.8;
