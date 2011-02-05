@@ -40,6 +40,9 @@ Library.at(\isJamesBox) ?? {
 s = Server.local;
 s.waitForBoot {
 	var	cond = Condition.new;
+
+	s.controlBusAllocator.reserve(4000, 96, warn: false);
+
 	(mypath.dirname.dirname +/+ "/common/common-defs.scd").loadPath;
 	NotificationCenter.registerOneShot(\lcrvb, \lcrvbexists, \feetSeq, {
 		cond.unhang;
@@ -78,6 +81,7 @@ s.waitForBoot {
 			~window.front.userCanClose_(false)
 				.onClose_(e { ~window = nil });
 		},
+		userfree: { (e { ~window.close }).free },
 		eventActive: { |action|
 			~eventTrigAction = action;
 			(e { ~eventBtn.enabled = action.notNil }).defer;
