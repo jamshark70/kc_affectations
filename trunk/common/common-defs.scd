@@ -716,8 +716,9 @@ Proto {
 			var	trig = InTrig.kr(~busIndex, 1);
 			SendReply.kr(trig, ~message, trig, replyID);
 		}).add;
+		~userprep.();
 	};
-
+	~freeCleanup = { ~userfree.() };
 	~preparePlay = {
 		~node ?? { ~node = Synth(~message, [bus: ~bus, replyID: ~reply]) };
 		~userPreparePlay.(~node);
@@ -745,29 +746,34 @@ Proto {
 // ));
 
 ~trigParms = (
-	sbounds: screenBounds,
+	// sbounds: screenBounds,
 	// play: \dummy,
 	setDoneSignal: {
 		~doneSignal = OSCresponderNode(s.addr, '/event', e { |t, r, m|
 			r.remove;
 			~stop.();
 		}).add;
-		defer(e {
-			~window = Window("GO", Rect(~sbounds.right - 120, ~sbounds.height - 150, 120, 60));
-			Button(~window, ~window.view.bounds.insetBy(2, 2))
-				.states_([["event"]])
-				.action_(e { ~stop.() });
-			~window.front.userCanClose_(false);
-		});
+		// defer(e {
+		// 	~window = Window("GO", Rect(~sbounds.right - 120, ~sbounds.height - 150, 120, 60));
+		// 	Button(~window, ~window.view.bounds.insetBy(2, 2))
+		// 		.states_([["event"]])
+		// 		.action_(e { ~stop.() });
+		// 	~window.front.userCanClose_(false);
+		// });
+		BP(\segTrig).eventActive(e { ~stop.() });
 	},
 	clearDoneSignal: {
-		defer(e { ~window.close })
+		defer(e {
+			// ~window.close;
+			~doneSignal.remove;
+			BP(\segTrig).eventActive(nil);
+		})
 	},
 	func: \dummy
 );
 
 {	|item|
-	var	sbounds = screenBounds;
+	// var	sbounds = screenBounds;
 	~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
 		var	inSeg = m[3], i;
 		case { inSeg == item[\id] or: { inSeg == 99999 } } {
@@ -792,19 +798,21 @@ Proto {
 			.postf(inSeg, item[\id])
 		};
 	}).add;
-	defer(e {
-		~window = Window("move on",
-			Rect(sbounds.right - 120, sbounds.height - 300, 120, 60));
-		Button(~window, ~window.view.bounds.insetBy(2, 2))
-			.states_([["to seg %".format(item[\id])]])
-			.action_(e { ~stop.(nil, ~isLastSection ? false) });
-		~window.front.userCanClose_(false)
-			.onClose_(e { ~window = nil });
-	});
+	// defer(e {
+	// 	~window = Window("move on",
+	// 		Rect(sbounds.right - 120, sbounds.height - 300, 120, 60));
+	// 	Button(~window, ~window.view.bounds.insetBy(2, 2))
+	// 		.states_([["to seg %".format(item[\id])]])
+	// 		.action_(e { ~stop.(nil, ~isLastSection ? false) });
+	// 	~window.front.userCanClose_(false)
+	// 		.onClose_(e { ~window = nil });
+	// });
+	BP(\segTrig).segActive(e { ~stop.(nil, ~isLastSection ? false) }, item[\id]);
 } => Func(\nextThingTrig);
 
 {	~trigResp.remove;
-	~window !? { defer(e { ~window.close }) };
+	// ~window !? { defer(e { ~window.close }) };
+	BP(\segTrig).segActive(nil);
 	~currentTriggerItem = nil;  // what a horrendous, god-awful hack
 	~cleanupTrigger.(nil, (manualStop: ~isLastSection ? false));
 } => Func(\clearNextTrig);

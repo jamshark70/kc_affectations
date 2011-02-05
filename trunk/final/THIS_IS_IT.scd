@@ -50,12 +50,50 @@ s.waitForBoot {
 		if(MCG.exists(7)) {
 			~master => MCG(7)
 		} {
-			MixingBoard(\arms, nil, ~master)
+			MixingBoard("volume", nil, ~master)
 		};
 	};
 
 	BP(\segTrig).free;
-	PR(\busTrig).chuck(BP(\segTrig), nil, (message: '/segment'));
+	PR(\busTrig).chuck(BP(\segTrig), nil, (
+		message: '/segment',
+		userprep: {
+			~sbounds = Window.screenBounds;
+			~window = Window("triggers", Rect(~sbounds.right - 120, ~sbounds.height - 150, 120, 110));
+			~eventBtn = Button(~window, Rect(2, 2, 116, 51))
+				.states_([["event"]])
+				.enabled_(false)
+				.action_(e { |view|
+					~eventTrigAction.();
+//					~eventActive.(nil);
+				});
+			~segBtn = Button(~window, Rect(2, 57, 116, 51))
+				.states_([["to next seg"]])
+				.enabled_(false)
+				.action_(e {
+					~segTrigAction.();
+//					~segActive.(nil);
+					// ~stop.(nil, ~isLastSection ? false)
+				});
+			~window.front.userCanClose_(false)
+				.onClose_(e { ~window = nil });
+		},
+		eventActive: { |action|
+			~eventTrigAction = action;
+			(e { ~eventBtn.enabled = action.notNil }).defer;
+		},
+		segActive: { |action, segID|
+			~segTrigAction = action;
+			(e {
+				~segBtn.enabled = action.notNil;
+				if(segID.notNil) {
+					~segBtn.states = [["to seg" + segID]]
+				} {
+					~segBtn.states = [["to next seg"]]
+				};
+			}).defer;
+		}
+	));
 	BP(\evTrig).free;
 	PR(\busTrig).chuck(BP(\evTrig), nil, (message: '/event', busIndex: 4094));
 	0.5.wait;
@@ -97,9 +135,10 @@ MT(1).gui;
 BP.all.stop;
 
 // if you need to clear everything, do this:
-BP.all.do { |bp| if(#[mstClock, di].includes(bp.collIndex).not) { bp.free } }; VC.all.free;
+BP.all.do { |bp| if(#[mstClock, di, traj].includes(bp.collIndex).not) { bp.free } }; VC.all.free;
 if(BP.exists(\mstClock)) { BP(\mstClock).free };
 if(BP.exists(\di)) { BP(\di).free };
+if(BP.exists(\traj)) { BP(\traj).free };
 
 ~seq.sections.do(_.prUnload);
 

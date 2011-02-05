@@ -1229,7 +1229,7 @@ make: { |name|
 				Font.default = Font(Font.defaultSansFace, 12);
 			};
 			defer(e {
-				~win = ResizeFlowWindow("test", Rect(900, 100, 300, 300))
+				~win = ResizeFlowWindow("continuous data", Rect(900, 100, 300, 300))
 					.onClose_(e { ~closeWin.() });
 				~uv = UserView(~win, 200@200)
 					.background_(~uvBackColor)
