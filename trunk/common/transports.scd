@@ -412,76 +412,19 @@ Proto({
 		
 			// split window
 		~leftFlow = FlowView(~window, 300@(~windowHeight - 4));
-//		~rightFlow = FlowView(~window, ~countOffWidth@(~windowHeight - 4));
-		~rightComp = GUI.compositeView.new(~window, Rect(0, 0, ~countOffWidth, ~windowHeight - 4));
-//			.relativeOrigin_(false);
-		
-//		GUI.staticText.new(~rightFlow, (~countOffWidth-4)@40).background_(Color.blue(alpha: 0.2));
 		
 		~buildTransports.(~leftFlow);
-		// ~buildCountoff.(~rightComp);
-		// ~buildCountMenu.(~rightComp);
-		// ~buildTempoControl.(~rightComp);
-
-/*		
-			// temp for Sept. 13 performance
-		~recButton = Button(~rightComp, Rect(0, ~tempoCtl.bounds.bottom + ~countOffGap,
-				~countOffWidth, ~menuHeight))
-			.states_([["Prepare record", "Start record", "Stop record"],
-				Color.black, Color.white].flop)
-			.font_(Font(*~menuFontSpec))
-			.action_({ |rb|
-				switch(rb.value)
-					{ 1 } {
-						~path = "/Users/dewdrop/Music/SuperCollider Recordings/vln-sep-13/";
-						~stamp = Date.getDate.stamp;
-						fork {
-							SynthDef(\quickdirtyrecorder, { |mainIn = 0, vlnIn,
-									mainbuf, vlnbuf|
-								var	main = In.ar(mainIn, 2),
-									vln = In.ar(vlnIn, 2);
-								DiskOut.ar(mainbuf, main - vln);
-								DiskOut.ar(vlnbuf, In.ar(8, 1));
-							}).memStore;
-							~mainBuf ?? { ~mainBuf = Buffer.alloc(s, 65536 * 4, 2) };
-							~vlnBuf ?? { ~vlnBuf = Buffer.alloc(s, 65536 * 4, 1) };
-							s.sync;
-							~mainBuf.write("%main%.aiff".format(~path, ~stamp),
-								leaveOpen: true);
-							~vlnBuf.write("%vln%.aiff".format(~path, ~stamp),
-								leaveOpen: true);
-							s.sync;
-							~recNode = Synth.newPaused(\quickdirtyrecorder, [
-								mainIn: 0, vlnIn: BP(\onsetRecorder).chan.inbus,
-								mainbuf: ~mainBuf, vlnbuf: ~vlnBuf
-							], RootNode(s), addAction: \addToTail);
-							"\n\nReady to record.".postln;
-						};
-					}
-					{ 2 } {
-						~recNode.run(true);
-					}
-					{ 0 } {
-						~recNode.free;
-						~mainBuf.close; ~vlnBuf.close;
-						~mainBuf.free; ~vlnBuf.free;
-						~mainBuf = ~vlnBuf = ~recNode = nil;
-					};
-			});
-*/		
-		~fixRightComp.(~rightComp);
 		
 		~refreshSections.();
 		
 		~window.recursiveResize.front
 			.onClose_(e { BP(~collIndex).free });
 
-		// ~model.metroLevel ?? { ~model.metroLevel = ~metroLevelDefault };
-
 		currentEnvironment
 	};
 	
 	~buildTransports = { |parent|
+		var	savedAddr;
 			// * numAcross + (4 * (numAcross-1))
 		~bigButtonSize = ~smallButtonSize * 3 + 8;
 
@@ -531,6 +474,71 @@ Proto({
 						"Loading current segment resources...".postln;
 						~model.loadResources(~model.currentSection + 1);
 					};
+				};
+			});
+
+		UserView(parent, ~bigButtonSize@16)
+			.drawFunc_({
+				Pen.color_(Color.gray(0.3))
+					.fillRect(Rect(0, 7, ~bigButtonSize, 3));
+			})
+			.refresh;
+
+		StaticText(parent, ~bigButtonSize@20)
+			.string_("Visual system IP/port")
+			.align_(\center);
+
+		savedAddr = (Platform.userAppSupportDir +/+ "vizaddr.txt").loadPath(warnIfNotFound: false);
+		savedAddr !? {
+			Library.put(\vizAddr, savedAddr)
+		};
+		~ipField = TextField(parent, ~bigButtonSize @ 20)
+			.align_(\center)
+			// .value_(" ")
+			.action_({ |view|
+				var	str = view.value, ip, port, colonI,
+					flashString = { |message, color, endColor|
+						{
+							view.background_(color).string_(message);
+							0.8.wait;
+							view.background_(endColor ?? { Color.white }).string_(str);
+						}.fork(AppClock);
+					};
+				if((colonI = str.indexOf($:)).notNil) {
+					ip = str[ .. colonI-1];
+					port = str[colonI+1 .. ].tryPerform(\asInteger) ? -9999;
+					if(port <= 0) { port = -9999 };
+					if(ip.count(_ == $.) != 3 or: { port == -9999
+						or: { ip.reject(_ == $.).any { |ch| ch.isDecDigit.not } } }) {
+							flashString.value("WRONG FORMAT", Color.red);
+						} {
+							Library.put(\vizAddr, NetAddr(ip, port));
+							flashString.value("OK: " ++ Library.at(\vizAddr).asString,
+								Color.new255(180, 255, 180), Color.new255(180, 255, 180));
+						};
+				} {
+					flashString.value("WRONG FORMAT", Color.red);
+				};
+			})
+			.tryPerform(\focusLostAction_, { |view| view.doAction })
+			.tryPerform(\focusGainedAction_, { |view| view.background_(Color.white) });
+
+		if(savedAddr.notNil) {
+			// this forces the action to fire, saving the netaddr and green-ing the background
+			~ipField.valueAction = savedAddr.ip ++ ":" ++ savedAddr.port;
+		} {
+			~ipField.value = "ip.ip.ip.ip:port";
+		};
+
+		~testBtn = Button(parent, ~bigButtonSize@20)
+			.states_([["Send test message to visual system"]])
+			.action_({ |view|
+				var	vizAddr = Library.at(\vizAddr);
+				if(vizAddr.notNil) {
+					"Sending test message to %\n".postf(vizAddr);
+					vizAddr.sendBundle(nil, [\note, \test.hash, -1, 0.2, 0.0, 1.0, 1.0, 0.0, 5].debug("msg"));
+				} {
+					"Enter a valid address before clicking".warn;
 				};
 			});
 	};

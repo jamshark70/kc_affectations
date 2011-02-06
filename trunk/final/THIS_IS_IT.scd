@@ -81,7 +81,7 @@ s.waitForBoot {
 			~window.front.userCanClose_(false)
 				.onClose_(e { ~window = nil });
 		},
-		userfree: { (e { ~window.close }).free },
+		userfree: { (e { ~window.close }).defer },
 		eventActive: { |action|
 			~eventTrigAction = action;
 			(e { ~eventBtn.enabled = action.notNil }).defer;
@@ -143,6 +143,9 @@ BP.all.do { |bp| if(#[mstClock, di, traj].includes(bp.collIndex).not) { bp.free 
 if(BP.exists(\mstClock)) { BP(\mstClock).free };
 if(BP.exists(\di)) { BP(\di).free };
 if(BP.exists(\traj)) { BP(\traj).free };
+
+[~glrvb, ~lcrvb, ~cavernousRvb].do(_.run(false)); [~glrvbmc, ~lcrvbmc, ~cRvbMc].do(_.mute(true));
+[~glrvb, ~lcrvb, ~cavernousRvb].do(_.run(true)); [~glrvbmc, ~lcrvbmc, ~cRvbMc].do(_.mute(false));
 
 ~seq.sections.do(_.prUnload);
 
