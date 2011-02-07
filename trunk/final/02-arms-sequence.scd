@@ -12,7 +12,7 @@
 				lcrvbmc: topEnvironment[\lcrvbmc],
 				master: topEnvironment[\master]
 			));
-			
+
 			BP(\am).amp = 0.9;
 			BP(\am).prepareForPlay;
 			BP(\am).v.reset;  // drives me NUTS this function isn't called by BP().reset
@@ -28,9 +28,9 @@
 						id: \am1,
 						autoSync: false,
 						cmds: [
+							{ 2.do { BP(\am).triggerOneEvent(0) }; 0 },
 							funcCmd: topEnvironment[\trigParms],
-							\cmdSync,
-							{ 2.do { BP(\am).triggerOneEvent(0) }; 0 }
+							\cmdSync
 						]
 					),
 					3.0,
@@ -57,7 +57,7 @@
 			));
 			BP(\acDisp) => VC(\ac);
 			0 => BP(\acDisp);
-			
+
 			p = BP(\acDisp);
 			p.startAuto = p[\saveStartAuto] ? p[\startAuto];
 			p.row = p[\saveRow] ? p[\row];
@@ -293,6 +293,14 @@
 					bpCmd: Library.at(\diparms),
 					{
 						BP(\shivaTrig).v.reset;
+						BP(#[am, am0, am1, am2]).do { |bp|
+							bp.gate = 0.8;
+							bp.root = 67;
+							bp.freqlag = 0.3;
+							bp.distance = 17;
+							bp.reset;
+							bp.v.reset;
+						};
 						BP(#[am0, am1, am2, tc]).do({ |bp|
 							bp.prepareForPlay;
 							bp.v.reset
@@ -360,7 +368,7 @@
 						cmds: [
 							{ BP(\ai).runGesture; rrand(2.5, 5.0) } //,
 							// funcCmd: topEnvironment[\trigParms],
-							// \cmdSync										
+							// \cmdSync
 						] //,
 						// repeats: rrand(2, 3)
 					)) },
@@ -368,14 +376,22 @@
 					\cmdSync,
 					funcCmd: (func: {
 						~iterator.findActive(\pt1).stop;
-						BP(#[am, am0, am1, am2, shivaTrig]).do { |bp| bp.reset; bp.v.reset };
+						BP(\shivaTrig).reset;
+						BP(#[am, am0, am1, am2]).do { |bp|
+							bp.gate = 0.8;
+							bp.root = 67;
+							bp.freqlag = 0.3;
+							bp.distance = 17;
+							bp.reset;
+							bp.v.reset;
+						};
 					}),
 					{ PR(\loopCmd).copy.putAll((
 						id: \pt2,
 						cmds: [
 							{ BP(\shivaTrig).triggerOneEvent(0); rrand(1.5, 2.5) } //,
 							// funcCmd: topEnvironment[\trigParms],
-							// \cmdSync										
+							// \cmdSync
 						],
 						repeats: rrand(3, 5),
 						clearDoneSignal: { BP(\shivaTrig).stop }
@@ -656,8 +672,8 @@
 						autoSync: false,
 						cmds: [
 							{ BP(\acDisp).spawnChild(0); 0 },
-							funcCmd: topEnvironment[\trigParms],
-							\cmdSync
+							0.05,
+							{ BP(BP(\acDisp).lastSpawned).automationTime + rrand(-1.0, 0.25) }
 						]
 					)
 				],
@@ -677,19 +693,147 @@
 			\chuckIf.eval(PR(\rockingChords), BP, \rc);
 			VC(\sp) => BP(\rc);
 			BP(\rc).finalAmp = -19.dbamp;
+
+			\chuckIf.eval(PR(\shimmerbass), BP, \shb);
+			VC(\sp) => BP(\shb);
+			0 => BP(\shb);
 		},
 		unloadProcesses: { BP(\rc).free },
 		seqPattern: {
+			var	runGestParms = (
+				func: {
+					var strm = BP(\rc).runGesture;
+					~doneSignal = NotificationCenter.register(strm, \done,
+						currentEnvironment, e { // |code|
+							~stop.()
+						});
+				},
+				setDoneSignal: { ~doneSignal = true },
+				clearDoneSignal: { ~doneSignal.remove }
+			);
 			Pn((
 				sequence: [
 					{ BP(\di).setStartTime(14, 6); 0 },
-					bpCmd: Library.at(\diparms),
-					bpCmd: (id: \rc, name: \rc,
-						// TEST
-						prepareBP: { |bp|
-							bp.autoRun = true
+					bpCmd: (name: \di, playWarning: false, shouldSync: false),
+					bpCmd: (name: \rc, prepareBP: { |bp|
+						bp.autoRun = false;
+						// bp.ffreqCtl.value = 3861;
+						bp.distCtl.value = 5;
+						bp.reset;
+					}),
+					0.01,
+					TLSequenceIterator([
+						gcAutoSynthCmd: (gc: BP(\rc).ffreqCtl, name: \ctlEnv, outName: \outbus,
+							env: Env(#[14000, 3861], #[50], \exp), connect: 0),
+						6,
+						gcAutoSynthCmd: (gc: BP(\rc).distCtl, name: \ctlEnv, outName: \outbus,
+							env: Env(#[5, 12], #[32])/*, connect: 0*/)
+					]).autoSyncAtEnd_(false), // cool! cmds get promoted right away
+					loopCmd: (
+						repeats: 2,
+						cmds: [
+							funcCmd: runGestParms,
+							\cmdSync,
+							{ if(~repeats > 1) { rrand(2, 4) * 0.5 } { 0 } }
+						]
+					),
+					\cmdSync,
+					{
+						BP(#[am0, am1, am2]).do { |bp, i|
+							bp.gate = 0.8 * #[1, 0.4, 0.1][i];
+							bp.root = 67 + #[0, -0.1, 0.1][i];
+							bp.freqlag = Penvir((sideEffect: { |x| x }), Pfunc({ |ev|
+								~sideEffect.(
+									if(~prevMidi.notNil) {
+										(ev[\midi] absdif: ~prevMidi).linlin(0, 16, 1.2, 0.7)
+									} { 0.9 },
+									~prevMidi = ev[\midi]
+								)
+							}));
+							bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
+							bp.prepareForPlay;
+							bp.reset
+						};
+						0
+					},
+					loopCmd: (
+						repeats: 3,
+						clearDoneSignal: {
+							thisThread.clock.sched(rrand(1.0, 2.0), { BP(#[am0, am1, am2]).stop })
+						},
+						cmds: [
+							{
+								fork {
+									BP(#[am0, am1, am2]).do { |bp| bp.triggerOneEvent(0); rrand(0.2, 0.5).wait };
+								};
+								/*~lastDelta =*/ rrand(3, 6) * 0.5
+							}
+						]
+					),
+					\cmdSync,
+					loopCmd: (
+						// repeats: 2,
+						cmds: [
+							funcCmd: runGestParms,
+							\cmdSync,
+							// { if(~repeats > 1) { rrand(2, 4) * 0.5 } { 0 } }
+							rrand(3, 7) * 0.5
+						]
+					),
+					TLSequenceIterator([
+						{ rrand(2.0, 4.0) },
+						{ BP(\shb).prepareForPlay; 0 },
+						{	var	loopc = PR(\loopCmd).copy.putAll((
+							doneSignal: true,
+							clearDoneSignal: { BP(\shb).stop },
+							cmds: [
+								funcCmd: (
+									setDoneSignal: {
+										~doneSignal = Updater(BP(\shb), e { |obj, what, event|
+											if(what == \oneEventPlayed) {
+												loopc.bassEvent = event;
+												~stop.();
+											}
+										});
+									},
+									func: {
+										BP(\shb).triggerOneEvent(0);
+									},
+									clearDoneSignal: { ~doneSignal.remove }
+								),
+								\cmdSync,
+								{ ~bassEvent[\dur] + rrand(6.0, 15.0) }
+							]
+						));
+							loopc
 						}
-					)
+					]).autoSyncAtEnd_(false),
+					{ rrand(5, 9) },
+					loopCmd: (
+						id: \am,
+						cmds: [
+							loopCmd: (
+								repeats: { rrand(3, 7) },
+								clearDoneSignal: {
+									thisThread.clock.sched(rrand(1.0, 2.0), { BP(#[am0, am1, am2]).stop })
+								},
+								cmds: [
+									{
+										fork {
+											BP(#[am0, am1, am2]).do { |bp|
+												bp.triggerOneEvent(0);
+												rrand(0.2, 0.5).wait;
+											};
+										};
+										~lastDelta = rrand(3, 6) * 0.5
+									}
+								]
+							),
+							\cmdSync,
+							{ rrand(3, 7) }
+						]
+					),
+					\sync,
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -784,7 +928,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{ BP(\di).setStartTime(14, 57); 0 },
+					{ BP(\di).setStartTime(14, 53); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (name: #[dr, lsyx, yxsw])
 				],

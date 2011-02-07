@@ -380,6 +380,7 @@ PR(\abstractProcess).clone {
 	~level = (Pn(0, 3) ++ Pexprand(0.01, 2.99, inf).collect(_.asInteger));
 	~ffreq = Pexprand(2300, 8000, inf);
 	~rq = Pexprand(0.1, 1.0, inf);
+	~root = 67;
 
 	~recvEventNotify = { |node| ~node = node };
 	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
@@ -390,7 +391,7 @@ PR(\abstractProcess).clone {
 			\node, Pfunc { ~node ?? { 0 } },
 			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
 			\root, 7,
-			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + 67),
+			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + ~root),
 			\freq, Pkey(\midi).midicps,
 			\delta, BPStream(\dur),
 // 			\legato, BPStream(\legato),
@@ -1797,6 +1798,20 @@ PR(\abstractProcess).clone {
 // Shiva
 
 (
+gate: Penvir((), Pseg(
+	Pstutter(2, Pseq([
+		Pexprand(0.1, 0.22, 1),
+		Pwhite(0.6, 0.9, 1)
+	], inf)),
+	// hold, then slide
+	Ppatlace([
+		Pwhite(3.0, 8.0, inf),
+		Pwhite(1.1, 2.2, inf)
+	], inf)
+).collect { |val|
+	if(~once.isNil) { ~once = true };
+	val
+}),
 make: {
 	3.collect { |i|
 		var	bp = PR(\melody) => BP(("am" ++ i).asSymbol);
@@ -1804,20 +1819,7 @@ make: {
 		0 => bp;
 
 		bp.event.distFar_(50).lcrvbamt_(0.035).ampMul_(nil);
-		bp.gate = Penvir((), Pseg(
-			Pstutter(2, Pseq([
-				Pexprand(0.1, 0.22, 1),
-				Pwhite(0.6, 0.9, 1)
-			], inf)),
-			// hold, then slide
-			Ppatlace([
-				Pwhite(3.0, 8.0, inf),
-				Pwhite(1.1, 2.2, inf)
-			], inf)
-		).collect { |val|
-			if(~once.isNil) { val.debug("starting from scratch"); ~once = true };
-			val
-		});
+		bp.gate = ~gate;
 		bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
 	};
 },
@@ -2094,9 +2096,12 @@ PR(\abstractProcess).clone {
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~distCtl = GenericGlobalControl(\distance, nil, 5, #[5, 20]);
+		~ffreqCtl = GenericGlobalControl(\ffreq, nil, 14000, \freq);
+		~rqCtl = GenericGlobalControl(\rq, nil, 1.0, \myrq);
+		~activeStreams = IdentitySet.new;
 	};
-	~useGui = { |vpi| ~distCtl => VP(vpi) };
-	~freeCleanup = { ~distCtl.free };
+	~useGui = { |vpi| [~distCtl, ~ffreqCtl, ~rqCtl].do { |gc| gc => VP(vpi) } };
+	~freeCleanup = { [~distCtl, ~ffreqCtl, ~rqCtl].free };
 
 	~topArrays = Pseq([
 		#[35, 40],
@@ -2118,15 +2123,23 @@ PR(\abstractProcess).clone {
 	~freq = Pfunc { |ev| Mode(ev[\mode]).cps(ev[\degree].scramble) };
 	~deltaBase = 1.2;
 	~delta = Plazy({ Pif(Pkey(\last), 2, 1) * BPStream(\deltaBase) });
-	~freqlag = 0.2;
+	~freqlag = Pif(Pkey(\last), 1.2, 0.4); // 0.2;
 	~finalAmp = -12.dbamp;
 	~sustain = Pif(Pkey(\last), Pkey(\delta) - 0.6, inf);
 	~distance = Plazy({ Pn(~distCtl.asMap, inf) });
 	~pan = Pwhite(0.5, 0.9, inf) * Pfunc { #[-1, 0, 1].scramble };
+	~ffreq = Plazy({ Pn(~ffreqCtl.asMap, inf) });
+	~rq = Plazy({ Pn(~rqCtl.asMap, inf) });
 
 	~runGesture = {
+		var	stream;
 		if(~spawner.notNil) {
-			~spawner.seq(~makePhrase.());
+			stream = CleanupStream(~makePhrase.().asStream, e {
+				~activeStreams.remove(stream);
+				NotificationCenter.notify(stream, \done, #[done]);
+			});
+			~activeStreams.add(stream);
+			~spawner.par(stream);
 		} {
 			"BP(%): Not playing; can't run phrase.".format(~collIndex.asCompileString).warn;
 		};
@@ -2156,6 +2169,8 @@ PR(\abstractProcess).clone {
 				\freqlag, BPStream(\freqlag),
 				\finalAmp, BPStream(\finalAmp),
 				\sustain, BPStream(\sustain),
+				\ffreq, BPStream(\ffreq),
+				\rq, BPStream(\rq),
 				\pan, ~panStream.next,
 				\distance, ~distanceStream.next
 			).collect({ |ev|
@@ -2181,6 +2196,10 @@ PR(\abstractProcess).clone {
 				~nodes.collect { |node| node.releaseMsg })
 		};
 		~nodes = nil;
+		~activeStreams.asArray.do { |strm|
+			NotificationCenter.notify(strm, \done, #[stop]);
+		};
+		~activeStreams = IdentitySet.new;
 	};
 
 	~asPattern = {
@@ -2271,7 +2290,7 @@ make: { |name|
 		// WrapInstr("osc2.fm10mod").listArgs
 		var sig = WrapInstr("osc2.fm10mod").valueArray([
 				Lag.kr(freq, freqlag), gate,
-				Env.adsr(0.05, 0.15, 0.6, 0.12),
+				Env.adsr(0.05, 0.15, 0.6, 0.9 /*0.12*/),
 				`{ |mod_amp, mod_vs, gate|
 					Env([0, mod_amp, 0.1, 0], [0.05, 0.1, 0.3], -4, releaseNode: 2)
 					// Env.adsr(0.05, 0.1, 0.1, 0.3)
@@ -3134,3 +3153,77 @@ s.waitForBoot {
 	BP(name).event.putAll((glrvbamt: 0.5, lcrvbamt: 0.1));
 	0 => BP(name);
 }, type: \bp) => Fact(\lsoloMel);
+
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayer);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
+		SynthDef(\bassVelMap, { |inbus, outbus, inMin, inMax, outMin, outMax, slewUp, slewDown|
+			var sig = In.kr(inbus);
+			sig = Slew.kr(sig, slewUp, slewDown).linexp(inMin, inMax, outMin, outMax, \minmax);
+			Out.kr(outbus, sig);
+		}).add;
+		// ~makeStreamForKey.(\top);
+	};
+	~freeCleanup = { ~ffreqCtl.free };
+
+	// not playing normal voicer way... need to get target and bus
+	~bindVoicer = { |vc|
+		~event.proto.put(\chan, vc.bus.tryPerform(\asMixer));
+	};
+
+	~mode = \g;
+	~degree = Pwhite(19, 27) - #[0, 7];
+	~freq = Pfunc({ |ev| ev[\mode].asMode.cps(ev[\degree]) });
+	~dur = Pwhite(3.5, 6.5, inf);
+	~length = Pwhite(3.0, 7.0, inf);
+	~gate = 0.1;
+	~pan = 0; // Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf);
+	~distance = 12; // Pwhite(5.0, 20.0, inf);
+	// ~ffreq = Pexprand(400, 1200, inf);
+	// ~fenvpeak = (Pexprand(6000, 10000, inf) / Pkey(\ffreq)) - 1;
+	~ffreq = Plazy({ Pn(~ffreqCtl.asMap, inf) });
+	~fenvpeak = Plazy({ ~ffreqCtl.asPattern / Pkey(\ffreq) - 1 });
+	~finalAmp = 2.5;
+	~attackTimeScale = 4.5;
+	~decayTimeScale = 4;
+	~rq = 1;
+
+	~inMin = 0;
+	~inMax = 1;
+	~outMin = 400;
+	~outMax = 5000;
+	~slewUp = 1;
+	~slewDown = 0.6;
+	~preparePlay = {
+		// watching is mandatory b/c of ~fenvpeak pattern
+		~ffreqCtl.watch.automate(\bassVelMap, [
+			inbus: BP(\di).busIndex(\vmax),
+			inMin: [~inMin, ~inMax, ~outMin, ~outMax, ~slewUp, ~slewDown]
+		]);
+	};
+	~stopCleanup = { ~ffreqCtl.stopAuto.stopWatching };
+	~asPattern = {
+		Pbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree, resetSource: true),
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\sustain, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\finalAmp, BPStream(\finalAmp),
+			\ffreq, BPStream(\ffreq),
+			\fenvpeak, BPStream(\fenvpeak),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\shimmerbass);
