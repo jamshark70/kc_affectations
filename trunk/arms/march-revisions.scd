@@ -1224,8 +1224,8 @@ u = Updater(BP(\sid), { |obj, what, mode|
 
 
 // prep for post-manipulation blowout
-VC(\lm).free;
-Fact(\locomoLead) => VC(\lm);
+VC(\lcm).free;
+Fact(\locomoLead) => VC(\lcm);
 
 VC(\lm).v.nodes[0].initArgs
 VC(\lm).v.nodes[0].initArgDict.as(Event)
@@ -2030,7 +2030,7 @@ p.length = Pkey(\dur);
 
 p.ffreq = Pwhite(1200, 12000, inf);
 p.ffreq = Pif(0.15.asPattern.coin, Pwhite(900, 1400, inf), Pwhite(2400, 12000, inf));
-p.rq = Pif(0.15.asPattern.coin, Pwhite(0.05, 0.15, inf), Pwhite(0.5, 0.9, inf));
+p.rq = Pif(0.15.asPattern.coin, Pwhite(0.15, 0.25, inf), Pwhite(0.5, 0.9, inf));
 
 p.top = \patRejectLastN.eval(Pwhite(32, 47, inf), 4);
 p.intervals = Pseries(0, Pwrand(#[1, 2, 3], #[1, 3, 3].normalizeSum, 3), 3);
@@ -2803,3 +2803,347 @@ BP(\qc).pan = Pseq([
 		Pfuncn({ |ev| (-1.0, (ev[\freq].size - 1).reciprocal - 1 .. 1.0).scramble }),
 		Pwhite(0.5, 1.0, inf) * Pseq(#[-1, 1], inf, { 2.rand })
 	], 1);
+
+
+// cradling section
+\chuckIf.eval(Fact(\shimmerpad), VC, \sp, nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1)
+).putAll(Library.at(\rvbs)));
+
+BP(\rc).free;
+\chuckIf.eval(PR(\rockingChords), BP, \rc);
+VC(\sp) => BP(\rc);
+BP(\rc).finalAmp = -19.dbamp;
+0 => BP(\rc);
+
+BP(\rc).autoRun = true;
+
+p = BP(\rc);
+
+p.autoRun = false;
+
+a = p.runGesture;
+NotificationCenter.registerOneShot(a, \done, \me, { |how| how.postln });
+
+NotificationCenter.unregister(a, \done, \me);
+
+
+// also refer back to shiva
+\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
+(
+BP(#[am0, am1, am2]).free;
+Fact(\shivaBPs).makev((
+	gate: Pbrown(0.1, 0.5, 0.08, inf)
+).putAll(Library.at(\rvbs)));
+
+BP(#[am0, am1, am2]).do { |bp, i|
+	0 => bp;
+	bp.amp = -4.dbamp;
+	bp.gate = bp.gate * #[1, 0.4, 0.1][i];
+	bp.root = bp.root + #[0, -0.1, 0.1][i];
+	bp.freqlag = Penvir((sideEffect: { |x| x }), Pfunc({ |ev|
+		~sideEffect.(
+			if(~prevMidi.notNil) {
+				(ev[\midi] absdif: ~prevMidi).linlin(0, 16, 1.2, 0.7)
+			} { 0.9 },
+			~prevMidi = ev[\midi]
+		)
+	}));
+	bp.distance = Pkey(\gate).linlin(0.1, 0.75, 45, 8);
+};
+)
+
+VC(\am) => BP(\am0);
+
+p = BP(\am0);
+p.freqlag = 1.1;
+p.amp = -4.dbamp;
+p.prepareForPlay;
+
+(
+var w = ResizeFlowWindow("mel", Rect(500, 100, 400, 100));
+Button(w, 100@20)
+.states_([["note"]])
+.action_({ BP(\am0).triggerOneEvent(0) });
+Button(w, 100@20)
+.states_([["stop"]])
+.action_({ BP(\am0).stop; });
+Button(w, 100@20)
+.states_([["reset"]])
+.action_({ BP(\am0).reset; BP(\am0).v.reset; });
+w.recursiveResize.front;
+)
+
+p.gate = Pbrown(0.1, 0.5, 0.08, inf);
+
+p.freqlag = Penvir((sideEffect: { |x| x }), Pfunc({ |ev|
+	~sideEffect.(
+		if(~prevMidi.notNil) {
+			(ev[\midi] absdif: ~prevMidi).linlin(0, 16, 1.2, 0.7)
+		} { 0.9 },
+		~prevMidi = ev[\midi]
+	)
+}));
+
+
+(
+PR(\abstractProcess).clone {
+	~event = (eventKey: \polySynthPlayer);
+	~alwaysReset = true;
+	~prep = {
+		~event.proto = topEnvironment[\rvbEvent].proto.copy
+			.put(\lcrvbamt, 0.015).put(\distFar, 45);
+		~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
+		SynthDef(\bassVelMap, { |inbus, outbus, inMin, inMax, outMin, outMax, slewUp, slewDown|
+			var sig = In.kr(inbus);
+			sig = Slew.kr(sig, slewUp, slewDown).linexp(inMin, inMax, outMin, outMax, \minmax);
+			Out.kr(outbus, sig);
+		}).add;
+		// ~makeStreamForKey.(\top);
+	};
+	~freeCleanup = { ~ffreqCtl.free };
+
+	// not playing normal voicer way... need to get target and bus
+	~bindVoicer = { |vc|
+		~event.proto.put(\chan, vc.bus.tryPerform(\asMixer));
+	};
+
+	~mode = \g;
+	~degree = Pwhite(19, 27) - #[0, 7];
+	~freq = Pfunc({ |ev| ev[\mode].asMode.cps(ev[\degree]) });
+	~dur = Pwhite(3.5, 6.5, inf);
+	~length = Pwhite(3.0, 7.0, inf);
+	~gate = 0.1;
+	~pan = 0; // Pwhite(0.5, 1.0, inf) * Prand(#[-1, 1], inf);
+	~distance = 12; // Pwhite(5.0, 20.0, inf);
+	// ~ffreq = Pexprand(400, 1200, inf);
+	// ~fenvpeak = (Pexprand(6000, 10000, inf) / Pkey(\ffreq)) - 1;
+	~ffreq = Plazy({ Pn(~ffreqCtl.asMap, inf) });
+	~fenvpeak = Plazy({ ~ffreqCtl.asPattern / Pkey(\ffreq) - 1 });
+	~finalAmp = 1;
+	~attackTimeScale = 4.5;
+	~decayTimeScale = 4;
+	~rq = 1;
+
+	~inMin = 0;
+	~inMax = 1;
+	~outMin = 400;
+	~outMax = 8000;
+	~slewUp = 1;
+	~slewDown = 0.6;
+	~preparePlay = {
+		// watching is mandatory b/c of ~fenvpeak pattern
+		~ffreqCtl.watch.automate(\bassVelMap, [
+			inbus: BP(\di).busIndex(\vmax),
+			inMin: [~inMin, ~inMax, ~outMin, ~outMax, ~slewUp, ~slewDown]
+		]);
+	};
+	~stopCleanup = { ~ffreqCtl.stopAuto.stopWatching };
+	~asPattern = {
+		Pbind(
+			\instrument, ~event[\voicer].nodes[0].defname,
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree, resetSource: true),
+			\freq, BPStream(\freq, resetSource: true),
+			\dur, BPStream(\dur, resetSource: true),
+			\sustain, BPStream(\length, resetSource: true),
+			\gate, BPStream(\gate, resetSource: true),
+			\distance, BPStream(\distance, resetSource: true),
+			\pan, BPStream(\pan, resetSource: true),
+			\finalAmp, BPStream(\finalAmp),
+			\ffreq, BPStream(\ffreq),
+			\fenvpeak, BPStream(\fenvpeak),
+			\attackTimeScale, BPStream(\attackTimeScale),
+			\decayTimeScale, BPStream(\decayTimeScale),
+			\rq, BPStream(\rq)
+		)
+	};
+} => PR(\shimmerbass);
+)
+
+BP(\shb).free;
+PR(\shimmerbass) => BP(\shb);
+VC(\sp) => BP(\shb);
+0 => BP(\shb);
+
+p = BP(\shb);
+
+p.ffreqCtl => VP(0);
+p.ffreqCtl.watch;
+
+p.prepareForPlay;
+BP(\di).play;
+p.triggerOneEvent(0);
+
+p.stop; BP(\di).stop;
+p.ffreqCtl.stopWatching;
+
+VC(\sp).v.trace;
+s.sendMsg(\n_free, 1007, 1008);
+
+p.slewUp = 1;
+p.slewDown = 0.6;
+p.outMax = 5000;
+
+p.eventStream.next(p.event.copy)
+
+p.freq = Pwhite(19, 27) - #[0, 7];
+p.finalAmp = 2.2;
+p.fenvpeak = (Pexprand(6000, 10000, inf) / Pkey(\ffreq)) - 1;
+
+Pwhite(3.0, 6.0, inf);
+
+VP(0).clearControlProxies;
+VC(\sp).v.globalControls.do { |gc| VC(\sp).v.unmapGlobal(gc.name) };
+
+
+
+t.activeCmds.do { |cmd|
+	if(cmd.isKindOf(Proto)) { cmd.listVars } { cmd.postln }
+}; ""
+
+t.stop;
+
+(
+var	runGestParms = (
+	func: {
+		var strm = BP(\rc).runGesture;
+		~doneSignal = NotificationCenter.register(strm, \done, currentEnvironment, e { // |code|
+			~stop.()
+		});
+	},
+	setDoneSignal: { ~doneSignal = true },
+	clearDoneSignal: { ~doneSignal.remove }
+);
+
+if(t.isPlaying) { t.stop };
+t = TLSequenceIterator([
+	bpCmd: (name: \di, prepareBP: { |bp|
+		bp.setStartTime(14, 6);
+	}),
+	bpCmd: (name: \rc, prepareBP: { |bp|
+		bp.autoRun = false;
+//		bp.ffreqCtl.value = 3861;
+		bp.distCtl.value = 5;
+		bp.reset;
+	}),
+	0.01,
+	TLSequenceIterator([
+		gcAutoSynthCmd: (gc: BP(\rc).ffreqCtl, name: \ctlEnv, outName: \outbus,
+			env: Env(#[14000, 3861], #[50], \exp), connect: 0),
+		6,
+		gcAutoSynthCmd: (gc: BP(\rc).distCtl, name: \ctlEnv, outName: \outbus,
+			env: Env(#[5, 12], #[32])/*, connect: 0*/)
+	]).autoSyncAtEnd_(false), // cool! cmds get promoted right away
+	loopCmd: (
+		repeats: 2,
+		cmds: [
+			funcCmd: runGestParms,
+			\cmdSync,
+			{ if(~repeats > 1) { rrand(2, 4) * 0.5 } { 0 } }
+		]
+	),
+	\cmdSync,
+	{ BP(#[am0, am1, am2]).do { |bp| bp.prepareForPlay; bp.reset }; 0 },
+	loopCmd: (
+		repeats: 3,
+		clearDoneSignal: {
+			thisThread.clock.sched(rrand(1.0, 2.0), { BP(#[am0, am1, am2]).stop })
+		},
+		cmds: [
+			{	
+				fork {
+					BP(#[am0, am1, am2]).do { |bp| bp.triggerOneEvent(0); rrand(0.2, 0.5).wait };
+				};
+				~lastDelta = rrand(3, 6) * 0.5
+			}
+		]
+	),
+	\cmdSync,
+	loopCmd: (
+		// repeats: 2,
+		cmds: [
+			funcCmd: runGestParms,
+			\cmdSync,
+			// { if(~repeats > 1) { rrand(2, 4) * 0.5 } { 0 } }
+			rrand(3, 7) * 0.5
+		]
+	),
+	TLSequenceIterator([
+		{ rrand(2.0, 4.0) },
+		{ BP(\shb).prepareForPlay; 0 },
+		{	var	loopc = PR(\loopCmd).copy.putAll((
+				doneSignal: true,
+				clearDoneSignal: { BP(\shb).stop },
+				cmds: [
+					funcCmd: (
+						setDoneSignal: {
+							~doneSignal = Updater(BP(\shb), e { |obj, what, event|
+								if(what == \oneEventPlayed) {
+									loopc.bassEvent = event;
+									~stop.();
+								}
+							});
+						},
+						func: {
+							BP(\shb).triggerOneEvent(0);
+						},
+						clearDoneSignal: { ~doneSignal.remove }
+					),
+					\cmdSync,
+					{ ~bassEvent[\dur] + rrand(6.0, 15.0) }
+				]
+			));
+			loopc
+		}
+	]).autoSyncAtEnd_(false),
+	{ rrand(5, 9) },
+	loopCmd: (
+		id: \am,
+		cmds: [
+			loopCmd: (
+				repeats: { rrand(3, 7) },
+				clearDoneSignal: {
+					thisThread.clock.sched(rrand(1.0, 2.0), { BP(#[am0, am1, am2]).stop })
+				},
+				cmds: [
+					{	
+						fork {
+							BP(#[am0, am1, am2]).do { |bp|
+								bp.triggerOneEvent(0);
+								rrand(0.2, 0.5).wait;
+							};
+						};
+						~lastDelta = rrand(3, 6) * 0.5
+					}
+				]
+			),
+			\cmdSync,
+			{ rrand(3, 7) }
+		]
+	),
+	\sync,
+	funcCmd: (func: { ~iterator.stop; /*BP(\am0).stop;*/ })
+]).play;
+)
+
+t.stop;
+
+// k, not bad
+VC(\sp).v.gate(\g.asMode.cps(14), 2, 0.00001);
+~master.level = 12.dbamp;
+
+
+BP(\rc).freqlag = Pif(Pkey(\last), 1.2, 0.4);
+BP(\rc) => VP(0);
+
+
+Penvir((sideEffect: { |x| x }), Pfunc({ |ev|
+	~sideEffect.(
+		if(~prevMidi.notNil) {
+			(ev[\midi] absdif: ~prevMidi).linlin(0, 16, 1.2, 0.7)
+		} { 0.9 },
+		~prevMidi = ev[\midi]
+	)
+}));
