@@ -557,6 +557,21 @@ Proto({
 	};
 	
 	~freeCleanup = {
+		var	file, path, addr;
+		if(Library.at(\vizAddr).isKindOf(NetAddr)) {
+			path = Platform.userAppSupportDir +/+ "vizaddr.txt";
+			addr = path.loadPath(warnIfNotFound: false);
+			if(Library.at(\vizAddr) != addr) {
+				protect {
+					file = File(path, "w");
+					if(file.isOpen) {
+						file <<< Library.at(\vizAddr) << Char.nl;
+					} {
+						"Couldn't persist visual system address in %\n".format(path).warn;
+					};
+				} { file.tryPerform(\close) };
+			};
+		};
 		~model.removeDependant(currentEnvironment);
 		BP(~collIndex).releaseDependants;	// clear from global dependants dict
 		~window.onClose_(nil).close;
