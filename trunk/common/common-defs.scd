@@ -3,6 +3,8 @@
 // work around crappy Cocoa limitation - I do not miss SC.app AT ALL
 var screenBounds = Window.screenBounds;
 
+s.latency = 0.075;
+
 s.waitForBoot {
 
 	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
@@ -523,16 +525,18 @@ Event.addEventType(\dataWrap, {
 Library.put(\defaultVizKeys, [
 	{ ~collIndex.hash },
 	\soundID,
-	{	var	server;
-		~latency ?? {
-			if(~server.size > 0) {
-				server = ~server.first;
-			} {
-				server = ~server ?? { Server.default };
-			};
-			server.latency
-		}
-	},
+	// general case - save for later
+	// {	var	server;
+	// 	~latency ?? {
+	// 		if(~server.size > 0) {
+	// 			server = ~server.first;
+	// 		} {
+	// 			server = ~server ?? { Server.default };
+	// 		};
+	// 		server.latency
+	// 	}
+	// },
+	s.latency,  // but I know this won't change, so save some time
 	{ ~freq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) },
 	{ ~sustain ?? { ~time } },
 	\amp,
@@ -543,7 +547,8 @@ Library.put(\defaultVizKeys, [
 Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 	#[2, 3, 4, 5],
 	[
-		{ ~latency ?? { ~voicer.target.server.latency } },
+		// { ~latency ?? { ~voicer.target.server.latency } },
+		s.latency,
 		{ ~newFreq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) },
 		{ ~length },
 		\gate
@@ -594,7 +599,7 @@ Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 				if(path.size > 1 and: { path[1].isInteger.not}) {
 					path[1] = path[1].hash  // Lorne wants numbers
 				};
-				addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
+				addr.sendBundle(0, (path ++ parms).asOSCArgArray);
 				// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
 			};
 		};
@@ -655,7 +660,7 @@ Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 				if(path.size > 1 and: { path[1].isInteger.not}) {
 					path[1] = path[1].hash  // Lorne wants numbers
 				};
-				addr.sendBundle(nil, (path ++ parms).asOSCArgArray);
+				addr.sendBundle(0, (path ++ parms).asOSCArgArray);
 				// ((~vizPath.collect(_.valueEnvir) ? #[note]).asArray ++ parms).asOSCArgArray.postln;
 			};
 		};
@@ -687,7 +692,7 @@ Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 	};
 } => Func(\dataWrapProtoEvent);
 
-#[polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger].do { |key|
+#[default, polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger].do { |key|
 	\dataWrapProtoEvent.eval(key);
 };
 
@@ -700,6 +705,17 @@ ProtoEvent(\voicerNote).copy.putAll((
 	}
 )) => ProtoEvent(\voicerNoteData);
 
+// don't want to go all the way to the top to define these temp vars
+{
+	var k = ProtoEvent.keys, evkeys;
+	ProtoEvent.composite(
+		(evkeys =
+			ProtoEvent(\monoSupport).v.parent.keys.asArray
+			.select(k.includes(_))
+			.collect { |key| (key ++ "Data").asSymbol }
+		).swap(0, evkeys.indexOf(\singleSynthTriggerData))
+	) => ProtoEvent(\monoSupportData);
+}.value;
 
 
 // triggers from remote c_set messages
