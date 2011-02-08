@@ -150,6 +150,22 @@ if(BP.exists(\traj)) { BP(\traj).free };
 ~seq.sections.do(_.prUnload);
 
 
+// test note data sending
+~oscRecvFile = File("sent_osc_" ++ Date.localtime.stamp, "w");
+
+o.remove;
+o = OSCresponderNode(nil, '/note', 
+	if(~oscRecvFile.tryPerform(\isOpen) ? false) { e { |t, r, m| ~oscRecvFile << ([t] ++ m) << Char.nl } }
+		{ e { |t, r, m| Post <<* ([t] ++ m) << Char.nl } }
+).add;
+
+~oscRecvFile.close;
+
+sent_osc_110208_145746
+
+NetAddr.localAddr
+
+
 // debugging drum7/8 problem
 // disable drone/formants
 BP(#[fmt, hsd]).do({ |bp| bp.requiredKeys = bp[\requiredKeys].add(\disableByRequiringAVariableThatWillNeverExist) });
