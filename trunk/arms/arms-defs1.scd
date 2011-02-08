@@ -182,7 +182,12 @@ s.doWhenBooted {
 
 // airy melody
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayerData, distNear: 5, distFar: 20);
+	~event = (eventKey: \singleSynthPlayerData, distNear: 5, distFar: 20)
+		.proto_((
+			soundID: 0,
+			vizKeys: Library.at(\defaultVizKeys).copy
+			.put(3, { ~loffreq.explin(20, 20000, -1, 1) })
+		));
 	~xyDef = \xylin;
 	~def = \airskid;
 
@@ -326,7 +331,8 @@ PR(\abstractProcess).clone {
 // so, I have to do it myself. grr....
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \monoSupport, immediateOSC: true);
+	~event = (eventKey: \monoSupportData, immediateOSC: true,
+		vizKeys: Library.at(\defaultVizKeys).copy.put(5, \ampMul), soundID: 0);
 	~vcKey = \am;
 	~prep = {
 		if(VC.exists(~vcKey).not) {
@@ -389,7 +395,10 @@ PR(\abstractProcess).clone {
 			\instrument, VC(~vcKey).v.nodes[0].defname.asSymbol,
 //			\level, BPStream(\level),
 			\node, Pfunc { ~node ?? { 0 } },
-			\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
+			\protoEvent, Pif(Pfunc { ~node.isNil },
+				\singleSynthPlayNotifyData,
+				\singleSynthTriggerData
+			),
 			\root, 7,
 			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + ~root),
 			\freq, Pkey(\midi).midicps,
@@ -1420,7 +1429,7 @@ Proto {
 PR(\abstractProcess).clone {
 	~alwaysReset = true;
 	~printStopMsg = false;
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~ampCtl = GenericGlobalControl(\ampMul, nil, -18.dbamp, \amp);
@@ -1509,7 +1518,7 @@ PR(\abstractProcess).clone {
 	~alwaysReset = true;
 	~reset = Func(\resetBPStreams).v;
 	~printStopMsg = false;
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 		~ymaxCtl = GenericGlobalControl(
@@ -1600,7 +1609,7 @@ PR(\abstractProcess).clone {
 // partnering/inversions
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNoteData);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~autoRun = false;
 	~dataKey = \di;
 	~prep = {
@@ -1861,7 +1870,7 @@ PR(\abstractProcess).clone {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~bpFilter = { |key|
 		key = key.asString;
 		key[..1] == "am" and: { key[2..].every(_.isDecDigit) }
@@ -1967,7 +1976,7 @@ PR(\shivaTrig).chuck(BP(name), nil, (
 
 // s & i
 PR(\abstractProcess).clone {
-	~event = (eventKey: \monoSupport);
+	~event = (eventKey: \monoSupportData, soundID: 0);
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;		
 	};
@@ -1986,11 +1995,11 @@ PR(\abstractProcess).clone {
 	~freqlag = min(Pkey(\delta) * 0.6, 1.1); // Pkey(\delta) * 0.6;
 	~finalAmp = -12.dbamp;
 	~protoEvent = Pseq([
-		\polySynthPlayNotify,
-		Pif(Pkey(\prevHigh) > 0, \polySynthPlayNotify, \polySynthTrigger)
+		\polySynthPlayNotifyData,
+		Pif(Pkey(\prevHigh) > 0, \polySynthPlayNotifyData, \polySynthTriggerData)
 	], 1);
 	~sustain = Pif(Pkey(\high) > 0, Pkey(\delta) - 0.6, inf);
-	~lag = Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotify), 0,
+	~lag = Pif(Pbinop('==', Pkey(\protoEvent), \polySynthPlayNotifyData), 0,
 		Pn(Pseries(0, Pwhite(0.12, 0.25, inf), 3).clump(3), inf));
 
 	~recvEventNotify = { |node| ~node = node };
@@ -2062,34 +2071,34 @@ make: { |name|
 
 
 // Stephen solo
-(
-keys: #[master, glrvbmc, lcrvbmc],
-make: { |name|
-	BP(name).free;
-	PR(\armsSkidMel).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthPlayer),
-		master: ~master,
-		glrvbmc: ~glrvbmc,
-		lcrvbmc: ~lcrvbmc,
-		amp: 0.4,
-		// def: \combskid,
-		// rdecay: 2,
-		hiffreq: Pfunc({ |ev|
-			var deg = ev[\degree];
-			deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.3, 0.5, 0.4]) } ! 2).integrate);
-			Mode(ev[\mode]).cps(deg + 42)
-		}),
-		lpffreq: Pexprand(1200, 7000, inf),
-		delta: Pwhite(1.5, 4.0, inf),
-		sustain: Pkey(\delta) * Pwhite(1.8, 2.5, inf)
-	));
-	0 => BP(name);
-}, type: \bp) => Fact(\stephenSolo);
+// (
+// keys: #[master, glrvbmc, lcrvbmc],
+// make: { |name|
+// 	BP(name).free;
+// 	PR(\armsSkidMel).chuck(BP(name), nil, (
+// 		event: (eventKey: \polySynthPlayer),
+// 		master: ~master,
+// 		glrvbmc: ~glrvbmc,
+// 		lcrvbmc: ~lcrvbmc,
+// 		amp: 0.4,
+// 		// def: \combskid,
+// 		// rdecay: 2,
+// 		hiffreq: Pfunc({ |ev|
+// 			var deg = ev[\degree];
+// 			deg = deg + (#[0] ++ ({ #[-1, -2, -3].wchoose(#[0.3, 0.5, 0.4]) } ! 2).integrate);
+// 			Mode(ev[\mode]).cps(deg + 42)
+// 		}),
+// 		lpffreq: Pexprand(1200, 7000, inf),
+// 		delta: Pwhite(1.5, 4.0, inf),
+// 		sustain: Pkey(\delta) * Pwhite(1.8, 2.5, inf)
+// 	));
+// 	0 => BP(name);
+// }, type: \bp) => Fact(\stephenSolo);
 
 
 // cradling/drawing bow
 PR(\abstractProcess).clone {
-	~event = (eventKey: \monoSupport);
+	~event = (eventKey: \monoSupportData, soundID: 0);
 	~autoRun = false;
 	~alwaysReset = true;
 
@@ -2158,8 +2167,8 @@ PR(\abstractProcess).clone {
 				\chan, ~event[\voicer].bus.asMixer,
 				\last, Pseq([Pn(false, num-1), true], 1),
 				\protoEvent, Pseq([
-					\polySynthPlayNotify,
-					Pn(\polySynthTrigger, inf)
+					\polySynthPlayNotifyData,
+					Pn(\polySynthTriggerData, inf)
 				], 1),
 				\mode, BPStream(\mode),
 				\top, degrees,
@@ -2315,7 +2324,7 @@ type: \voicer) => Fact(\locomoLead);
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote, mainAmp: -12.5.dbamp);
+	~event = (eventKey: \voicerNoteData, mainAmp: -12.5.dbamp, soundID: 0);
 	~mode = \g;
 	~alwaysReset = true;
 	~printStopMsg = false;
@@ -2397,7 +2406,7 @@ PR(\abstractProcess).clone {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNoteData, distFar: 100, lcrvbamt: 0.01);
+	~event = (eventKey: \voicerNoteData, distFar: 100, lcrvbamt: 0.01, soundID: 0);
 	~printStopMsg = false;
 	~alwaysReset = true;
 	~prep = {
@@ -2605,7 +2614,7 @@ free: { [~target, ~cb, ~mb].free }, type: \voicer) => Fact(\armsBass);
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNoteData);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~alwaysReset = true;
 	~printStopMsg = false;
 
@@ -2649,7 +2658,7 @@ PR(\abstractProcess).clone {
 
 // anacrusis between manipulation and locomotive stuff
 PR(\abstractProcess).clone {
-	~event = (eventKey: \default, distFar: 100);
+	~event = (eventKey: \defaultData, distFar: 100);
 	~alwaysReset = true;
 	~printStopMsg = false;
 	~vcKey = \lcm;
@@ -2692,6 +2701,7 @@ PR(\abstractProcess).clone {
 
 	~onePattern = { |fmul = 1|
 		Pmono(VC(~vcKey).v.nodes[0].defname,
+			\soundID, fmul,
 			\freq, ~freq * fmul,
 			\car_buf, ~car_buf,
 			\mod_lev, ~mod_lev,
@@ -2793,7 +2803,7 @@ make: { |name|
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData);
 	~alwaysReset = true;
 	~trigKey = \lsyx;
 	~dataKey = \dr;
@@ -2801,6 +2811,7 @@ PR(\abstractProcess).clone {
 		~event.proto = topEnvironment[\rvbEvent].proto.copy
 			.put(\lcrvbamt, 0.035).put(\distFar, 45);
 		~ampCtl = GenericGlobalControl(\finalAmp, nil, -12.5.dbamp);
+		~soundID = 0;
 	};
 	~freeCleanup = { ~ampCtl.free };
 
@@ -2812,6 +2823,7 @@ PR(\abstractProcess).clone {
 	};
 	~nextNoteNow = {
 		if(~isPlaying) {
+			~soundID = ~soundID + 1;
 			~esp.stop;
 			~event[\voicer].releaseAll;
 			~esp = EventStreamPlayer(~noteRoutine, ~event).play;
@@ -2863,6 +2875,7 @@ PR(\abstractProcess).clone {
 
 	~noteStrm = {
 		CleanupStream(Pbind(
+			\soundID, Pfunc({ ~soundID }),
 			\esphash, Pfunc({ ~esp.hash }),
 			\lasthash, Pdelay(Pkey(\esphash), 1),
 			\newesp, Pseq([true, Pbinop('!=', Pkey(\esphash), Pkey(\lasthash))], 1),
@@ -2970,7 +2983,7 @@ make: { |name|
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~alwaysReset = true;
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto.copy
@@ -3023,7 +3036,7 @@ PR(\abstractProcess).clone {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 	~alwaysReset = true;
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto.copy
@@ -3156,7 +3169,7 @@ s.waitForBoot {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthPlayer);
+	~event = (eventKey: \polySynthPlayerData, soundID: 0);
 	~alwaysReset = true;
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto.copy

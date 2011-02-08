@@ -281,7 +281,10 @@
 			BP(\tc).finalAmp = 0.2;
 			BP(\tc) => VC(\btp);
 			\chuckIf.eval(PR(\shivaTrig), BP, \shivaTrig);
-			BP(#[am0, am1, am2]).do { |bp| bp.amp = -4.dbamp };
+			BP(#[am0, am1, am2]).do { |bp, i|
+				bp.event.soundID = i;
+				bp.amp = -4.dbamp;
+			};
 		},
 		unloadProcesses: {
 			BP(#[am0, am1, am2, tc, shivaTrig]).free; VC(#[am, btp]).free;
@@ -515,7 +518,7 @@
 							VC(\abs).env.target.level = -19.dbamp;
 						}))
 					},
-					2,
+					1.5,
 					loopCmd: (
 						id: \s_i,
 						autoSync: false,
