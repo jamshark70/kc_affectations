@@ -133,7 +133,7 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [3/7]
+*** TODO Coding fixes [4/8]
 **** TODO Refactor snare drum stuff in feet sequence
 **** TODO Undo dataIn changes
 ***** arms-defs1: startAuto function
@@ -144,6 +144,8 @@
 ****** stacking - plug data back in
 **** TODO Proper fix for F20
 **** TODO Fix leak warning in bellMel (arms)
+**** DONE fix leaky synth in dataReader
+     Issue is: may be preparePlay'ed without playing: synth is created but won't be removed by stopCleanup
 **** DONE Don't stop segment trigger BPs at end
 **** DONE Check whether trig BPs are properly freed & dependency removed
 **** DONE LeakDC for arms-manipulation
@@ -208,32 +210,29 @@
 *** F160-Partnering - runs by itself
 
 ** Arms
-*** A500 -- first statement of axial theme
-    1. One event cue per arm gesture = one melody note
-*** A510 -- first statement of locomotive theme
-    1. each event cue makes an arpeggio -- I can automate these if it will be easier
-*** A520 -- sunrise
-*** A530 -- hand stacking
-*** A540 -- partnering
+*** A500 -- first statement of axial theme: when they separate and arms come up
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+*** A510 -- first statement of locomotive theme: when they start moving
+    1. 1-3 event triggers to start a melody playing. (Event triggers during the melody are ignored.)
+*** A520 -- sunrise: when Stephen joins L&I backstage left and arms make an arc
+*** A530 -- hand stacking: when the three kneel together
+*** A540 -- partnering: after breaking out of the stacking pose
 *** A550 -- Shiva (axial)
-    1. As before, one event cue for each arm gesture
-*** A560 -- more partnering
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+*** A560 -- more partnering: after breaking out of the Shiva pose
+    1. One event trigger -- plays a few Shiva notes.
+    2. (Optional) event trigger for a bit of locomotive material, but only if there's time.
 *** A570 -- axial theme, three levels
-    1. As before, one event cue for each arm gesture
-*** A580 -- Stephen and Ilana duet
-    1. Event cues trigger sequences of one or more chords -- these could be automated too
-*** A590 -- locomotive (short)
-    1. event cue = arpeggio (also open to automation)
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+*** A580 -- Stephen and Ilana duet: after breaking out of the three-levels pose
+    1. Event trigger for second chord (when S&I are embracing).
 *** A600 -- manipulating Laura
-    1. As before, one event cue for each arm gesture
-*** A610 -- another short locomotive section
-    1. event cue = arpeggio (also open to automation)
-*** A620 -- Stephen solo
-    1. Like the earlier axial music, one event cue for each arm gesture
-*** A630 -- cradling gesture
-*** A640 -- Laura solo
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+*** A610 -- loco-prep: when Laura disappears behind S&I
+*** A620 -- another short locomotive section: when Laura bursts to the front between S&I
+*** A630 -- cradling gesture: L&I's entrance from left
+*** A640 -- Laura solo: Laura's re-entrance from right
 *** A650 -- fade out to make silence before the face dance
-
 ** Head
 *** H1000-Start of face dance
     1. 1 event trigger for creaking --> door sound
