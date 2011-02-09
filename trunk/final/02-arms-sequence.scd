@@ -74,7 +74,7 @@
 			VC(\lcm) => BP(\lcm);
 			1 => BP(\lcm);
 		},
-		unloadProcesses: { BP(#[acDisp, lm]).free; VC(#[ac, lm]).free },
+		unloadProcesses: { BP(#[acDisp, lcm]).free; VC(#[ac, lcm]).free },
 		seqPattern: {
 			// var	sect = currentEnvironment;
 			Pn((
@@ -649,9 +649,12 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \bana, shouldSync: false)
+					bpCmd: (name: \bana, shouldSync: false),
+					gcAutoSynthCmd: (gc: BP(\bana).mainAmpCtl, name: \ctlEnv, outName: \outbus,
+						env: Env(#[-24, -17].dbamp, #[10], 2.1), connect: 0 //, shouldSync: false
+					)
 				],
-				onStop: { BP(\bana).stop(DelayTimeSpec(3.0)) },
+				onStop: { BP(\bana).stop(DelayTimeSpec(1.0)) },
 				dur: \trigger,  // or \sync
 				id: 620,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -680,7 +683,11 @@
 						]
 					)
 				],
-				onStop: {},
+				onStop: {
+					BP.keys.do { |key|
+						if("acDisp[0-9]+".matchRegexp(key.asString)) { BP(key).stop(0) };
+					};
+				},
 				dur: \trigger,  // or \sync
 				id: 630,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -701,7 +708,7 @@
 			VC(\sp) => BP(\shb);
 			0 => BP(\shb);
 		},
-		unloadProcesses: { BP(\rc).free },
+		unloadProcesses: { BP(#[rc, shb]).free },
 		seqPattern: {
 			var	runGestParms = (
 				func: {
@@ -805,7 +812,11 @@
 									clearDoneSignal: { ~doneSignal.remove }
 								),
 								\cmdSync,
-								{ ~bassEvent[\dur] + rrand(6.0, 15.0) }
+								{
+									~bassEvent[\dur] + if(~bassEvent[\dur] > 0) {
+										rrand(6.0, 15.0)
+									} { 0 }
+								}
 							]
 						));
 							loopc
@@ -926,7 +937,7 @@
 		},
 		unloadProcesses: {
 			// BP(\lsyx).removeDependant(BP(\yxsw).v);
-			BP(#[lsm, lsac, qc, bfl, yxsw, lsyx]).free;
+			BP(#[lsm, lsac, qc, bfl, yxsw, lsyx, dr]).free;
 		},
 		seqPattern: {
 			Pn((

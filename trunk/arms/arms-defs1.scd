@@ -2063,7 +2063,9 @@ make: { |name|
 	));
 	BP(name).chan.doWhenReady {
 		BP(name).chan.playfx { |outbus|
-			LeakDC.ar(In.ar(outbus, 2));  // combs have BAD dc
+			var	sig = In.ar(outbus, 2);
+			sig = LeakDC.ar(sig);  // combs have BAD dc
+			HPF.ar(sig, 160)
 		};
 	};
 	0 => BP(name);
@@ -3212,31 +3214,34 @@ PR(\abstractProcess).clone {
 	~outMax = 5000;
 	~slewUp = 1;
 	~slewDown = 0.6;
-	~preparePlay = {
-		// watching is mandatory b/c of ~fenvpeak pattern
-		~ffreqCtl.watch.automate(\bassVelMap, [
-			inbus: BP(\di).busIndex(\vmax),
-			inMin: [~inMin, ~inMax, ~outMin, ~outMax, ~slewUp, ~slewDown]
-		]);
-	};
 	~stopCleanup = { ~ffreqCtl.stopAuto.stopWatching };
 	~asPattern = {
-		Pbind(
-			\instrument, ~event[\voicer].nodes[0].defname,
-			\mode, BPStream(\mode),
-			\degree, BPStream(\degree, resetSource: true),
-			\freq, BPStream(\freq, resetSource: true),
-			\dur, BPStream(\dur, resetSource: true),
-			\sustain, BPStream(\length, resetSource: true),
-			\gate, BPStream(\gate, resetSource: true),
-			\distance, BPStream(\distance, resetSource: true),
-			\pan, BPStream(\pan, resetSource: true),
-			\finalAmp, BPStream(\finalAmp),
-			\ffreq, BPStream(\ffreq),
-			\fenvpeak, BPStream(\fenvpeak),
-			\attackTimeScale, BPStream(\attackTimeScale),
-			\decayTimeScale, BPStream(\decayTimeScale),
-			\rq, BPStream(\rq)
-		)
+		Pseq([
+			Pfuncn({
+				// watching is mandatory b/c of ~fenvpeak pattern
+				~ffreqCtl.watch.automate(\bassVelMap, [
+					inbus: BP(\di).busIndex(\vmax),
+					inMin: [~inMin, ~inMax, ~outMin, ~outMax, ~slewUp, ~slewDown]
+				]);
+				Event.silent(0)
+			}),
+			Pbind(
+				\instrument, ~event[\voicer].nodes[0].defname,
+				\mode, BPStream(\mode),
+				\degree, BPStream(\degree, resetSource: true),
+				\freq, BPStream(\freq, resetSource: true),
+				\dur, BPStream(\dur, resetSource: true),
+				\sustain, BPStream(\length, resetSource: true),
+				\gate, BPStream(\gate, resetSource: true),
+				\distance, BPStream(\distance, resetSource: true),
+				\pan, BPStream(\pan, resetSource: true),
+				\finalAmp, BPStream(\finalAmp),
+				\ffreq, BPStream(\ffreq),
+				\fenvpeak, BPStream(\fenvpeak),
+				\attackTimeScale, BPStream(\attackTimeScale),
+				\decayTimeScale, BPStream(\decayTimeScale),
+				\rq, BPStream(\rq)
+			)
+		])
 	};
 } => PR(\shimmerbass);

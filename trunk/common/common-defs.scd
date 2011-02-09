@@ -1099,7 +1099,11 @@ PR(\abstractProcess).clone {
 	// ~preparePlay = {
 	// };
 	~stopCleanup = {
-		~node !? { ~node.free; ~node = nil };
+		~node !? {
+			// + 0.5 - try to prevent race condition where synth is freed before creation
+			~node.server.makeBundle(~node.server.latency + 0.5, { ~node.free });
+			~node = nil
+		};
 		~resp.do(_.remove); ~resp = nil;
 	};
 	~recvEventNotify = { |node|
