@@ -423,3 +423,29 @@ if(#[drum7, drum8].includes(collIndex)) {
 	"^^ This is a DEBUG backtrace; don't panic.".postln;
 };
 
+
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
+	OSCpathResponder(s.addr, ['/n_set', m[1], \amp], { |t, r, m|
+		r.remove;
+		m[3].debug("amp")
+	}).add;
+	s.sendMsg(\s_get, m[1], \amp);
+}).add;
+
+s.sendMsg(\s_get, ~master.synth.nodeID, \pan);
+o.remove;
+o = OSCresponderNode(s.addr, '/n_set', { |t, r, m| r.remove; m.postcs }).add;
+
+OSCresponder.all.select { |resp| resp.isKindOf(OSCpathDispatcher) }.do { |resp|
+	resp.pathResponders.copy.do { |r|
+		if(r.cmdName == '/n_set') { r.path.postln; r.remove };
+	};
+};
+
+p.use {
+	x = Pwrand(#[0, 1], Pif(Pkey(\delta) >= (~messedUpMulCtl.asPattern * 0.25), #[0.75, 0.25], #[0.1, 0.9]), inf).asStream;
+};
+
+x.next((delta: 0.1))
