@@ -35,8 +35,8 @@
 **** Musical revisions completed <2011-01-07 Fri>
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
-** Musical edits [0/5]
-*** TODO Feet [2/2] <2010-12-05 Sun>
+** Musical edits [2/5]
+*** DONE Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
 ***** Ilana: Quick direction changes - basicSynthChooser; parm groups
@@ -63,7 +63,7 @@
       6. L - pause, poses, multispeed
       7. To corners, all 3 together
 **** DONE Phrasing!!!
-*** TODO Arms [1/3] <2010-12-15 Sun>
+*** DONE Arms [1/3] <2010-12-15 Sun>
 **** New sequence
 ***** +Axial
 ***** +Locomotive + mel
@@ -114,26 +114,36 @@
 ***** Melody!!!!!
 ***** Rhythm?
 ***** As she leaves, push sounds into distance
-*** TODO Head [0/2] <2010-12-23 Thu>
+*** TODO Head [0/3] <2010-12-23 Thu>
 **** Notes
 ***** Some dips in continuous data
 ***** 24:20 - moving around
-***** 24:40 - low to ground
+***** 24:40 - low to ground - laying heads in laps
+***** Start to disintegrate the rhythms after "metronome" (25:05 in cont. data)
 **** TODO Face: Less squeaky
-**** TODO New material for slower movements toward end
+**** TODO Pacing: get all the material in faster
+***** Notes from 10-1122 vid:
+      1. head starts, 21:25
+      2. voices start, 22:55
+      3. drums start, 23:22
+      4. kneeling, 25:10 - start drum7/8 here, c 1min to metronome/disintegration
+      5. final cadence, 26:05
+      6. metronome, 26:15
+
+**** TODO New material for slower movements toward end: reuse some of the face dance stuff
 *** TODO Torso [0/1] <2010-12-26 Sun>
 **** TODO Redo Laura's solo pre-body
 *** TODO Body [0/1] <2011-01-04 Tue>
 **** TODO Recall more cues
-** Programming [1/4]
-*** TODO Place to put in IP address/port
+** Programming [2/3]
+*** DONE Place to put in IP address/port
 *** DONE Voicer events need different arg handling
     - GCs look to control bus - right? (no, if it's not a key) - needed?
 *** Fixes to check in [3/3]
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [4/8]
+*** TODO Coding fixes [4/10]
 **** TODO Refactor snare drum stuff in feet sequence
 **** TODO Undo dataIn changes
 ***** arms-defs1: startAuto function
@@ -144,6 +154,8 @@
 ****** stacking - plug data back in
 **** TODO Proper fix for F20
 **** TODO Fix leak warning in bellMel (arms)
+**** TODO F110 was silent when playing in sequence
+**** TODO @ F190, stop military steps immediately
 **** DONE fix leaky synth in dataReader
      Issue is: may be preparePlay'ed without playing: synth is created but won't be removed by stopCleanup
 **** DONE Don't stop segment trigger BPs at end
@@ -205,7 +217,7 @@
     1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
     2. When they scatter to the three corners - next segment cue
        comes quickly!
-*** F150-multispeed - when Laura starts walking VERY slowly
+*** F150-multispeed - when Laura starts walking VERbY slowly
     1. Event cue when Stephen and Ilana come in
 *** F160-Partnering - runs by itself
 
