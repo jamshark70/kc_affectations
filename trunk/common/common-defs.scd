@@ -764,25 +764,28 @@ Proto {
 ~trigParms = (
 	// sbounds: screenBounds,
 	// play: \dummy,
-	setDoneSignal: {
+	setEventResponder: {
 		~doneSignal = OSCresponderNode(s.addr, '/event', e { |t, r, m|
 			r.remove;
 			~stop.();
 		}).add;
-		// defer(e {
-		// 	~window = Window("GO", Rect(~sbounds.right - 120, ~sbounds.height - 150, 120, 60));
-		// 	Button(~window, ~window.view.bounds.insetBy(2, 2))
-		// 		.states_([["event"]])
-		// 		.action_(e { ~stop.() });
-		// 	~window.front.userCanClose_(false);
-		// });
-		BP(\segTrig).eventActive(e { ~stop.() });
+		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 1);
+		BP(\segTrig).eventActive(currentEnvironment, e { ~stop.() });
+	},
+	setDoneSignal: {
+		if(BP(\segTrig).v[\eventTrigCmd].isNil) {
+			~setEventResponder.();
+		} {
+			"Event trigger already active. This trigger will wait until the last finishes.".debug;
+			~doneSignal = NotificationCenter.register(BP(\segTrig).v[\eventTrigCmd],
+				\done, currentEnvironment, e { "Event trigger is unblocked".debug; ~doneSignal.remove; ~setEventResponder.() });
+		};
 	},
 	clearDoneSignal: {
 		defer(e {
-			// ~window.close;
 			~doneSignal.remove;
-			BP(\segTrig).eventActive(nil);
+			BP(\segTrig).eventActive(nil, nil);
+			Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 0);
 		})
 	},
 	func: \dummy
@@ -814,20 +817,12 @@ Proto {
 			.postf(inSeg, item[\id])
 		};
 	}).add;
-	// defer(e {
-	// 	~window = Window("move on",
-	// 		Rect(sbounds.right - 120, sbounds.height - 300, 120, 60));
-	// 	Button(~window, ~window.view.bounds.insetBy(2, 2))
-	// 		.states_([["to seg %".format(item[\id])]])
-	// 		.action_(e { ~stop.(nil, ~isLastSection ? false) });
-	// 	~window.front.userCanClose_(false)
-	// 		.onClose_(e { ~window = nil });
-	// });
+	Library.at(\vizAddr).tryPerform(\sendMsg, \segTrig, item[\id]);
 	BP(\segTrig).segActive(e { ~stop.(nil, ~isLastSection ? false) }, item[\id]);
 } => Func(\nextThingTrig);
 
 {	~trigResp.remove;
-	// ~window !? { defer(e { ~window.close }) };
+	Library.at(\vizAddr).tryPerform(\sendMsg, \segTrig, 0);
 	BP(\segTrig).segActive(nil);
 	~currentTriggerItem = nil;  // what a horrendous, god-awful hack
 	~cleanupTrigger.(nil, (manualStop: ~isLastSection ? false));
@@ -1046,6 +1041,298 @@ Instr([\busfx, \chorus2band], { arg bus, numChan, predelay, speed, depth,
 	lo = lo + hi;
 	XFade2.ar(in, lo, xfade * 2 - 1)
 }, [\audiobus, StaticSpec(1, 8, \lin, 1, 1), #[0.0001, 0.2, \exponential, 0, 0.001], #[0.001, 10, \exponential], #[0.0001, 0.25, \exponential], #[0, 2pi], /*#[0, 1],*/ \freq, #[0, 1]]);
+
+// data in
+
+Proto {
+	~event = (eventKey: \singleSynthPlayNotify);
+	~numCh = 1;
+//	~iMadeBus = false;
+	~prep = {
+		~outCh ?? { ~outCh = ~numCh };
+		if(~bus.notNil) {
+			~bus = SharedBus.newFrom(~bus, \notMe);
+		} {
+			~bus = Bus.control(s, ~outCh);
+			// ~iMadeBus = true;
+		};
+		if(~recvBus.notNil) {
+			~recvBus = SharedBus.newFrom(~recvBus, \notMe);
+		} {
+			~recvBus = Bus.control(s, ~numCh);
+			// ~iMadeBus = true;
+		};
+		~userprep.();
+	};
+	~freeCleanup = {
+		// if(~iMadeBus) { ~bus.free };
+		[~bus, ~recvBus].free;
+		~userfree.();
+	};
+	
+	~asPattern = {
+		~userPat.() <> ~busyWaitPat.()
+	};
+	~userPat = Pfunc { |ev| ev };
+	~busyWaitPat = {
+		Pn((instrument: \rest, delta: 1), inf)
+	};
+} => PR(\dataIn);
+
+
+(keys: #[],
+// filename: "arms/hands-1_data2.wav",
+filename: "vizdata/Affectations_KC1-VelMod.wav",
+playTestFile: false,
+readFrame: 0,
+frameRate: 30,
+showViz: true,
+make: { |name|
+	BP(name).free;
+	PR(\dataIn).chuck(BP(name), nil, (
+		alwaysReset: true,
+		numCh: 12,
+		outCh: 28,
+		bus: ~bus,
+		recvBus: ~recvBus,
+		path: topEnvironment[\sampleDir] +/+ ~filename,
+		playTestFile: ~playTestFile,
+		readFrame: ~readFrame,
+		frameRate: ~frameRate ? 30,
+		dataNames: ~dataNames ?? { 
+			#[time, markers, xmin, xavg, xmax, ymin, yavg, ymax,
+			vmax, vavg, xavgv, yavgv, xspan/*, xratio*/, yspan/*, yratio*/]
+		},
+		startFrame: 0,
+		startFrame_: { |startFrame = 0|
+			currentEnvironment.put(\startFrame, startFrame);
+			if(~player.notNil) { ~player.set(\t_startFrame, startFrame) };
+			currentEnvironment
+		},
+		setStartTime: { |min(0), sec(0)|
+			~startFrame_.((min*60 + sec) * ~frameRate);
+		},
+		startTime: {
+			var	t = ~startFrame / ~frameRate;
+			[t div: 60, t % 60]
+		},
+		vizRate: 10,
+		vizRate_: { |newRate = 10|
+			KrBusWatcher.newFrom(s).updateFreq = newRate;
+			currentEnvironment.put(\vizRate, newRate);
+			//if(~fixer.notNil) { ~fixer.set(\avgTime, newRate.reciprocal) };
+		},
+		avgTime: 0.2,
+		showViz: ~showViz ? true,
+		userprep: {
+			~dataMap = IdentityDictionary.new;
+			~dataNames.do { |name, i| ~dataMap.put(name, i) };
+
+			~buf = Buffer.readAndQuery(s, ~path, ~readFrame);
+			~maxVel = GenericGlobalControl(\maxVel, nil, 9, #[0, 20, lin]);
+			~maxRatio = GenericGlobalControl(\maxRatio, nil, 5.1, #[0.05, 15, exp]);
+
+			~trigbus = Bus.control(s, 1);
+	
+			SynthDef("data" ++ ~numCh, { |buf, outbus, trigbus, frameRate = 30,
+				t_startFrame = 0, loop = 0|
+				var	fr = BufFrames.ir(buf),
+					startFrame = Latch.kr(t_startFrame, t_startFrame),
+					dur = fr / frameRate,
+					notLoop = loop <= 0,
+					end = fr + (10000 * notLoop),
+					// stopper = Line.kr(0, 1, dur - (startFrame / frameRate), doneAction: notLoop*2),
+					startChanged = t_startFrame > 0,
+					ph = Phasor.kr(startChanged, frameRate * ControlDur.ir,
+						start: startFrame, end: end, resetPos: startFrame),
+					prevph = Delay1.kr(ph),
+					sampleChanged = prevph.trunc < ph.trunc,
+					data = BufRd.kr(~numCh, buf, ph, 0, interpolation: 1);
+				data = data.copy.put(0, ph);
+				// data = data.collect { |chan|
+				// 	EnvGen.kr(Env(chan ! 2, [frameRate.reciprocal], \lin), sampleChanged)
+				// };
+				FreeSelf.kr(notLoop * (end >= fr));
+				Out.kr(outbus, data);
+				// tell the data fixer when a new value is coming
+				Out.kr(trigbus, sampleChanged);
+			}).add;
+	
+			SynthDef("datafixer" ++ ~numCh, { |recvBus, bus, trigbus, useTrigBus = 0, avgTime = 0.2, stop = 0, maxVel = 1, maxRatio = 10, frameRate = 30, bufnum|
+				var	sig = In.kr(recvBus, ~numCh),
+					trig = Select.kr(useTrigBus, [
+						InTrig.kr(recvBus, 1),
+						In.kr(trigbus, 1)
+					]) > 0,  // force trig to be exactly 0 or 1
+					trigTime = max(0.001, Timer.kr(trig)),
+					avgSamps = (avgTime * frameRate).trunc,
+					delayChan = ~numCh,
+					delayBuf = LocalBuf(delayChan * avgSamps).clear,
+					delayPhase = Demand.kr(trig, 0, Dseq([Dseries(0, delayChan, avgSamps)], inf)),
+					prev, writer, sum, sigdiff,
+					initTrig = Impulse.kr(0),
+					slopeBuf, slopePrev;
+				sig = sig.copy;
+			
+				trig = Trig1.kr(trig, ControlDur.ir);
+			
+				sig[0] = Select.kr(useTrigBus, [sig[0], sig[0] / frameRate]);
+				// delayPhase = delayPhase + (0 .. (sig.size-1));
+				// prev = Demand.kr(trig, 0, Dbufrd(delayBuf, delayPhase));
+				// sigdiff = sig - prev;
+				// sum = Select.kr(initTrig, [LocalIn.kr(delayChan), 0]);
+				// sum = sum + (trig * sigdiff);
+				// writer = Demand.kr(trig <! prev[0], 0, Dbufwr(sig, delayBuf, delayPhase));
+				// LocalOut.kr(sum);
+				sum = MedianTriggered.kr(sig, trig, avgSamps);
+				sum = sum.copy.add(sum[3] - sum[2])
+					.add(sum[6] - sum[5]);
+				// sum = sum / avgSamps;
+				slopeBuf = LocalBuf(sum.size).clear;
+				slopePrev = Demand.kr(trig, 0, Dbufrd(slopeBuf, (0 .. (sum.size-1))));
+				sig = sum ++ ((sum - slopePrev) / trigTime);
+				Demand.kr(trig <! slopePrev[0], 0, Dbufwr(sum, slopeBuf, (0 .. (sum.size-1))));
+				FreeSelf.kr(stop);
+				ReplaceOut.kr(bus, sig[#[0, 1, 2, 4, 3, 5, 7, 6] ++ (8..(~outCh-1))]);
+			}).add;
+
+			if(~showViz) { ~visualizer.() };
+			~upd = Updater(~bus, e { |obj, data|
+				var tv, uv, vs, ds, mins, secs;
+				~latestData = data;
+				~win !? {
+					tv = ~tv; uv = ~uv; vs = ~vs; ds = ~dataSpecs;
+					defer {
+						vs.value = data[8];
+						uv.refresh;
+						mins = data[0] div: 60;
+						secs = (data[0] % 60).trunc;
+						tv.string = "%%:%%".format(
+							if(mins < 10) { $0 } { "" },
+							mins,
+							if(secs < 10) { $0 } { "" },
+							secs
+						);
+					};
+				};
+			});
+
+			topEnvironment[\seq] !? {
+				topEnvironment[\seq].addDependant(currentEnvironment)
+			};
+		},
+		latestData: 0 ! ~outCh,
+		velSizeSpec: #[1, 8, -2].asSpec,
+		maxExpectedVel: 1.2,
+		calcVelSize: { |vel| ~velSizeSpec.map(vel / ~maxExpectedVel) },
+		visualizer: {
+			~boundsColor = ~boundsColor ?? { Color.red(alpha: 0.15) };
+			~velColor = ~velColor ?? { Color.blue(alpha: 0.3) };
+			~uvBackColor = ~uvBackColor ?? { Color.gray(0.9) };
+			if(thisProcess.platform.name == \osx) {
+				Font.default = Font(Font.defaultSansFace, 12);
+			};
+			defer(e {
+				~win = ResizeFlowWindow("continuous data", Rect(900, 100, 300, 300))
+					.onClose_(e { ~closeWin.() });
+				~uv = UserView(~win, 200@200)
+					.background_(~uvBackColor)
+					.drawFunc_(e { |view|
+						var	data = ~latestData.copy,
+							// velSize = data[9] * 2 + 3;  // max approx = 18
+							velSize = ~calcVelSize.(data[9]);
+						(5..7).do { |i| data[i] = data[i].neg };
+						Pen.color_(~boundsColor)
+							.fillRect(Rect.newSides(*(data[#[2, 7, 4, 5]] * 100 + 100)))
+							.color_(~velColor)
+							.fillOval(Rect.aboutPoint(Point(*(data[#[3, 6]] * 100 + 100)),
+								velSize, velSize));
+					});
+				~win.startRow;
+				~tv = StaticText(~win, 200@30)
+					.font_(Font.default.copy.size_(18))
+					.align_(\center)
+					.background_(Color.white);
+				~win.startRow;
+				~vs = EZSlider(~win, 200@30, "velocity", #[0, 8]);
+				~win.recursiveResize.front;
+				
+				KrBusWatcher.newFrom(s).updateFreq_(~vizRate ? 10);
+			});
+		},
+		userfree: {
+			KrBusWatcher.unregister(~bus);
+			~upd.remove;
+			[~buf, ~maxVel, ~maxRatio, ~trigbus/*, ~recvBus, ~bus*/].free;
+			topEnvironment[\seq] !? {
+				topEnvironment[\seq].removeDependant(currentEnvironment)
+			};
+			~closeWin.();
+		},
+		busIndex: { |name|
+			var	add;
+			if((add = ~dataMap[name]).notNil) { ~bus.index + add }
+		},
+		preparePlay: {
+			~bus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~numCh);
+			KrBusWatcher.register(~bus)
+		},
+		stopCleanup: {
+			KrBusWatcher.unregister(~bus);
+			s.listSendBundle(nil, [
+				[error: -1],
+				// ~fixer.tryPerform(\freeMsg),
+				~fixer.tryPerform(\setMsg, \stop, 1),
+				~player.tryPerform(\freeMsg),
+				[error: -2]
+			].select(_.notNil));
+			~fixer = nil;
+			~player = nil;
+			~bus.setn(0 ! ~outCh);
+			~recvBus.setn(0 ! ~numCh);
+		},
+		recvEventNotify: { |node, ev|
+			if(ev[\instrument].asString.contains("fixer")) {
+				~fixer = node;
+			} {
+				~player = node;
+			};
+		},
+		userPat: {
+			Pseq([
+				(
+					instrument: ("datafixer" ++ ~numCh).asSymbol,
+					recvBus: ~recvBus, bus: ~bus, avgTime: ~avgTime ? 0.2,
+					maxVel: ~maxVel.asMap, maxRatio: ~maxRatio.asMap,
+					bufnum: ~buf, frameRate: ~frameRate,
+					trigbus: ~trigbus, useTrigBus: ~playTestFile.binaryValue,
+					delta: 0.0005, collIndex: ~collIndex, addAction: \addToHead
+				),
+				Pfuncn({
+					if(~playTestFile) {
+						(
+							instrument: ("data" ++ ~numCh).asSymbol,
+							buf: ~buf, bus: ~recvBus, loop: 0,
+							delta: ~buf.numFrames / ~frameRate, trigbus: ~trigbus,
+							startFrame: ~startFrame, frameRate: ~frameRate,
+							target: ~fixer, addAction: \addBefore, collIndex: ~collIndex
+						).parent_(ProtoEvent(\singleSynthPlayNotify).parent)
+					} { Event.silent(5000) };
+				})
+			], 1)
+		},
+		closeWin: {
+			var	win = ~win;
+			win !? {
+				defer(e { win.onClose_(nil).close });
+				~win = nil;
+			};
+		}
+	));
+	0 => BP(name);
+}, type: \bp) => Fact(\dataIn);
+
 
 PR(\abstractProcess).clone {
 	~alwaysReset = true;
