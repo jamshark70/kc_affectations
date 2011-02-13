@@ -9,6 +9,7 @@ var	t2;
 var drumLevel = -7.dbamp;
 
 (Document.current.path.dirname.dirname +/+ "/head/head-defs.scd")/*.debug*/.loadPath;
+// ("/home/dlm/share/SuperCollider/scd/kc.git/trunk/head/head-defs.scd")/*.debug*/.loadPath;
 
 PR(\bpCmd).clone {
 	~setDoneSignal = {
@@ -29,6 +30,7 @@ PR(\funcCmd).copy.putAll((
 				~stop.()
 			};
 		});
+		~setUserSignal.();
 	},
 	clock108: topEnvironment[\clock108],
 	func: {
@@ -45,9 +47,10 @@ PR(\funcCmd).copy.putAll((
 		// I tried to fix it in TLSequenceIterator but maybe it didn't take, so...
 		if(~subIter.isRunning) { ~subIter.stop };
 	},
-	clearDoneSignal: {
+	clearDoneSignal: { |parms|
 		~doneSignal.remove;
 		~doneSignal = nil;
+		~clearUserSignal.(parms);
 	},
 	collIndex: \subIterCmd  // chuck => PR doesn't automatically set this
 )) => PR(\subIterCmd);
@@ -113,7 +116,7 @@ t2 = [
 		gcAutoSynthCmd: (gc: { BP(\drum3).ffreqCtl }, /*shouldSync: false,*/ name: \ctlPoint, outName: \outbus, 
 			value: 18000, time: 30, curve: 5),
 		
-		24,
+		12,
 		{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
 			BP(\drum2).bar = 3;
 			12
@@ -125,16 +128,17 @@ t2 = [
 		
 		{	BP(\drum3).bar = Prand(BP(\drum3).indices[[2, 3]].flat, inf);
 			BP(\drum1).bar = 3;
-			24
+			12
 		},
 		
 		{	BP(\drum3).bar = 15;
 			6
-		}
+		},
+		{ NotificationCenter.notify(\drumIter1, \done.debug("sending notification")); 1 }
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
-		{ rrand(5.0, 8.0) * 108/60 },
+//		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
 		{ BP(#[drum1, drum2, drum3]).stop; 0 },
 		bpCmd: (name: #[drum4, drum5], quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
@@ -151,28 +155,45 @@ t2 = [
 		}),
 		
 		18,
-		swap56cmd: (quant: #[-1, 0.25], extraPrep: { |bp|
-			bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
-			bp[\chan].level = drumLevel;
-		}),
 		gcAutoSynthCmd: (gc: { BP(\drum4).ffRangeCtl }, name: \ctlPoint, outName: \outbus, 
 			value: 18, time: 36),
-		
-		24,
-		swap56cmd: (quant: #[-1, 1.25], extraPrep: { |bp| bp.amp = Pseq(#[1, 1 /* finger-amp */], inf) }),
-		24,
-		swap56cmd: (quant: #[-1, 0.75]),
-		24,
+		loopCmd: (
+			// this way will force quantPhases to reset
+			setDoneSignal: {
+				~quantPhases = Pseq(#[0.25, 1.25, 0.75], inf).asStream;
+			},
+			cmds: [
+				{
+					PR(\swap56cmd).copy.putAll((quant: [-1, ~quantPhases.next], extraPrep: { |bp|
+						bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
+						bp[\chan].level = drumLevel;
+					}))
+				},
+				12
+			]
+		),
+		funcCmd: topEnvironment[\trigParms],
+		\cmdSync,
+		{	NotificationCenter.notify(\drumIter2, \done);
+			1
+		}
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
-		{ rrand(5.0, 8.0) * 108/60 },
-		Quant(3, -0.5),
+//		{ rrand(5.0, 8.0) * 108/60 },
+		Quant(1, -0.05),
+		{
+			var c = thisThread.clock;
+			c.setMeterAtBeat(3, c.nextTimeOnGrid(1));
+			0
+		},
 		{	BP(#[drum4, drum5, drum6]).stop;
 			BP(\drum7).pan = -1;
 			BP(\drum8).pan = 1;
 			BP(\drum7).quant = -1;
 			BP(\drum8).quant = #[-1, 0.75];
+			BP(\drum7).distCtl.value = 5;
+			BP(\drum7).finalLpfCtl.value = 18000;
 			0
 		},
 		
@@ -183,14 +204,14 @@ t2 = [
 			bp[\chan].level = drumLevel;
 		}),
 		funcCmd: (doneSignal: true,
-			num3: rrand(2, 7),
+			num3: rrand(5, 9),
 			func: {
 				var	thisCmd = currentEnvironment;
 				BP(#[drum7, drum8]).do { |bp|
-					~num3 = ~num3 + 5;
+					// ~num3 = ~num3 + 5;
 					bp.gest = Pseq([
 						CleanupStream(
-							Pseq([\threePl1, Pn(\threeAcc, ~num3), \ostFilt2Quant]).asStream,
+							Pseq([\threePl1, Pn(\threeAcc, ~num3), \randquant /*\ostFilt2Quant*/]).asStream,
 							{ thisCmd.stop }
 						),
 						Pn(\ostFilt2, inf)
@@ -201,42 +222,54 @@ t2 = [
 			}
 		),
 		\cmdSync,
-		{ "synced".debug; 6 },
-		
-		18,
-		loopCmd: (repeats: 2,
-			qphase: Pseq(#[1.25, 0.75], inf).asStream,
-			acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
-			cmds: [
-				{	var	numAcc = rrand(3, 6), acc = ~acc.next,
-					pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1);
-					BP(#[drum7, drum8]).do { |bp|
-						bp.override(\gest, pat);
-					};
-					BP(\drum8).quant = [-1, ~qphase.next];
-					rrand(3, 5) * 6
-				}
-			]
-		),
+	
+		{
+			var	thisLoop = PR(\loopCmd).copy.putAll((
+				repeats: 2,
+				qphase: Pseq(#[1.25, 0.75], inf).asStream,
+				// acc: Pseq([\threeAcc, Prand(#[fiveAcc, sevenAcc], inf)]).asStream,
+				acc: Prand(#[fiveAcc, sevenAcc], inf).asStream,
+				cmds: [
+					{ rrand(2, 4) * 3 },
+					funcCmd: (
+						setDoneSignal: { ~doneSignal = true },
+						func: {
+							var	numAcc = rrand(4, 6), acc = thisLoop.acc.next,
+								pat = Pseq([\ostFilt2Sync, Pn(acc, numAcc), \ostFilt2Quant], 1),
+								stream;
+							BP(\drum7).override(\gest, CleanupStream(pat.asStream, e { ~stop.() }));
+							BP(\drum8).override(\gest, pat);
+							BP(\drum8).quant = [-1, thisLoop.qphase.next];
+						}
+					),
+					\cmdSync
+				]
+			));
+			thisLoop
+		},
 		\cmdSync,
+		6,
 		
-		{	BP(\drum8).gest = Pfsm([
-			#[4, 5],
-			Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-			Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-			\fiveAcc, #[2, 4, 5],
-			\sevenAcc, #[3, 4, 5],
-			\five1Acc, #[0, 2],
-			\seven1Acc, #[1, 3],
-		], inf);
-			6
-		},
-		{	BP(\drum7).gest = BP(\drum8).gest;
-			6 //24
+		{
+			BP(\drum8).gest = Pfsm([
+				#[4, 5],
+				Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+				Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+				\fiveAcc, #[2, 4, 5],
+				\sevenAcc, #[3, 4, 5],
+				\five1Acc, #[0, 2],
+				\seven1Acc, #[1, 3],
+			], inf);
+		// 	6
+		// },
+		/*{*/
+			BP(\drum7).gest = BP(\drum8).gest;
+			12 //24
 		},
 		
-		loopCmd: (repeats: 3,
+		loopCmd: (// repeats: 3,
 			acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
+			id: \accentLoop,
 			cmds: [
 				{	var	// both 7+8 use the same random seed
 					pat = Pseed(Pn(Date.seed, 1), Pseq([
@@ -244,72 +277,65 @@ t2 = [
 						\randquant
 					], 1));
 					BP(#[drum7, drum8]).do { |bp|
-						bp.keepGoing = false.debug("set % keepGoing".format(bp.collIndex));
+						bp.keepGoing = false/*.debug("set % keepGoing".format(bp.collIndex))*/;
 						bp.override(\gest, pat);
 					};
 					BP(\drum8).quant = -1;
 					// override is guaranteed to end first because it's at most 11 beats
 					rrand(2, 4) * 6
 				}
-			]
+			],
+			clearDoneSignal: {
+				// but, cmd may terminate while overriding -- clean up
+				BP(#[drum7, drum8]).do { |bp|
+					bp.unOverride(\gest);
+				};
+			}
 		),
+	
+		funcCmd: topEnvironment[\trigParms],
 		\cmdSync,
+		funcCmd: (func: {
+			~iterator.findActive(\accentLoop).stop
+		}),
 		
-		gcAutoSynthCmd: (gc: { BP(\drum7).fmltWetCtl }, name: \ctlPoint, shouldSync: false, outName: \outbus,
-			value: 0.736, time: 20, curve: 2),
-		loopCmd: (repeats: 4,
-			cmds: [
-				funcCmd: (
-					doneSignal: true,
-					func: {
-						var	seed = Date.seed, num = rrand(7, 15),
-						thisCmd = currentEnvironment,
-						n = Pxrand((2..8), num).asStream.all.debug("n"),
-						factor = { rrand(1, 2) } ! num,
-						rest = #[1, 2].wchoose(#[0.8, 0.2]);
-						BP(#[drum7, drum8]).do { |bp|
-							var	once = true, saven, saveFactor;
-							bp.keepGoing = false;
-							bp.override(\restBeats, Pn(rest, 1));
-							bp.override(\gest, Pseq([
-								\randsync,
-								\oneAcc,
-								Pseed(Pn(seed, 1),
-									Pwrand(#[nhigh, nhighAcc], #[0.4, 0.6], num)
-								).collect { |gest|
-									if(once) {
-										bp.override(\n, Pseq(n, 1));
-										bp.override(\factor, Pseq(factor, 1));
-										once = false;
-									};
-									gest
-								}
-							], 1), false, { thisCmd.stop });
-						};
-					}
-				),
-				\sync,
-				{ if(~repeats > 1) { rrand(12, 24) } { 0 } }
-			]
-		),
+		{
+			var x = (Pseed(Pn(Date.seed, 1), Pwhite(3, 6, inf)) / BP(\drum7).messedUpMulCtl).round * 3,
+				y = Pseed(Pn(Date.seed + 234321, 1), Pwhite(3, 9, inf)),
+				oldGest = BP(\drum7).gest,
+				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1);
+			BP(#[drum7, drum8]).do { |bp|
+				bp.keepGoing = false;
+				bp.quant = q1;
+				bp.gest = Pseq([
+					// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
+					\randquant,
+					Pn(\messedUp, y.asStream),
+					Pfuncn({ bp.quant = qbar; \randquant }),
+					Pif(Ptime() < Pstutter(1e6, x.asStream), oldGest),
+				], inf) //.trace(prefix: bp.collIndex ++ " gesture: ")
+			};
+			BP(\drum7).messedUpMulCtl.value = 1;
+			18
+		},
+	
+		gcAutoSynthCmd: (gc: { BP(\drum7).messedUpMulCtl }, name: \ctlEnv, outName: \outbus,
+			env: Env(#[1, 3], #[45])),
+	
+		12,
+		[	0.05,
+			{
+				PR(\gcAutoSynthCmd).copy.putAll((
+					gc: BP(\drum7).finalLpfCtl, name: \bassVelMap, outName: \outbus,
+					inbus: BP(\drum7).distCtl.bus,
+					inMin: 5, inMax: 20, outMin: 18000, outMax: 400, slewUp: 1e6, slewDown: 1e6
+				))
+			}
+		],
+		gcAutoSynthCmd: (gc: { BP(\drum7).distCtl }, name: \ctlEnv, outName: \outbus,
+			env: Env(#[5, 20], #[70])),
 		\cmdSync,
-		{ "synced".debug; 0 },
-		
-		{	BP(\drum7).gest = Pseq([
-			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
-			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "7-num57: ").asStream, BP(\drum7).gest)
-		], inf);
-			12
-		},
-		
-		{	BP(\drum8).gest = Pseq([
-			\randsync,
-			Pwrand(#[ngap, ngapAcc, nhigh, nhighAcc], #[0.2, 0.2, 0.3, 0.3], { rrand(7, 15) }),
-			Pfin((Pwhite(4, 8, inf) * Pseries.fromEndpoints(5, 0.3, 5)).trunc.trace(prefix: "8-num57: ").asStream, BP(\drum8).gest)
-		], inf);
-			36
-		},
+		{ BP(#[drum7, drum8]).stop(0); 0 }
 	]).shouldSync_(false)
 ];
 
@@ -689,7 +715,12 @@ t2 = [
 						};
 					}),
 					0.1,
+					// this guy fires the streams
 					bpCmd: (name: \hstrig, doReset: true, shouldSync: false,
+						prepareBP: { |bp|
+							bp.delta = Pexprand(0.04, 0.2, inf)
+								* Plazy({ Env(#[20, 1], #[90], \exp).asStream });
+						},
 						setDoneSignal: { |bp|
 							~doneSignal = Updater(BP(\hs), e { |obj, what|
 								if(what == \allChildrenStopped) {
@@ -699,63 +730,72 @@ t2 = [
 							});
 						}
 					),
-					40
+					25
 				],
 				// onStop: {},
 				dur: \sync, // \trigger,  // or \sync
-				id: 1510,  // trig id
-				init: Func(\nextThingTrig).v,
-				clear: Func(\clearNextTrig).v
+				id: 1510 //,  // trig id
+				// not used because dur is \sync
+				// init: Func(\nextThingTrig).v,
+				// clear: Func(\clearNextTrig).v
 			), 1)
 		}
 	)),
 
-	PR(\tlsAff).copy.putAll((
-		name: "H1510-start sweeps",
-		segID: 1510,
-		initProcesses: {
-			\chuckIf.eval(PR(\hsSweep), BP, \hswp, nil, Library.at(\rvbs));
-		},
-		unloadProcesses: { BP(\hswp).free },
-		seqPattern: {
-			Pn((
-				sequence: [
-					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
-					bpCmd: (name: #[hs, hstrig], shouldSync: false, playWarning: false),
-					bpCmd: (name: \hswp, shouldSync: false, prepareBP: { |bp|
-						bp.debug.lowhCtl.value = 2;
-						bp.tophCtl.value = 2;
-					}),
-					gcAutoSynthCmd: (
-						gc: BP(\hswp).tophCtl, shouldSync: false, name: \ctlPoint, outName: \outbus,
-						value: 32, time: 28, curve: 1.6,
-						setDoneSignal: {
-							~upd = Updater(~gc, e { |obj, msg|
-								var	val;
-								if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hs).low }) {
-									if(val < BP(\hs).high) {
-										BP(\hs).low = max(val - 12, 2);
-									} {
-										BP(#[hstrig]).stop;
-									}
-								};
-							});
-						},
-						clearDoneSignal: { ~upd.remove }
-					),
-					18,
-				],
-				// onStop: {},
-				dur: \sync, // \trigger,  // or \sync
-				id: 1520,  // trig id
-				init: Func(\nextThingTrig).v,
-				clear: Func(\clearNextTrig).v
-			), 1)
-		}
-	)),
+	// PR(\tlsAff).copy.putAll((
+	// 	name: "H1510-start sweeps",
+	// 	segID: 1510,
+	// 	initProcesses: {
+	// 		\chuckIf.eval(PR(\hsSweep), BP, \hswp, nil, Library.at(\rvbs));
+	// 	},
+	// 	unloadProcesses: { BP(\hswp).free },
+	// 	seqPattern: {
+	// 		Pn((
+	// 			sequence: [
+	// 				bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
+	// 				bpCmd: (name: #[hs, hstrig], shouldSync: false, playWarning: false),
+	// 				bpCmd: (name: \hswp, shouldSync: false, prepareBP: { |bp|
+	// 					bp.debug.lowhCtl.value = 2;
+	// 					bp.tophCtl.value = 2;
+	// 				}),
+	// 				TLSequenceIterator([
+	// 					gcAutoSynthCmd: (
+	// 						gc: BP(\hswp).tophCtl, shouldSync: false, name: \ctlPoint, outName: \outbus,
+	// 						value: 32, time: 18, curve: 1.6,
+	// 						setDoneSignal: {
+	// 							~upd = Updater(~gc, e { |obj, msg|
+	// 								var	val;
+	// 								if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hs).low }) {
+	// 									if(val < BP(\hs).high) {
+	// 										BP(\hs).low = max(val - 12, 2);
+	// 									} {
+	// 										BP(#[hstrig]).stop;
+	// 									}
+	// 								};
+	// 							});
+	// 						},
+	// 						clearDoneSignal: { ~upd.remove }
+	// 					),
+	// 					16,
+	// 					gcAutoSynthCmd: (
+	// 						gc: BP(\hswp).tophCtl, shouldSync: false, name: \ctlPoint, outName: \outbus,
+	// 						value: 31, time: 18, curve: 1.6,
+	// 						clearDoneSignal: { BP(\hswp).stop }
+	// 					)
+	// 				]).shouldSync_(false),
+	// 				10,
+	// 			],
+	// 			// onStop: {},
+	// 			dur: \sync, // \trigger,  // or \sync
+	// 			id: 1520,  // trig id
+	// 			init: Func(\nextThingTrig).v,
+	// 			clear: Func(\clearNextTrig).v
+	// 		), 1)
+	// 	}
+	// )),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1520-drone+formants",
+		name: "H1520-drone+formants",
 		segID: 1520,
 		initProcesses: {
 			\chuckIf.eval(PR(\trajectories), BP, \trajHead);
@@ -783,27 +823,43 @@ t2 = [
 					}),
 					gcAutoSynthCmd: (
 						gc: BP(\hsd).tophCtl, shouldSync: false, name: \ctlPoint, outName: \outbus,
-						value: 32, time: 30, curve: 1.6,
+						value: 24, time: 20, curve: 1.6,
 						setDoneSignal: {
 							~upd = Updater(~gc, e { |obj, msg|
 								var	val;
-								if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hswp).low }) {
-									if(val < BP(\hswp).tophCtl.value) {
-										BP(\hswp).lowhCtl.value = val+1;
+								if(msg[\what] == \value and: { (val = ~gc.value.asInteger) > BP(\hs /* was: \hswp */).low }) {
+									if(val < BP(\hs).high /*val < BP(\hswp).tophCtl.value*/) {
+										// BP(\hswp).lowhCtl.value = val+1;
+										BP(\hs).low = val+1;
 									} {
-										BP(\hswp).stop;
+										BP(\hs /* was: \hswp */).stop;
 									}
 								};
 							});
 						},
-						clearDoneSignal: { ~upd.remove; BP(\hswp).stop }
+						clearDoneSignal: { ~upd.remove; BP(\hs /* was: \hswp */).stop }
 					),
-					14,
+					funcCmd: (
+						setDoneSignal: {
+							thisThread.clock.beats.debug("waiting for top harmonic 15");
+							~doneSignal = Updater(BP(\hsd).tophCtl, e { |obj, event|
+								if(event[\what] == \value and: { obj.value >= 15 }) {
+									~stop.();
+								}
+							});
+						},
+						clearDoneSignal: {
+							thisThread.clock.beats.debug("got top harmonic 15");
+							~doneSignal.remove
+						}
+					),
+					\cmdSync,
+					// 6,
 					bpCmd: (name: \fmt, shouldSync: false, prepareBP: { |bp|
-						bp.debug.fadeIn = 22;
+						bp.debug.fadeIn = 18;
 						bp.fadeOut = 12;
 					}),
-					16,
+					12,
 				],
 				// onStop: {},
 				dur: \sync, // \trigger,  // or \sync
@@ -815,7 +871,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1530-sung 1",
+		name: "H1530-sung 1",
 		segID: 1530,
 		initProcesses: {
 			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil, Library.at(\rvbs));
@@ -838,6 +894,7 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
+					subIterCmd: (id: \drumIterator0, subIter: t2[0], shouldSync: false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.debug("choral").tempoPat = 1;
 						p.chan.level = -1.dbamp;
@@ -858,7 +915,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1540-sung 2",
+		name: "H1540-sung 2",
 		segID: 1540,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -867,10 +924,6 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					// TLSequenceIterator([
-					// 	{ rrand(5.0, 8.0) },
-						subIterCmd: (id: \drumIterator0, subIter: t2[0], shouldSync: false),
-					// ]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.oneNote_(false);
 						p.dur = Pwhite(0.7, 0.9, inf) *.x Pwhite(12.0, 16.0, { |num| num });
@@ -888,7 +941,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1550-sung 3",
+		name: "H1550-sung 3",
 		segID: 1550,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -906,6 +959,50 @@ t2 = [
 						p.reset;
 					}),
 					\cmdSync,
+					subIterCmd: (id: \drumIterator1, subIter: t2[1], shouldSync: false,
+						// there is no **@#&*@ way to prevent clearUserSignal from firing twice
+						subCmdNotScheduled: true,
+						setUserSignal: {
+							~endNotify = NotificationCenter.register(
+								\drumIter1, \done, ~id, e {
+									~endNotify.remove;
+									~doneSignal.remove;
+									~stop.();
+								}
+							);
+						},
+						// I can't believe this playCmd trick actually works!
+						clearUserSignal: { |parms|
+							var	seq = topEnvironment[\seq];
+							~endNotify.remove;
+							if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) != true }) {
+								~subCmdNotScheduled = false;
+								seq.sections[seq.currentSection].currentIterator
+								.playCmd(PR(\subIterCmd).copy, (
+									id: \drumIterator2, subIter: t2[2], shouldSync: false,
+									subCmdNotScheduled: true,
+									// holy recursive flow of control batman
+									setUserSignal: {
+										~endNotify = NotificationCenter.register(
+											\drumIter2, \done, ~id, e { ~endNotify.remove; ~stop.() }
+										)
+									},
+									clearUserSignal: { |parms|
+										var	seq = topEnvironment[\seq];
+										~endNotify.remove;
+										if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) != true }) {
+											~subCmdNotScheduled = false;
+											seq.sections[seq.currentSection].currentIterator
+											.playCmd(PR(\subIterCmd).copy, (
+												id: \drumIterator3, subIter: t2[3],
+												shouldSync: false
+											))
+										};
+									}
+								));
+							};
+						}
+					),
 					2, //{ rrand(6.0, 9.0) },
 				],
 				// onStop: {},
@@ -918,7 +1015,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1560-sung 4",
+		name: "H1560-sung 4",
 		segID: 1560,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -927,10 +1024,6 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					// TLSequenceIterator([
-					// 	{ rrand(5.0, 8.0) },
-						subIterCmd: (id: \drumIterator1, subIter: t2[1], shouldSync: false),
-					// ]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.dur = Pwhite(0.5, 0.8, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 						p.p5_(1).shortFirst_(true);
@@ -948,10 +1041,21 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1570-sung 5",
+		name: "H1570-sung 5",
 		segID: 1570,
 		// initProcesses: {},
 		// unloadProcesses: {},
+		initProcesses: {
+			\chuckIf.eval(Fact(\drum4), BP, \drum4, nil, (pan: -1).putAll(Library.at(\rvbs)));
+			// 5 and 6 are basically copies - switch between them to change phase vs. drum4
+			\chuckIf.eval(Fact(\drum4), BP, \drum5, nil,
+				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
+			\chuckIf.eval(Fact(\drum4), BP, \drum6, nil,
+				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
+		},
+		unloadProcesses: {
+			(4..6).do { |i| BP(("drum" ++ i).asSymbol).free }
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -974,7 +1078,7 @@ t2 = [
 
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1580-sung 6",
+		name: "H1580-sung 6",
 		segID: 1580,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -999,15 +1103,25 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1590-sung 7",
+		name: "H1590-sung 7",
 		segID: 1590,
 		// initProcesses: {},
 		// unloadProcesses: {},
+		initProcesses: {
+			\chuckIf.eval(Fact(\drum7), BP, \drum7, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\drum7), BP, \drum8, nil,
+				(ctlSource: \drum7, quant: #[-1, 1.25]).putAll(Library.at(\rvbs)));
+			BP(\drum7).leadTime = 0.01;
+		},
+		unloadProcesses: {
+			BP(#[drum7, drum8]).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
+					// subIterCmd: (id: \drumIterator2, subIter: t2[2], shouldSync: false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.sharp_(true);
 					}),
@@ -1024,19 +1138,8 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1600-sung 8",
+		name: "H1600-sung 8",
 		segID: 1600,
-		initProcesses: {
-			\chuckIf.eval(Fact(\drum4), BP, \drum4, nil, (pan: -1).putAll(Library.at(\rvbs)));
-			// 5 and 6 are basically copies - switch between them to change phase vs. drum4
-			\chuckIf.eval(Fact(\drum4), BP, \drum5, nil,
-				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
-			\chuckIf.eval(Fact(\drum4), BP, \drum6, nil,
-				(pan: 1, chan: BP(\drum4).chan).putAll(Library.at(\rvbs)));
-		},
-		unloadProcesses: {
-			(4..6).do { |i| BP(("drum" ++ i).asSymbol).free }
-		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -1044,7 +1147,7 @@ t2 = [
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
 					// TLSequenceIterator([
 					// 	{ rrand(5.0, 8.0) },
-						subIterCmd: (id: \drumIterator2, subIter: t2[2], shouldSync: false),
+
 					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
@@ -1063,7 +1166,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1610-sung 9",
+		name: "H1610-sung 9",
 		segID: 1610,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -1088,19 +1191,19 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1620-sung 10+lpc",
+		name: "H1620-sung 10+lpc",
 		segID: 1620,
-		// initProcesses: {
-		// 	\chuckIf.eval(Fact(\int), BP, \int, nil, Library.at(\rvbs));
-		// 	topEnvironment[\clock108] => BP(\int);
-		// },
-		// unloadProcesses: { BP(\int).free },
+		initProcesses: {
+			\chuckIf.eval(Fact(\int), BP, \int, nil, Library.at(\rvbs));
+			topEnvironment[\clock108] => BP(\int);
+		},
+		unloadProcesses: { BP(\int).free },
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-/*
+
 					TLSequenceIterator([
 						{ rrand(4.0, 8.0) },
 						loopCmd: (
@@ -1132,7 +1235,7 @@ t2 = [
 							value: -8.5.dbamp, time: 3.5, curve: 2.1
 						)
 					]).shouldSync_(false),
-*/					
+					
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.seqKeys = #[t2, a2d1, a2d2];
 					}),
@@ -1149,7 +1252,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1630-sung 11",
+		name: "H1630-sung 11",
 		segID: 1630,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -1179,7 +1282,7 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1640-sung 12",
+		name: "H1640-sung 12",
 		segID: 1640,
 		// initProcesses: {},
 		// unloadProcesses: {},
@@ -1207,16 +1310,17 @@ t2 = [
 	)),
 
 	PR(\tlsAff).copy.putAll((
-		name: "F1650-sung 13",
+		name: "H1650-sung 13",
 		segID: 1650,
-		initProcesses: {
-			\chuckIf.eval(Fact(\drum7), BP, \drum7, nil, Library.at(\rvbs));
-			\chuckIf.eval(Fact(\drum7), BP, \drum8, nil,
-				(ctlSource: \drum7, quant: #[-1, 1.25]).putAll(Library.at(\rvbs)));
-		},
-		unloadProcesses: {
-			BP(#[drum7, drum8]).free;
-		},
+		// initProcesses: {
+		// 	\chuckIf.eval(Fact(\drum7), BP, \drum7, nil, Library.at(\rvbs));
+		// 	\chuckIf.eval(Fact(\drum7), BP, \drum8, nil,
+		// 		(ctlSource: \drum7, quant: #[-1, 1.25]).putAll(Library.at(\rvbs)));
+		// 	BP(\drum7).leadTime = 0.01;
+		// },
+		// unloadProcesses: {
+		// 	BP(#[drum7, drum8]).free;
+		// },
 		seqPattern: {
 			// var	headChans = IdentitySet.new;
 			// #[mstClock, int].do { |key|
@@ -1229,7 +1333,7 @@ t2 = [
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
 					// TLSequenceIterator([
 					// 	{ rrand(5.0, 8.0) },
-						subIterCmd: (id: \drumIterator3, subIter: t2[3], shouldSync: false),
+					//	subIterCmd: (id: \drumIterator3, subIter: t2[3], shouldSync: false),
 					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = 1.2;
@@ -1263,7 +1367,7 @@ t2 = [
 // TEMPLATE
 
 	// PR(\tlsAff).copy.putAll((
-	// 	name: "F1570-sung 5",
+	// 	name: "H1570-sung 5",
 	// 	segID: 1570,
 	// 	// initProcesses: {},
 	// 	// unloadProcesses: {},
@@ -1297,7 +1401,6 @@ t2 = [
 	// 		), 1)
 	// 	}
 	// )),
-
 ];
 
 /*

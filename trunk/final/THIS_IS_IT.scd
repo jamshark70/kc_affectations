@@ -82,7 +82,8 @@ s.waitForBoot {
 				.onClose_(e { ~window = nil });
 		},
 		userfree: { (e { ~window.close }).defer },
-		eventActive: { |action|
+		eventActive: { |cmd, action|
+			~eventTrigCmd = cmd;
 			~eventTrigAction = action;
 			(e { ~eventBtn.enabled = action.notNil }).defer;
 		},
@@ -111,10 +112,11 @@ s.waitForBoot {
 
 	// to my surprise, this actually does match only filenames starting with numbers!
 	(mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
-	// (mypath.dirname +/+ "03*.scd").pathMatch.sort
 	.do { |path|
+		var	result = path.loadPath;
+		if(result.isNil) { Error("Section % failed to load".format(path.basename)).throw };
 		indices = indices.add(~sections.size);
-		~sections = ~sections ++ path.loadPath;
+		~sections = ~sections ++ result;
 	};
 
 	~seq = PR(\affSectSeq).copy.sections_(~sections).startLoadingAt_(indices);
@@ -123,7 +125,15 @@ s.waitForBoot {
 	PR(\transports).chuck(BP(\transports), nil, (model: ~seq));
 
 	BP(\transports).userfree = { |bp, what|
+		topEnvironment[\seq].releaseDependants;
 		BP(#[segTrig, evTrig]).debug("freeing").free;
+	};
+
+	if(d.notNil) {
+		~timerUpdater = Updater(~seq, e { |obj, what|
+			switch(what)
+				{ \play } { d.reset }
+		});
 	};
 };
 )
@@ -137,6 +147,9 @@ ChuckableBrowser.newWindow;
 MT(1).gui;
 
 BP.all.stop;
+
+d = DDWTimer.new;
+
 
 // if you need to clear everything, do this:
 BP.all.do { |bp| if(#[mstClock, di, traj].includes(bp.collIndex).not) { bp.free } }; VC.all.free;
@@ -369,3 +382,11 @@ BP(\fmt).play;
 BP(\mstClock).play;
 
 BP.all.stop
+
+
+o.do(_.remove);
+o = #['/eventTrig', '/segTrig'].collect { |key|
+	OSCresponderNode(nil, key, { |t, r, m| m.postln }).add
+};
+
+NetAddr.localAddr
