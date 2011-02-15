@@ -1316,3 +1316,38 @@ o = OSCresponderNode(s.addr, '/n_go', { |t, r, m|
 
 p.lpcStart = Pkey(\ptstart);
 p.lpcEnd = Pkey(\ptend);
+
+
+
+// watch formant bus
+(
+var w = Window("formants", Rect(900, 50, 300, 200)), data = 0 ! BP(\fmt).fmtBus.numChannels,
+	bpupd, busupd;
+
+w.drawHook = {
+	Pen.moveTo(Point(0, 199 - (data[0]*199)));
+	data.doAdjacentPairs { |a, b, i|
+		Pen.lineTo(Point(i * 299 / (data.size-1), 199 - (b*199)));
+	};
+	Pen.stroke;
+};
+
+w.onClose = { bpupd.remove; busupd.remove; KrBusWatcher.unregister(BP(\fmt).fmtBus) };
+
+bpupd = Updater(BP(\fmt), { |obj, what, more|
+	case { what == \play } { KrBusWatcher.register(BP(\fmt).fmtBus) }
+	{ more == \stopped } { KrBusWatcher.unregister(BP(\fmt).fmtBus) }
+});
+
+busupd = Updater(BP(\fmt).fmtBus, { |bus, val|
+	data = val;
+	{ w.refresh }.defer;
+});
+
+w.front;
+)
+
+Window.allWindows.last.front
+
+BP(\fmt).fmtBus.dependants
+KrBusWatcher.newFrom(s).nodes
