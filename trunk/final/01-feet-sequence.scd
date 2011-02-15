@@ -875,7 +875,7 @@ var lwpLoopParms = { (
 									~runGesture.(~snareParms.((
 										numEv: rrand(12, 25),
 										mainAmp: 0.2
-									)));
+									)), true);  // allows instant stop of children later
 									~spawner.wait(rrand(2, 4) * seq[\tempo]);
 								}
 							}))
@@ -886,7 +886,8 @@ var lwpLoopParms = { (
 				],
 				onStop: {
 					if(BP(\st).isPlaying) {
-						BP(\st).spawner.suspend(~snarePlayerStream)
+						BP(\st).spawner.suspend(~snarePlayerStream);
+						BP(\st).stopSavedStreams;
 					};
 				},
 				dur: \trigger,  // or \sync

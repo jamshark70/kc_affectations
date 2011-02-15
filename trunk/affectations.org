@@ -143,19 +143,21 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [4/10]
+*** TODO Coding fixes [9/12]
 **** TODO Refactor snare drum stuff in feet sequence
-**** TODO Undo dataIn changes
+**** TODO Proper fix for F20
+**** TODO F110 was silent when playing in sequence - couldn't reproduce just now?
+**** DONE slight break in drums just before drum7/8
+**** DONE BP(\fmt): init filter amps to 1.0
+**** DONE Undo dataIn changes
 ***** arms-defs1: startAuto function
 ***** 02-arms-seq
 ****** test file path?
 ****** reactivate di cmds - Library.at(\diparms)
 ****** c. line 586, yx auto
 ****** stacking - plug data back in
-**** TODO Proper fix for F20
-**** TODO Fix leak warning in bellMel (arms)
-**** TODO F110 was silent when playing in sequence
-**** TODO @ F190, stop military steps immediately
+**** DONE Fix leak warning in bellMel (arms)
+**** DONE @ F190, stop military steps immediately
 **** DONE fix leaky synth in dataReader
      Issue is: may be preparePlay'ed without playing: synth is created but won't be removed by stopCleanup
 **** DONE Don't stop segment trigger BPs at end

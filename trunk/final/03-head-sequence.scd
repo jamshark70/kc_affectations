@@ -36,8 +36,7 @@ PR(\funcCmd).copy.putAll((
 	func: {
 		~subIter.play(argClock: ~clock108 ? TempoClock.default);
 	},
-	done: {
-// "subIterCmd '%' done func".format(~id).debug;
+	done: { |parms|
 		// oh, this is REALLY f*ked up
 		// if the subiterator stops, the Updater fires FROM WITHIN THE ROUTINE
 		// then this forcibly stops the routine early
@@ -45,7 +44,7 @@ PR(\funcCmd).copy.putAll((
 		// that interrupts the subIterCmd's cleanup process
 		// how many gray hairs from trying to find THAT one?
 		// I tried to fix it in TLSequenceIterator but maybe it didn't take, so...
-		if(~subIter.isRunning) { ~subIter.stop };
+		if(~subIter.isRunning) { ~subIter.stop(parms.debug("subiter stop parms")) };
 	},
 	clearDoneSignal: { |parms|
 		~doneSignal.remove;
@@ -141,7 +140,7 @@ t2 = [
 //		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
 		{ BP(#[drum1, drum2, drum3]).stop; 0 },
-		bpCmd: (name: #[drum4, drum5], quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
+		bpCmd: (name: #[drum4, drum5], quant: `nil, shouldSync: false, prepareBP: { |bp|
 			var	panEnd = -1;
 			bp.reset;
 			if(bp.collIndex == \drum5) {
@@ -160,17 +159,18 @@ t2 = [
 		loopCmd: (
 			// this way will force quantPhases to reset
 			setDoneSignal: {
-				~quantPhases = Pseq(#[0.25, 1.25, 0.75], inf).asStream;
+				~quantPhases = Pseq(#[0.25, 1.25, 0.75], inf).trace(prefix: "drum56 phase: ").asStream;
 			},
 			cmds: [
 				{
 					PR(\swap56cmd).copy.putAll((quant: [-1, ~quantPhases.next], extraPrep: { |bp|
 						bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
 						bp[\chan].level = drumLevel;
-					}))
+					}, shouldSync: false))
 				},
 				12
-			]
+			],
+			autoSync: false  // else swap56cmd prevents loop from advancing
 		),
 		funcCmd: topEnvironment[\trigParms],
 		\cmdSync,
@@ -807,9 +807,12 @@ t2 = [
 		},
 		unloadProcesses: {
 			fork {
+				var	oldMstClock = BP(\mstClock);
 				BP(#[traj, fmt, hsd]).free;
 				5.0.wait;
-				BP(\mstClock).free;  // making durned sure this is the last one to go
+				if(BP(\mstClock) === oldMstClock) {
+					BP(\mstClock).free;  // making durned sure this is the last one to go
+				};
 			}
 		},
 		seqPattern: {
@@ -874,10 +877,12 @@ t2 = [
 		name: "H1530-sung 1",
 		segID: 1530,
 		initProcesses: {
-			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil, Library.at(\rvbs));
+			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil,
+				(printStopMsg: false).putAll(Library.at(\rvbs)));
 			0 => BP(\cpt);
 			
-			\chuckIf.eval(PR(\cadences), BP, \cd, nil, (parentBP: \cpt).putAll(Library.at(\rvbs)));
+			\chuckIf.eval(PR(\cadences), BP, \cd, nil,
+				(parentBP: \cpt, printStopMsg: false).putAll(Library.at(\rvbs)));
 			0 => BP(\cd);
 
 			(1..3).do { |i|
@@ -984,7 +989,10 @@ t2 = [
 									// holy recursive flow of control batman
 									setUserSignal: {
 										~endNotify = NotificationCenter.register(
-											\drumIter2, \done, ~id, e { ~endNotify.remove; ~stop.() }
+											\drumIter2, \done, ~id, e {
+												~endNotify.remove;
+												~stop.((manualStop: false))
+											}
 										)
 									},
 									clearUserSignal: { |parms|

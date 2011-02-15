@@ -2087,7 +2087,7 @@ PR(\abstractProcess).clone {
 		#[scaleLen, numDescents, numDecays, startDeg].do { |key| ~makeStreamForKey.(key) };
 		~ampMul = GenericGlobalControl(\ampMul, nil, 0.26, [0, 12.dbamp, \amp]);
 		~event.ampMul = ~ampMul.asMap;
-		~addedWavetables = IdentitySet.new;
+		~addedWavetables = IdentityDictionary.new;
 
 		~dataIndices = #[xmin, xmax].collect { |name|
 			BP(\di).busIndex(name) - BP(\di).bus.index
@@ -2102,22 +2102,30 @@ PR(\abstractProcess).clone {
 		if(ampFunc.notNil and: { ~vc.notNil }) {
 			if(~vc.env[key].notNil) { ~vc.env[key].free };  // remove old buffers
 			~vc.env[key] = \makeWavetables.eval(8, s, 2048, 48, ampFunc);
-			~addedWavetables.add(key);
+			~addedWavetables.put(key, ~vc.env[key]);
 		} {
 			"BP(%).addWtToVoicer: Either you didn't give an ampFunc or this BP has no voicer"
 			.format(~collIndex.asCompileString).warn;
 		};
 	};
 	~removeWavetables = {
-		if(~addedWavetables.notEmpty and: { ~vc.exists }) {
-			~addedWavetables.do { |key| ~vc.env[key].free; ~vc.env[key] = nil };
+		var	vcexists = ~vc.exists;
+		if(~addedWavetables.notEmpty) {
+			~addedWavetables.keysValuesDo { |key, val|
+				val.free;
+				if(vcexists) { ~vc.env[key] = nil };
+			};
 			~addedWavetables.clear;
-		} {
-			if(~addedWavetables.notEmpty) {
-				"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
-				.format(~collIndex.asCompileString).warn;
-			}
 		};
+		// if(~addedWavetables.notEmpty and: { ~vc.exists }) {
+		// 	~addedWavetables.do { |key| ~vc.env[key].free; ~vc.env[key] = nil };
+		// 	~addedWavetables.clear;
+		// } {
+		// 	if(~addedWavetables.notEmpty) {
+		// 		"BP(%): Uh-oh... wavetables were added and VC was freed before cleanup. Leak?"
+		// 		.format(~collIndex.asCompileString).warn;
+		// 	}
+		// };
 	};
 	~bindVoicer = { |voicer|
 		var	vc = VC.collection.detect { |vc| vc.v === voicer };

@@ -433,6 +433,7 @@ PR(\hs1).clone {
 	~preparePlay = {
 		BP(~trajectoryKey).isUsedBy(~collIndex);
 		~traj ?? { ~traj = Pn(Pshuf(BP(~trajectoryKey).xymaps, 1), inf) };
+		BP(~fmtProc).initializeAmps;
 	};
 	~stopCleanup = {
 		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
@@ -543,8 +544,9 @@ make: { |name|
 		formant: Plazy({ Pxrand(~fmtKeys, inf) }),
 		fadeIn: 12,
 		fadeOut: 8,
+		initializeAmps: { ~fmtBus.setn(1 ! ~partials.size) },
 		preparePlay: {
-			~fmtBus.setn(1 ! ~partials.size);
+			~initializeAmps.();
 			~sensCtl.automate(\ctlEnv, [connect: 0, env: Env(#[0, 1], [~fadeIn], 0)],
 				~chan.fadergroup, \addToHead)
 		},
@@ -561,7 +563,7 @@ make: { |name|
 		stopCleanup: { ~doFadeOut.() },
 		objects: (
 			fmtAmps: (
-				def: SynthDef(\ctlEnv, { |outbus, levelScale = 1, levelBias = 0, time = 1, connect = 1,
+				def: SynthDef(\ctlEnvSens, { |outbus, levelScale = 1, levelBias = 0, time = 1, connect = 1,
 							sens = 1|
 						var	env = \env.kr(0 ! 40), sig;	// enough for 10 breakpoints
 						env[0] = Select.kr(connect > 0, [env[0], In.kr(outbus, 1)]);
@@ -1995,7 +1997,7 @@ PR(\abstractProcess).clone {
 				Pwhile1({ |proto, ev|
 					// ~keepGoing or: { ev.delta == 0 }
 					if(~keepGoing) { true }
-						{ ev.delta.debug("~keepGoing = false; delta"); ev.debug; ev.delta == 0 }
+						{ /*ev.delta.debug("~keepGoing = false; delta"); ev.debug;*/ ev.delta == 0 }
 				},
 					~gestures[~gestStream.next]
 				)
