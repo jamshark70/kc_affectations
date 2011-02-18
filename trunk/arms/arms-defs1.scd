@@ -2109,7 +2109,7 @@ PR(\abstractProcess).clone {
 		};
 	};
 	~removeWavetables = {
-		var	vcexists = ~vc.exists;
+		var	vcexists = ~vc.tryPerform(\exists) ? false
 		if(~addedWavetables.notEmpty) {
 			~addedWavetables.keysValuesDo { |key, val|
 				val.free;
@@ -2240,7 +2240,6 @@ PR(\abstractProcess).clone {
 } => PR(\bellMel);
 
 (make: { |name|
-	BP(name).free;
 	BP(name).free;
 	PR(\bellMel) => BP(name);
 	if(VC.exists(\bmel)) {
