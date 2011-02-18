@@ -765,7 +765,7 @@ Proto {
 	// sbounds: screenBounds,
 	// play: \dummy,
 	setEventResponder: {
-		~doneSignal = OSCresponderNode(s.addr, '/event', e { |t, r, m|
+		~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
 			r.remove;
 			~stop.();
 		}).add;
@@ -775,6 +775,7 @@ Proto {
 	setDoneSignal: {
 		if(BP(\segTrig).v[\eventTrigCmd].isNil) {
 			~setEventResponder.();
+			~doneSignal = true;
 		} {
 			"Event trigger already active. This trigger will wait until the last finishes.".debug;
 			~doneSignal = NotificationCenter.register(BP(\segTrig).v[\eventTrigCmd],
@@ -782,11 +783,10 @@ Proto {
 		};
 	},
 	clearDoneSignal: {
-		defer(e {
-			~doneSignal.remove;
-			BP(\segTrig).eventActive(nil, nil);
-			Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 0);
-		})
+		~doneSignal.tryPerform(\remove);
+		~eventResponder.remove;
+		BP(\segTrig).eventActive(nil, nil);
+		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 0);
 	},
 	func: \dummy
 );
