@@ -283,8 +283,12 @@
 *** B2540 - Restart axial sequence -- very short, as in 2510.
 *** B2550 - Locomotive in place, short like 2520.
 *** B2560 - Wild arm movements.
-*** B2570 - Coming...
-
+*** B2570 - Stephen touches Laura's arm/shoulder after her solo (42:48)
+    A melody plays here for a bit less than a minute. When that's over, hit the next one.
+*** B2580 - drums 1 -- drums will start after a few seconds -- I can make this more immediate later
+*** B2590 - the first foreshadowing of Ilana's suspension (45:38)
+*** B2600 - second foreshadowing (47:05, just before)
+*** B2610 - last suspension (48:17-ish)
 
 * Sample attributions
     September 3, 2010
