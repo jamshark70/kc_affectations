@@ -2109,7 +2109,7 @@ PR(\abstractProcess).clone {
 		};
 	};
 	~removeWavetables = {
-		var	vcexists = ~vc.tryPerform(\exists) ? false
+		var	vcexists = ~vc.tryPerform(\exists) ? false;
 		if(~addedWavetables.notEmpty) {
 			~addedWavetables.keysValuesDo { |key, val|
 				val.free;
