@@ -1,4 +1,6 @@
 #+STARTUP: hidestars
+#+DRAWERS: ANNOTATION
+#+OPTIONS: d:nil num:nil toc:nil
 
 * Essentials
 
@@ -225,28 +227,77 @@
 
 ** Arms
 *** A500 -- first statement of axial theme: when they separate and arms come up
-    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    1. One event cue per arm gesture = one melody note
+    :ANNOTATION:
+    Segment trigger fires the first note. Event triggers fire successive notes. The idea is to catch each arm motion. It's okay if you miss one or two -- would add variety to the rhythm.
+    :END:
 *** A510 -- first statement of locomotive theme: when they start moving
     1. 1-3 event triggers to start a melody playing. (Event triggers during the melody are ignored.)
+    :ANNOTATION:
+    Segment trigger launches. Event triggers cause a melody to play. I haven't thought about what enough movement should make that happen. One event trigger starts the melody and it runs on its own. Event triggers are ignored until the melody stops.
+
+    I'm using y-span / x-span to decide note density and the rate at which the notes rotate around the virtual space.
+    :END:
 *** A520 -- sunrise: when Stephen joins L&I backstage left and arms make an arc
+    :ANNOTATION:
+    Just a segment trigger. This is where Ilana and Laura are to the left (from the audience's point of view), then Steven slides over and joins them, and they all make an arc with their hands from left to right. The segment trigger should happen when they start the arc or just before (probably makes sense to look at Stephen coming over).
+    :END:
 *** A530 -- hand stacking: when the three kneel together
+    :ANNOTATION:
+    Segment trigger. This starts when they kneel to the floor.
+
+    When I detect that the height (y-max) is increasing, the base pitch goes up; when decreasing, it goes down. Timing of the movement may be an issue -- not a good idea to take significantly longer (pitches will go too high), or to take much longer to come down than to go up (too low).
+    :END:
 *** A540 -- partnering: after breaking out of the stacking pose
+    :ANNOTATION:
+    Segment trigger only, when they break out of the hand stacking position.
+    :END:
 *** A550 -- Shiva (axial)
     1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
 *** A560 -- more partnering: after breaking out of the Shiva pose
     1. One event trigger -- plays a few Shiva notes.
     2. (Optional) event trigger for a bit of locomotive material, but only if there's time.
+    :ANNOTATION:
+    Segment trigger to start, like A540, when they move away from the Shiva posture. You should hit one event trigger a few seconds later -- that makes a few Shiva notes play. Some more things happen on their own. One more event trigger is possible, but optional, later, to do a little bit of the locomotive material.
+    :END:
 *** A570 -- axial theme, three levels
     1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
 *** A580 -- Stephen and Ilana duet: after breaking out of the three-levels pose
     1. Event trigger for second chord (when S&I are embracing).
-*** A600 -- manipulating Laura
+    :ANNOTATION:
+    Segment trigger (as Laura is starting to lie down) makes a bass glissando and one chord. Event trigger makes a second chord. Probably best to trigger that sometime when they're embracing. It plays on its own after that.
+    :END:
+*** A600 -- manipulating Laura: when they pick Laura up
     1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
 *** A610 -- loco-prep: when Laura disappears behind S&I
+    :ANNOTATION:
+    Segment trigger only. Intended for this to happen when Laura goes behind them.
+    :END:
 *** A620 -- another short locomotive section: when Laura bursts to the front between S&I
+    :ANNOTATION:
+    Segment trigger, should be timed when Laura bursts to the front between Stephen and Ilana.
+    :END:
 *** A630 -- cradling gesture: L&I's entrance from left
+    :ANNOTATION:
+    Just a segment trigger, but I wrote the sequence so that we could cue the materials visually (by event triggers). Let's talk about that.
+    :END:
 *** A640 -- Laura solo: Laura's re-entrance from right
+    :ANNOTATION:
+    Segment trigger, materials triggered by continuous data. Don't worry about it :)
+    :END:
 *** A650 -- fade out to make silence before the face dance
+    :ANNOTATION:
+    This is still left over from October -- I need to fix it so that the fadeout is slow and gradual, maybe controlled by their x position.
+    :END:
 ** Head
 *** H1000-Start of face dance
     1. 1 event trigger for creaking --> door sound
@@ -400,13 +451,13 @@
       2. Copy (or symlink) the SuperCollider/ directory into ~/share/SuperCollider/Extensions.
       3. Create ~/.sclang.sc with this text.
          JSCTextEditBase.useBorder = false;
-        
+
          g = SwingOSC.default;
          g.options.javaOptions = "-Dswing.defaultlaf=com.sun.java.swing.plaf.nimbus.NimbusLookAndFeel";
-        
+
          // put the location of SwingOSC.jar in this line
          SwingOSC.program = "~/share/SwingOSC/build/SwingOSC.jar".standardizePath;
-        
+
          fork {
         	 2.5.wait;
         	 g.waitForBoot {
@@ -419,11 +470,11 @@
         		 }
         	 }
          };
-        
+
          // must not load Instr's until class tree init is finished
          // INCLUDING StartUp.add actions set up by *initClass methods
          // b/c I create some Spec.specs in there
-        
+
          StartUp.add {
         	 // note, after step 9, put the real path in here
         	 Instr.dir = "/path/to/kc.git/trunk/Instr/";
