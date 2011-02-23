@@ -764,29 +764,41 @@ Proto {
 ~trigParms = (
 	// sbounds: screenBounds,
 	// play: \dummy,
+	eventID: 1,
 	setEventResponder: {
 		~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
-			r.remove;
-			~stop.();
+			if(m[3] == ~eventID) {
+				r.remove;
+				~stop.();
+			};
 		}).add;
-		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 1);
-		BP(\segTrig).eventActive(currentEnvironment, e { ~stop.() });
+		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
 	},
 	setDoneSignal: {
-		if(BP(\segTrig).v[\eventTrigCmd].isNil) {
-			~setEventResponder.();
-			~doneSignal = true;
-		} {
-			"Event trigger already active. This trigger will wait until the last finishes.".debug;
-			~doneSignal = NotificationCenter.register(BP(\segTrig).v[\eventTrigCmd],
-				\done, currentEnvironment, e { "Event trigger is unblocked".debug; ~doneSignal.remove; ~setEventResponder.() });
+		try {
+			// throws error if ID is already used
+			BP(\segTrig).eventActive(currentEnvironment, e { ~stop.() }, ~eventID);
+		} { |err|
+			if(err.isException.not) { err.throw }; // rethrow a real error
 		};
+		~setEventResponder.();
+		~doneSignal = true;
+		// if(BP(\segTrig).v[\eventTrigCmd].isNil) {
+		// 	~setEventResponder.();
+		// 	~doneSignal = true;
+		// } {
+		// 	"Event trigger already active. This trigger will wait until the last finishes.".debug;
+		// 	~doneSignal = NotificationCenter.register(BP(\segTrig).eventTrigCmdByID(~eventID),
+		// 		\done, currentEnvironment, e { "Event trigger is unblocked".debug; ~doneSignal.remove; ~setEventResponder.() });
+		// };
 	},
 	clearDoneSignal: {
 		~doneSignal.tryPerform(\remove);
 		~eventResponder.remove;
-		BP(\segTrig).eventActive(nil, nil);
-		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, 0);
+		BP(\segTrig).eventActive(nil, nil, ~eventID);
+		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
+			if(BP(\segTrig).eventTrigsWaiting.isEmpty) { 0 } { ~eventID.neg }
+		);
 	},
 	func: \dummy
 );

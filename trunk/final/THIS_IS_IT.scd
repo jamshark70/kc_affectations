@@ -1,3 +1,6 @@
+// last bug: lastGesture is nil? how?
+// fade out lpcs?
+
 // Affectations
 // Main process loader
 
@@ -80,13 +83,32 @@ s.waitForBoot {
 				});
 			~window.front.userCanClose_(false)
 				.onClose_(e { ~window = nil });
+
+			~eventTrigsWaiting = IdentityDictionary.new;
 		},
 		userfree: { (e { ~window.close }).defer },
-		eventActive: { |cmd, action|
-			~eventTrigCmd = cmd;
-			~eventTrigAction = action;
-			(e { ~eventBtn.enabled = action.notNil }).defer;
+		eventActive: { |cmd, action, eventID(1)|
+			if(cmd.notNil) {
+				if(~eventTrigsWaiting[eventID].isNil) {
+					~eventTrigsWaiting[eventID] = [cmd, action];
+					// ~eventTrigCmd = cmd;
+					// ~eventTrigAction = action;
+				} {
+					Exception("event trigger with id % is already active: can't register new event"
+						.format(eventID)).throw;
+				}
+			} {
+				~eventTrigsWaiting[eventID] = nil
+			};
+			(e { ~eventBtn.enabled = ~eventTrigsWaiting.notEmpty }).defer;
 		},
+		eventTrigAction: {
+			// no id given through GUI: fire earliest (lowest ID) event
+			if(~eventTrigsWaiting.notEmpty) {
+				~eventTrigsWaiting[~eventTrigsWaiting.keys.minItem].[1].value
+			};
+		},
+		eventTrigCmdByID: { |eventID| ~eventTrigsWaiting[eventID][0] },
 		segActive: { |action, segID|
 			~segTrigAction = action;
 			(e {

@@ -28,12 +28,19 @@
 						[\mixerAutoSynthCmd, 
 							headChans.asArray.collect { |chan|
 								(mixer: chan, name: \ctlPoint, outName: \outbus,
-									level: 0, time: 18, curve: -2.1)
+									value: 0, time: 18, curve: -2.1)
 							}
-						].flop
+						].flop.flat
+						++
+						[\gcAutoSynthCmd, 
+							BP(#[wtrig, cwd]).collect { |bp|
+								(gc: bp.ampCtl, name: \ctlPoint, outName: \outbus,
+									value: 0, time: 18, curve: -2.1)
+							}
+						].flop.flat
 						++
 						[	\sync,
-							{	
+							{
 								BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8]).stop(0);
 								0 // 10
 							}

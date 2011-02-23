@@ -44,7 +44,7 @@ PR(\funcCmd).copy.putAll((
 		// that interrupts the subIterCmd's cleanup process
 		// how many gray hairs from trying to find THAT one?
 		// I tried to fix it in TLSequenceIterator but maybe it didn't take, so...
-		if(~subIter.isRunning) { ~subIter.stop(parms.debug("subiter stop parms")) };
+		if(~subIter.isRunning) { ~subIter.stop(parms) };
 	},
 	clearDoneSignal: { |parms|
 		~doneSignal.remove;
@@ -133,7 +133,7 @@ t2 = [
 		{	BP(\drum3).bar = 15;
 			6
 		},
-		{ NotificationCenter.notify(\drumIter1, \done.debug("sending notification")); 1 }
+		{ NotificationCenter.notify(\drumIter1, \done); 1 }
 	]).shouldSync_(false),
 
 	TLSequenceIterator([
@@ -168,7 +168,7 @@ t2 = [
 						bp[\chan].level = drumLevel;
 					}, shouldSync: false))
 				},
-				12
+				24
 			],
 			autoSync: false  // else swap56cmd prevents loop from advancing
 		),
@@ -249,17 +249,9 @@ t2 = [
 		},
 		\cmdSync,
 		6,
-		
+
 		{
-			BP(\drum8).gest = Pfsm([
-				#[4, 5],
-				Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-				Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
-				\fiveAcc, #[2, 4, 5],
-				\sevenAcc, #[3, 4, 5],
-				\five1Acc, #[0, 2],
-				\seven1Acc, #[1, 3],
-			], inf);
+			BP(\drum8).gest = Library.at(\drum78AccGest);
 		// 	6
 		// },
 		/*{*/
@@ -293,31 +285,123 @@ t2 = [
 			}
 		),
 	
-		funcCmd: topEnvironment[\trigParms],
+		funcCmd: topEnvironment[\trigParms].copy.put(\eventID, 2),
 		\cmdSync,
 		funcCmd: (func: {
 			~iterator.findActive(\accentLoop).stop
 		}),
-		
+		Quant(1, -0.05),
 		{
-			var x = (Pseed(Pn(Date.seed, 1), Pwhite(3, 6, inf)) / BP(\drum7).messedUpMulCtl).round * 3,
-				y = Pseed(Pn(Date.seed + 234321, 1), Pwhite(3, 9, inf)),
-				oldGest = BP(\drum7).gest,
-				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1);
-			BP(#[drum7, drum8]).do { |bp|
-				bp.keepGoing = false;
-				bp.quant = q1;
-				bp.gest = Pseq([
+			var c = thisThread.clock;
+			c.setMeterAtBeat(3, c.nextTimeOnGrid(1));
+			BP(#[drum7, drum8]).do(_.keepGoing = false);
+			0
+		},
+
+		{
+			var x = (Pseed(Pn(Date.seed, 1), Pwhite(2, 4, inf)) / BP(\drum7).messedUpMulCtl).round * 3,
+				y = (Pseed(Pn(Date.seed + 234321, 1), Pwhite(3, 9, inf))
+					* Env(#[1, 0.075], #[80], 0.5).asStream).round,
+				oldGest = Library.at(\drum78AccGest),
+				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1),
+				rsyncEnv = Env(#[1, 0], #[90], 1.4).asStream;
+	
+	d.reset;
+	
+			BP(\drum7).gest = Pseq([
+				Pseq([
 					// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
 					\randquant,
 					Pn(\messedUp, y.asStream),
-					Pfuncn({ bp.quant = qbar; \randquant }),
+					Pfuncn({ ~quant = qbar; \randquant }),
 					Pif(Ptime() < Pstutter(1e6, x.asStream), oldGest),
-				], inf) //.trace(prefix: bp.collIndex ++ " gesture: ")
-			};
+				], 2),
+				Prout({ |inval|
+					var	xstream = x.asStream,
+						muPats = [
+							Pn(\messedUp, y.asStream),
+							Pfuncn({
+								if(~collIndex == \drum7) { BP(\wtrig).triggerOneEvent(0) };
+								\messedUp1
+							}, Pwhite(1, Env(#[1, 1, 5], #[10, 50]), inf).round.asStream
+								.collect { |num| ~mUp1Num = num; num }
+							)
+						];
+					NotificationCenter.notify(\drum7, \disintegrationAdvance);
+					inval = Pseq([\randsync, muPats[0], \randsync, muPats[1]])
+					.embedInStream(inval);
+					loop {
+						if(rsyncEnv.next.coin) { inval = \randsync.embedInStream(inval) };
+						inval = Pseq(muPats, 1).embedInStream(inval);
+						// inval = muPats[1].embedInStream(inval);
+					};
+				})
+			]).collect { |gest| ~lastGesture = gest };
+			BP(\drum8).gest = Pfunc({ BP(\drum7).lastGesture });
 			BP(\drum7).messedUpMulCtl.value = 1;
-			18
+			BP(\wtrig).delta = Pfunc({ BP(\drum7).lastMessedUpBeats });
+			BP(\wtrig).sustain = (Pkey(\delta) / Ptempo());
+			BP(\wtrig).ffreqTopCtl.value = 18000;
+			BP(\wtrig).distCtl.value = 8;
+			BP(\wtrig).ampCtl.value = 0.8;
+			BP(\wtrig).playAttack = true;
+			BP(\wtrig).offset = Pseq([
+				0.75,
+				Pseq([
+					Pn(0, { BP(\drum7).mUp1Num - 1 }),
+					min(Pwhite(1, 3, 1) * 0.5, Pkey(\delta) - 0.5)
+				], inf)
+			]);
+			BP(\cwd).use {
+				~pitchProb.value = 1;
+				~ampCtl.value = 17.dbamp;
+				~pitchednormAmp = ~ampCtl.asMap.asPattern;
+				~pitchedenv = [Env(#[0, 1, 0.35, 0.35, 0], #[0.01, 0.1, 0.69, 0.2], -4)];
+				~pfreq = (Paccumbounce(35, 46, Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+					-.x Pseries(0, Pwhite(1, 4, Pkey(\numInChord).asStream)))
+				.clump(Pfunc({ |ev| ev[\numInChord] = rrand(7, 11); ev[\numInChord] }))
+				.collect { |deg, ev| Mode(ev[\mode]).cps(deg) };
+				~pitchedSlideProb = Env(#[0, 0.5], #[45], 2);
+				~pitchedtime = Pfunc({ BP(\wtrig).lastEvent.sustain });
+				~preparePlay.();
+			};
+			BP(\drum7).messedUp1Beats = Pseq([
+				Pwhite(4, 7, 1),
+				Pseq([
+					Pwrand(#[1, 1.5, 2, 2.5, 3], #[3, 4, 2, 1, 1].normalizeSum, { ~mUp1Num - 1 }),
+					Pwhite(4, 7, 1),
+				], inf)
+			]);
+			0
+			// 18
 		},
+	
+		{	BP(#[drum4, drum5, drum6]).stop;
+			BP(\drum7).pan = -1;
+			BP(\drum8).pan = 1;
+			BP(\drum7).quant = -1;
+			BP(\drum8).quant = #[-1, 0.75];
+			BP(\drum7).distCtl.value = 5;
+			BP(\drum7).finalLpfCtl.value = 18000;
+			0
+		},
+	
+		// bpCmd: (name: #[drum7, drum8], quant: -1, /*shouldSync: false,*/ prepareBP: { |bp|
+		// 	bp.ostFiltCtl.value = 1;
+		// 	bp.fmltDcyCtl.value = 0.25;
+		// 	bp.fmltWetCtl.value = 0.1;
+		// 	bp[\chan].level = -7.dbamp;
+		// }),
+	
+		funcCmd: (
+			setDoneSignal: {
+				~doneSignal = NotificationCenter.register(\drum7, \disintegrationAdvance, \wait, e{
+					~stop.();
+				});
+			},
+			clearDoneSignal: { ~doneSignal.remove }
+		),
+		\cmdSync,
 	
 		gcAutoSynthCmd: (gc: { BP(\drum7).messedUpMulCtl }, name: \ctlEnv, outName: \outbus,
 			env: Env(#[1, 3], #[45])),
@@ -330,12 +414,22 @@ t2 = [
 					inbus: BP(\drum7).distCtl.bus,
 					inMin: 5, inMax: 20, outMin: 18000, outMax: 400, slewUp: 1e6, slewDown: 1e6
 				))
-			}
+			},
+			20,
+			gcAutoSynthCmd: (gc: { BP(\wtrig).distCtl }, name: \ctlPoint, outName: \outbus,
+				value: 20, time: 100),
+			gcAutoSynthCmd: (gc: { BP(\wtrig).ffreqTopCtl }, name: \ctlPoint, outName: \outbus,
+				value: 300, time: 140, curve: -2.1),
+			gcAutoSynthCmd: (gc: { BP(\wtrig).ampCtl }, name: \ctlPoint, outName: \outbus,
+				value: 0, time: 150, curve: -2.1,
+				stopAction: { BP(\wtrig).playAttack = false }
+			),
+			70,
+			gcAutoSynthCmd: (gc: { BP(\cwd).ampCtl }, name: \ctlPoint, outName: \outbus,
+				value: 0, time: 125, curve: -2.1),
 		],
 		gcAutoSynthCmd: (gc: { BP(\drum7).distCtl }, name: \ctlEnv, outName: \outbus,
-			env: Env(#[5, 20], #[70])),
-		\cmdSync,
-		{ BP(#[drum7, drum8]).stop(0); 0 }
+			env: Env(#[5, 20], #[120]))
 	]).shouldSync_(false)
 ];
 
@@ -701,7 +795,7 @@ t2 = [
 					),
 					6,
 					bpCmd: (name: \hs, shouldSync: false, prepareBP: { |bp|
-						bp.debug.use {
+						bp.use {
 							~lastRise = 1;
 							~rat = Pswitch1([
 								Pwhile1({ |in, item| ~lastRise = item; item <= ~high }, Pseries(~low, 1, inf)),
@@ -811,7 +905,7 @@ t2 = [
 				BP(#[traj, fmt, hsd]).free;
 				5.0.wait;
 				if(BP(\mstClock) === oldMstClock) {
-					BP(\mstClock).free;  // making durned sure this is the last one to go
+					oldMstClock.free;  // making durned sure this is the last one to go
 				};
 			}
 		},
@@ -821,7 +915,7 @@ t2 = [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: \hswp, shouldSync: false, playWarning: false),
 					bpCmd: (name: \hsd, shouldSync: false, prepareBP: { |bp|
-						bp.debug.tophCtl.value = 2;
+						bp.tophCtl.value = 2;
 						bp.ampCtl.value = 0.2;
 					}),
 					gcAutoSynthCmd: (
@@ -844,7 +938,6 @@ t2 = [
 					),
 					funcCmd: (
 						setDoneSignal: {
-							thisThread.clock.beats.debug("waiting for top harmonic 15");
 							~doneSignal = Updater(BP(\hsd).tophCtl, e { |obj, event|
 								if(event[\what] == \value and: { obj.value >= 15 }) {
 									~stop.();
@@ -852,14 +945,13 @@ t2 = [
 							});
 						},
 						clearDoneSignal: {
-							thisThread.clock.beats.debug("got top harmonic 15");
 							~doneSignal.remove
 						}
 					),
 					\cmdSync,
 					// 6,
 					bpCmd: (name: \fmt, shouldSync: false, prepareBP: { |bp|
-						bp.debug.fadeIn = 18;
+						bp.fadeIn = 18;
 						bp.fadeOut = 12;
 					}),
 					12,
@@ -901,7 +993,7 @@ t2 = [
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
 					subIterCmd: (id: \drumIterator0, subIter: t2[0], shouldSync: false),
 					bpCmd: (name: \cd, prepareBP: { |p|
-						p.debug("choral").tempoPat = 1;
+						p.tempoPat = 1;
 						p.chan.level = -1.dbamp;
 						p.dur = Pwhite(0.9, 1.25, inf) *.x Pwhite(12.0, 16.0, { |num| num });
 						p.p5_(0).sharp_(false).shortFirst_(false).oneNote_(true);
@@ -1153,10 +1245,6 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					// TLSequenceIterator([
-					// 	{ rrand(5.0, 8.0) },
-
-					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = (42/60) * Pexprand(0.75, 0.5.reciprocal, inf);
 						p.seqKeys = #[t3, a31, a32];
@@ -1262,8 +1350,32 @@ t2 = [
 	PR(\tlsAff).copy.putAll((
 		name: "H1630-sung 11",
 		segID: 1630,
-		// initProcesses: {},
-		// unloadProcesses: {},
+		initProcesses: {
+			\chuckIf.eval(Fact(\words), BP, \cwd);
+			// hack hack hack hack hack...
+			BP(\cwd).use {
+				~ampCtl ?? {
+					~ampCtl = GenericGlobalControl(\amp, nil, 17.dbamp, [0, 20.dbamp, \amp])
+				};
+				// if it's a function, the dtor for ampCtl hasn't been added yet
+				// (I said it's a hack)
+				if(~userfree.isFunction) {
+					~userfree = ~userfree.addFunc({ ~ampCtl.free });
+				};
+				~chan.doWhenReady {
+					~limiter = ~chan.playfx(Instr("busfx.limiter"), [0, 2, 0.9, 0.01]);
+				};
+			};
+
+			\chuckIf.eval(PR(\wordsFastChordTrig), BP, \wtrig, nil, (source: \cwd));
+			BP(\wtrig).prepareForPlay;
+
+			topEnvironment[\clock108] => BP(\wtrig);
+			topEnvironment[\clock108] => BP(\cwd);
+		},
+		unloadProcesses: {
+			BP(#[wtrig, cwd]).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -1339,10 +1451,6 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					// TLSequenceIterator([
-					// 	{ rrand(5.0, 8.0) },
-					//	subIterCmd: (id: \drumIterator3, subIter: t2[3], shouldSync: false),
-					// ]).shouldSync_(false),
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.tempoPat = 1.2;
 						p.filterNotePat = { |pat|
@@ -1354,11 +1462,11 @@ t2 = [
 					TLSequenceIterator([
 						gcAutoSynthCmd: (gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
 							value: BP(\hsd).minTop, time: 18),
-						// gcAutoSynthCmd: (gc: BP(\int).ampCtl, name: \ctlPoint, outName: \outbus,
-						// 	value: 0, time: 18, curve: -2.1),
+						gcAutoSynthCmd: (gc: BP(\int).ampCtl, name: \ctlPoint, outName: \outbus,
+							value: 0, time: 18, curve: -2.1),
 						\cmdSync,
 						{
-							BP(#[hsd, fmt, mstClock/*, int*/]).stop(0);
+							BP(#[hsd, fmt, mstClock, int]).stop(0);
 							0
 						}
 					]).shouldSync_(false)
