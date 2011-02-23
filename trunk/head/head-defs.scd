@@ -54,7 +54,26 @@ s.waitForBoot {
 			eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
 		Out.ar(outbus, sig.distort * postAmp * eg);
 	}).add;
-	
+
+	SynthDef(\lpfxferPan2, { |inbus, outbus, ffreq1 = 2000, ffreq2 = 2000,
+		sustain = 1, ffreqTimeScale = 1, panTimeScale = 1, fshiftTimeScale = 1, attackPct = 0.05,
+		pan = 0, pan2 = 0, lpfxAmp = 0.3, fshiftMix = 0.5|
+		var	ffreqtime = sustain * ffreqTimeScale,
+		ffreq = XLine.kr(ffreq1, ffreq2, ffreqtime),
+		sig = In.ar(inbus, 1),
+		env = Env.perc(attackPct, 1 - attackPct),
+		eg = EnvGen.kr(env, timeScale: sustain, doneAction: 2);
+		pan = Line.kr(pan, pan2, sustain * panTimeScale);
+		sig = LPF.ar(sig, ffreq, lpfxAmp);
+		sig = XFade2.ar(sig,
+			FreqShift.ar(sig, Line.kr(Rand(80, 300) * (IRand(0, 1).madd(2, -1)), 0.01,
+				sustain * fshiftTimeScale
+			)),
+			fshiftMix.madd(2, -1)
+		);
+		Out.ar(outbus, Pan2.ar(sig, pan, eg));
+	}).add;
+	\addRvbOut.eval(\lpfxferPan2Dist, SynthDescLib.at(\lpfxferPan2).def.func).add;
 	
 	// harmonic series drones
 	SynthDef(\partial1bgated, { |outbus, freq = 440, amp = 1, ampFilt = 1,
@@ -1476,6 +1495,17 @@ makeBP: { |name|
 	topEnvironment[\clock108] => BP(name);
 })) => Fact(\drum7);
 
+Library.put(\drum78AccGest, Pfsm([
+	#[4, 5],
+	Pwrand(#[five, fiveRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+	Pwrand(#[seven, sevenRest], #[0.5, 0.5], { rrand(2, 4) }), #[0, 1, 2, 3],
+	\fiveAcc, #[2, 4, 5],
+	\sevenAcc, #[3, 4, 5],
+	\five1Acc, #[0, 2],
+	\seven1Acc, #[1, 3],
+], inf));
+
+
 // Fact(\drum7) => BP(\drum7);
 // Fact(\drum7).chuck(BP(\drum8), nil, (ctlSource: \drum7, quant: #[-1, 1.25]));
 
@@ -1558,6 +1588,7 @@ PR(\abstractProcess).clone {
 	~messedUpRatios = Prand([3/2, 4/3, 5/4, 6/5, 9/8], inf);
 	~messedUpNumEv = Pwhite(3, 9, inf);
 	~messedUpBeats = Plazy({ Pwhite(1, 6, inf) * ~messedUpMulCtl.asPattern.round });
+	~messedUp1Beats = Pwhite(7, 14, inf);
 
 	~gestures = (
 		ost: Pbind(
@@ -1857,61 +1888,72 @@ PR(\abstractProcess).clone {
 		}),
 
 		// new for march: really disintegrate the rhythm
-		messedUp: Plazy({ |inEv|
+		messedUpBase: { |inEv|
 			var	accEv = ~accEvent.(inEv, Pkey(\delta)).asStream,
-				once = false,
-				dur,
-				pat = Pchain(
-					Pfunc({ |ev|
-						var	x;
-						if(ev[\doAccent]) {
-							ev = accEv.next(ev).put(\wet, 0.55);
-							if(once) { ev } {
-								once = true;
-								x = ~messedUpRatiosStream.nextN(3, ev);
-								x.doAdjacentPairs { |a, b, i| x[i+1] = a*b };
-								ev.put(\ffreq, ev[\ffreq] * x)
-									.put(\ffreq2, ev[\ffreq2] * x);
-							};
-						} { ev }
-					}),
-					Pbind(
-						\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
-							Pwrand(#[0, 1], Pif(Pkey(\delta) >= (~messedUpMulCtl.asPattern * 0.25), #[0.75, 0.25], #[0.1, 0.9]), inf)
-						),
-						// \amp, 1,
-						\amp, Pn(Plazy({ |ev|
-							var	bool = 0.3.coin;
-							if(bool) {
-								Pn(1, ev[\numInSeg])
-							} {
-								Pgeom.fromEndpoints(1, rrand(0.2, 0.5), ev[\numInSeg])
-							}
-						}), inf),
-						\rate, Pif(Pkey(\bufIndex) > 0, 1, Prand(#[0.5, 0.6], inf)),
-						\start, 0,
-						\pan, Plazy({ BPStream(\pan) }),
-						\ffreq, Plazy({ BPStream(\lpfreq) }),
-						\wet, 0
+				once = false;
+			Pchain(
+				Pfunc({ |ev|
+					var	x;
+					if(ev[\doAccent]) {
+						ev = accEv.next(ev).put(\wet, 0.55);
+						if(once) { ev } {
+							once = true;
+							x = ~messedUpRatiosStream.nextN(3, ev);
+							x.doAdjacentPairs { |a, b, i| x[i+1] = a*b };
+							ev.put(\ffreq, ev[\ffreq] * x)
+								.put(\ffreq2, ev[\ffreq2] * x);
+						};
+					} { ev }
+				}),
+				Pbind(
+					\bufIndex, Pswitch1([0, Pxrand((1..4), inf)],
+						Pwrand(#[0, 1], Pif(Pkey(\delta) >= (~messedUpMulCtl.asPattern * 0.25), #[0.75, 0.25], #[0.1, 0.9]), inf)
 					),
-					Pbind(
-						\doAccent, false,
-						\delta, Pn(Plazy({ |ev|
-							ev[\numInSeg] = rrand(3, 9);
-							ev[\doAccent] = true;
-							Pgeom.fromEndpoints(*
-								[rrand(0.4, 0.6), rrand(0.08, 0.2)].rotate(2.rand)
-								++ [ev[\numInSeg]]
-							) * ~messedUpMulCtl
-						}), inf)
-					)
-				);
+					// \amp, 1,
+					\amp, Pn(Plazy({ |ev|
+						var	bool = 0.3.coin;
+						if(bool) {
+							Pn(1, ev[\numInSeg])
+						} {
+							Pgeom.fromEndpoints(1, rrand(0.2, 0.5), ev[\numInSeg])
+						}
+					}), inf),
+					\rate, Pif(Pkey(\bufIndex) > 0, 1, Prand(#[0.5, 0.6], inf)),
+					\start, 0,
+					\pan, Plazy({ BPStream(\pan) }),
+					\ffreq, Plazy({ BPStream(\lpfreq) }),
+					\wet, 0
+				),
+				Pbind(
+					\doAccent, false,
+					\delta, Pn(Plazy({ |ev|
+						ev[\numInSeg] = rrand(3, 9);
+						ev[\doAccent] = true;
+						Pgeom.fromEndpoints(*
+							[rrand(0.4, 0.6), rrand(0.08, 0.2)].rotate(2.rand)
+							++ [ev[\numInSeg]]
+						) * ~messedUpMulCtl
+					}), inf)
+				)
+			);
+		},
+		messedUp: Plazy({ |inEv|
+			var	dur;
 			if(~leadTime > 0) {
 				~lastMessedUpBeats = dur = ~messedUpBeatsStream.next(inEv)
 			} {
 				dur = BP(~ctlSource).lastMessedUpBeats;
 			};
-			Pfindur(dur, pat)
+			Pfindur(dur, ~gestures[\messedUpBase].(inEv))
+		}),
+		messedUp1: Plazy({ |inEv|
+			var	dur;
+			if(~leadTime > 0) {
+				~lastMessedUpBeats = dur = ~messedUp1BeatsStream.next(inEv);
+			} {
+				dur = BP(~ctlSource).lastMessedUpBeats;
+			};
+			Psync(Pfin(1, ~gestures[\messedUpBase].(inEv)), dur, dur)
 		})
 	);
 
@@ -1979,7 +2021,7 @@ PR(\abstractProcess).clone {
 		~makeStreamForKey.(\factor);
 		~makeStreamForKey.(\numBars);
 		~makeStreamForKey.(\restBeats);
-		#[messedUpRatios, messedUpNumEv, messedUpBeats, numAcc].do { |key|
+		#[messedUpRatios, messedUpNumEv, messedUpBeats, messedUp1Beats, numAcc].do { |key|
 			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
 		};
 		// w/o Pif, Event.silent results from Ppar cause this to die
@@ -1992,12 +2034,11 @@ PR(\abstractProcess).clone {
 		<>
 		PnNilSafe(
 			Plazy({
-				thisThread.clock.beats.debug("% beats".format(~collIndex));
 				~keepGoing = true;
 				Pwhile1({ |proto, ev|
 					// ~keepGoing or: { ev.delta == 0 }
 					if(~keepGoing) { true }
-						{ /*ev.delta.debug("~keepGoing = false; delta"); ev.debug;*/ ev.delta == 0 }
+						{ ev.delta == 0 }
 				},
 					~gestures[~gestStream.next]
 				)
@@ -2613,6 +2654,9 @@ make: { |name|
 				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 			};
 		},
+		preparePlay: {
+			~pitchedSlideProbStream ?? { ~makeStreamForKey.(\pitchedSlideProb) };
+		},
 	
 		delta: 1,
 		sustain: 1,
@@ -2658,6 +2702,8 @@ make: { |name|
 		}),
 		pan1: Pwhite(-1.0, 1.0, inf),
 		pan2: Pwhite(0.0, 1.0, inf) * Pkey(\pan1).sign.neg,
+		lpcAtk: 0.05,
+		lpcDcy: 0.05,
 		lpcEv: Pbind(
 			\instrument, \simpleLPCfxPan2Dist,
 			\lpcbuf, Plazy({ Pn(~lpcbuf, inf) }),
@@ -2672,7 +2718,9 @@ make: { |name|
 			\xfscale, Plazy({ Pn(~xfscale.asMap, inf) }),
 			\postAmp, Plazy({ Pn(~postAmp.asMap, inf) }),
 			// filter is sometimes still ringing when 'time' cuts it off
-			\time, Pkey(\time) + 0.1
+			\time, Pkey(\time) + 0.1,
+			\attack, BPStream(\lpcAtk),
+			\decay, BPStream(\lpcDcy)
 		),
 	
 		objects: (
@@ -2703,7 +2751,7 @@ make: { |name|
 						}, { rrand(1, 4) }))
 					], inf),
 					freq1: BPStream(\pfreq),
-					freq2: Pif(Pfunc({ ~pitchedSlideProb.coin }),
+					freq2: Pif(Pfunc({ |ev| ~pitchedSlideProbStream.next(ev).coin }),
 						BPStream(\pfreq), Pkey(\freq1)),
 					bufnum: Plazy({ Pkey(\freq1).cpsmidi.linlin(48, 48+(12*7),
 						~pitchbufs.first.bufnum, ~pitchbufs.first.bufnum + ~pitchbufs.size - 1
@@ -2746,3 +2794,89 @@ make: { |name|
 	));
 	0 => BP(name);
 }, type: \bp) => Fact(\words);
+
+
+// drums coda
+
+(play: {
+//	currentEnvironment.debug;
+	if(~playChild) {
+		BP(~source).triggerOneEvent(DelayTimeSpec(min(~offset ? 0, ~delta - 0.5)));
+	};
+}) => ProtoEvent(\fastChordTrig);
+
+PR(\abstractProcess).clone {
+	~event = (eventKey: \fastChordTrig, isFx: true);
+	~source = \cwd;
+
+	~ffreq1 = Plazy({ ~ffreqTopCtl.asPattern });
+	~ffreq2 = 400;
+	// ~sustain = 2;
+	~ffreqTimeScale = 0.3;
+	~fshiftTimeScale = 0.125;
+	~fshiftMix = 0;
+	~lpfxAmp = Plazy({ Pn(~ampCtl.asMap, inf) });
+	~playAttack = true.asPattern;
+	~playChild = true.asPattern;
+	~attackPct = 0.05;
+
+	~delta = 3; // Pwhite(3, 10, inf) * 0.25;
+	~sustain = Pwhite(1.2, 2.1, inf);
+	~offset = Prand(#[0.5, 1.0], inf);
+
+	~filtXferParms = Plazy({
+		Pbind(
+			\instrument, \lpfxferPan2Dist,
+			\chan, Pfunc({ BP(~source).chan }),
+			\isFx, true,
+			\ffreq1, BPStream(\ffreq1),
+			\ffreq2, BPStream(\ffreq2),
+			\ffreqTimeScale, BPStream(\ffreqTimeScale),
+			\lpfxAmp, BPStream(\lpfxAmp),
+			\fshiftMix, BPStream(\fshiftMix),
+			\fshiftTimeScale, BPStream(\fshiftTimeScale),
+			\attackPct, BPStream(\attackPct),
+			\distance, ~distCtl.asMap
+		)
+	});
+
+	~prep = {
+		BP(~source).addDependant(currentEnvironment);
+		~distCtl = GenericGlobalControl(\distance, nil, 12, #[5, 20]);
+		~ffreqTopCtl = GenericGlobalControl(\ffreqTop, nil, 18000, \freq);
+		~ampCtl = GenericGlobalControl(\amp, nil, 0.8, \amp);
+	};
+	~freeCleanup = {
+		BP(~source).removeDependant(currentEnvironment);
+		[~distCtl, ~ffreqTopCtl, ~ampCtl].free;
+	};
+
+	~asPattern = {
+		~reset.();
+		Pbind(
+			\source, ~source,
+			\delta, BPStream(\delta),
+			\sustain, BPStream(\sustain),
+			\offset, BPStream(\offset),
+			\playChild, BPStream(\playChild)
+		).collect { |ev| ~lastEvent = ev; ev }
+	};
+
+	~update = { |obj, what, event|
+		if(what == \oneEventPlayed and: { ~lastEvent.notNil and: { ~playAttackStream.next(event) } }) {
+			~filtXferParmsStream.next(ProtoEvent(\singleSynthPlayer).copy)
+			.put(\inbus, event.lpcEv.inbus)
+			.put(\sustain, ~lastEvent[\sustain])
+			.play;
+		};
+	};
+
+	~reset = {
+		~makeStreamForKey.(\filtXferParms);
+		#[playAttack, playChild].do { |key|
+			(key ++ "Stream").asSymbol.envirGet ?? {
+				~makeStreamForKey.(key);
+			};
+		};
+	};
+} => PR(\wordsFastChordTrig);

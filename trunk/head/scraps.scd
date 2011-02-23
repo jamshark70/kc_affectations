@@ -449,3 +449,211 @@ p.use {
 };
 
 x.next((delta: 0.1))
+
+
+
+// make new process
+(Document.current.path.dirname.dirname +/+ "arms/arms-defs1.scd").loadPath;
+
+// sawB == boring
+WrapPatch("analog.sawB", [nil, nil, nil, `18000, 0.8]).asSynthDef.add;
+SynthDescLib.at('-1abwv').controls.do(_.postln); ""
+
+ProtoEvent(\polySynthPlayer).copy.putAll((
+	instrument: '-1abwv',
+	freq: [60, 64, 67].midicps,
+	fLowRatio: 1,
+	target: n.synthgroup,
+	bus: a,
+	sustain: 2,
+	sus: 0.3,
+	dec: 0.4
+)).play;
+
+SynthDescLib.at(\formantXfer2).controls.do(_.postln); ""
+
+b = Bus.control(s, 15);
+a = Bus.audio(s, 2);
+
+x = [FormantTable.at(\tenorA), FormantTable.at(\tenorE)];
+x = x.flop;
+
+VC(\sp).free;
+Fact(\shimmerpad).chuck(VC(\sp), nil, (
+	env: Env.adsr(0.05, 0.2, 0.3, 0.5, curve: -2),
+	fenv: Env.adsr(0.15, 0.5, 0.2, 3, peakLevel: 1, bias: 1) //.postcs
+));
+
+ProtoEvent(\polySynthPlayer).copy.putAll((
+	instrument: VC(\sp).v.nodes[0].defname,
+	freq: [60, 64, 67].midicps,
+	ffreq: 14000,
+	fenvsens: 1,
+	glrvbamt: 0, lcrvbamt: 0,
+	target: n.synthgroup,
+	bus: a,
+	sustain: 2
+)).play;
+
+p = Pmono(\formantXfer2,
+	\trig, 1,
+	\inbus, a,
+	\group, n.effectgroup,
+	\outbus, n.inbus,
+	\lpfreq, 3000,
+	\ffreqs, Ptuple([Pseq(x[0])], 1),
+	\amps, Ptuple([Pseq(x[1])], 1),
+	\qs, Ptuple([Pseq(x[2])], 1),
+	\delta, Pseq(#[0.5, 2.0], 1),
+	\amp, 5
+).play;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+
+ProtoEvent(\singleSynthPlayer).copy.putAll((
+	instrument: '-1abwv',
+	isFx: true,
+	chan: n,
+	inbus: a,
+	lpfreq: 15000,
+	ffreqs: x[0][0],
+
+)).play;
+
+
+
+p.coords = Plazy({ BPStream(\word).collect { |item| [item[\start].blend(item[\end], 0.35), item[\end]] } });
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+s.sendMsg(\g_freeAll, 15);
+
+p.word.postcs
+q = p.pts.select { |pt|
+	p.questionKeys.includesEqual(pt[\id])
+};
+
+f = SoundFile.openRead(p.dir +/+ p.v[\path]);
+
+r = { |i|
+	var	data;
+	f.seek((q[i].start * f.sampleRate).asInteger, 0);
+	f.readData(data = FloatArray.newClear(((q[i].end - q[i].start) * f.sampleRate * f.numChannels).asInteger));
+	defer { data.plot2(numChannels: f.numChannels, minval: -1, maxval: 1) };
+};
+
+r.(2);
+
+f.close;
+
+
+
+
+		{
+			var x = (Pseed(Pn(Date.seed, 1), Pwhite(3, 6, inf)) / BP(\drum7).messedUpMulCtl).round * 3,
+				y = (Pseed(Pn(Date.seed + 234321, 1), Pwhite(3, 9, inf))
+					* Env(#[1, 0.075], #[80], 0.5).asStream).round,
+				oldGest = Library.at(\drum78AccGest),
+				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1),
+				rsyncEnv = Env(#[1, 0], #[90], 1.4).asStream;
+			BP(\drum7).gest = Pseq([
+				// Pseq([
+					// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
+					\randquant,
+					Pn(\messedUp, y.asStream),
+					Pfuncn({ ~quant = qbar; \randquant }),
+					Pif(Ptime() < Pstutter(1e6, x.asStream), oldGest),
+				// ], 2),
+				Prout({ |inval|
+					var	xstream = x.asStream,
+						muPats = [
+							Pn(\messedUp, y.asStream),
+							Pfuncn({
+								if(~collIndex == \drum7) { BP(\wtrig).triggerOneEvent(0) };
+								\messedUp1
+							}, Pwhite(1, Env(#[1, 1, 5], #[10, 50]), inf).round.asStream
+								.collect { |num| ~mUp1Num = num; num }
+							)
+						];
+					NotificationCenter.notify(\drum7, \disintegrationAdvance);
+					inval = Pseq([\randsync, muPats[0], \randsync, muPats[1]])
+					.embedInStream(inval);
+					loop {
+						if(rsyncEnv.next.coin) { inval = \randsync.embedInStream(inval) };
+						inval = muPats[0].embedInStream(inval);
+						inval = muPats[1].embedInStream(inval);
+					};
+				})
+			]).collect { |gest| ~lastGesture = gest };
+			BP(\drum8).gest = Pfunc({ BP(\drum7).lastGesture });
+			// BP(\drum8).gest = Pseq([
+			// 	Pseq([
+			// 		// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
+			// 		\randquant,
+			// 		Pn(\messedUp, y.asStream),
+			// 		Pfuncn({ ~quant = qbar; \randquant }),
+			// 		Pif(Ptime() < Pstutter(1e6, x.asStream), oldGest),
+			// 	], 2),
+			// 	Pfunc({ BP(\drum7).lastGesture })
+			// ]);
+			BP(\drum7).messedUpMulCtl.value = 1;
+			BP(\wtrig).delta = Pfunc({ BP(\drum7).lastMessedUpBeats });
+			BP(\wtrig).sustain = (Pkey(\delta) / Ptempo());
+			BP(\wtrig).offset = Pseq([
+				0.75,
+				Pseq([
+					Pn(0, { BP(\drum7).mUp1Num - 1 }),
+					min(Pwhite(1, 3, 1) * 0.5, Pkey(\delta) - 0.5)
+				], inf)
+			]);
+			BP(\cwd).use {
+				~pitchProb.value = 1;
+				~pitchedenv = [Env(#[0, 1, 0.35, 0.35, 0], #[0.01, 0.1, 0.69, 0.2], -4)];
+				~pfreq = (Paccumbounce(35, 46, Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+					-.x Pseries(0, Pwhite(1, 4, Pkey(\numInChord).asStream)))
+				.clump(Pfunc({ |ev| ev[\numInChord] = rrand(7, 11); ev[\numInChord] }))
+				.collect { |deg, ev| Mode(ev[\mode]).cps(deg) };
+				~pitchedSlideProb = 0.5;
+				~pitchedtime = Pfunc({ BP(\wtrig).lastEvent.sustain });
+			};
+			BP(\drum7).messedUp1Beats = Pseq([
+				Pwhite(4, 7, 1),
+				Pseq([
+					Pwrand(#[1, 1.5, 2, 2.5, 3], #[3, 4, 2, 1, 1].normalizeSum, { ~mUp1Num - 1 }),
+					Pwhite(4, 7, 1),
+				], inf)
+			]);
+			0
+			// 18
+		},
+
+		funcCmd: (
+			setDoneSignal: {
+				~doneSignal = NotificationCenter.register(\drum7, \disintegrationAdvance, \wait, e{
+					~stop.();
+				});
+			},
+			clearDoneSignal: { ~doneSignal.remove }
+		),
+		\cmdSync,
+	
+		gcAutoSynthCmd: (gc: { BP(\drum7).messedUpMulCtl }, name: \ctlEnv, outName: \outbus,
+			env: Env(#[1, 3], #[45])),
+	
+		12,
+		[	0.05,
+			{
+				PR(\gcAutoSynthCmd).copy.putAll((
+					gc: BP(\drum7).finalLpfCtl, name: \bassVelMap, outName: \outbus,
+					inbus: BP(\drum7).distCtl.bus,
+					inMin: 5, inMax: 20, outMin: 18000, outMax: 400, slewUp: 1e6, slewDown: 1e6
+				))
+			}
+		],
+		gcAutoSynthCmd: (gc: { BP(\drum7).distCtl }, name: \ctlEnv, outName: \outbus,
+			env: Env(#[5, 20], #[70])),
+		\cmdSync,
+		{ BP(#[drum7, drum8]).stop(0); 0 }
