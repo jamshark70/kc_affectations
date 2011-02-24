@@ -694,7 +694,16 @@
 							// 	env: Env(#[0.05, 0.2], #[1], \exp), connect: 0, time: 16),
 
 							{	var p = BP(\sw);
-								topEnvironment[\clock52] => p;
+								// workaround: BP(\sw) is not supposed to be playing here
+								// but Lorne found that it was at one point
+								// but, if the clock is wrong we need the warning, so...
+								if(p.clock !== topEnvironment[\clock52]) {
+									if(p.isPlaying) {
+										"Somehow BP(\\sw) is playing when setting the clock. The clock may be wrong going forward".warn;
+									} {
+										topEnvironment[\clock52] => p;
+									}
+								};
 								1 => p;
 								p.pitchedmode = Pwrand(#[d0, e0], #[0.8, 0.2], inf);
 								p.synth = \pitched;

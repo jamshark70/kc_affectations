@@ -100,7 +100,8 @@ PR(\abstractProcess).clone {
 		~vcKey = VC.keys.detect { |key| VC(key).value === vc };
 		~event.putAll((
 			chan: VC(~vcKey).env.target,
-			instrument: VC(~vcKey).v.nodes[0].defname
+			instrument: VC(~vcKey).v.nodes[0].defname,
+			bufbase: VC(~vcKey).env.wt.first.bufnum
 		));
 	};
 } => PR(\finalSus);

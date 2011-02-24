@@ -600,6 +600,8 @@ Proto({
 			{ \section } {
 				defer(e {
 					~sectionMenu.value = modifier;
+					~fwdSection.enabled = (~model.sections[~model.currentSection]
+						.tryPerform(\isLastSection) ? false).not;
 					if(~model.isRunning) {
 						~nextCueText.string_(~sectionMenu.items[modifier+1] ? "END");
 					} {

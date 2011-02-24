@@ -1098,7 +1098,7 @@ var lwpLoopParms = { (
 				// 	VC(\wp).v.nodes.do { |node| node.release(-1.6) };
 				// },
 				dur: \trigger,  // or \sync
-				id: 501,  // trig id
+				id: 500,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
