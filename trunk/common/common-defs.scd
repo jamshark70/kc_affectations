@@ -935,6 +935,8 @@ PR(\sectionSequencer).clone({
 			~status = \playing;
 			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
 				/*~savedCmds.*/debug("playing section %".format(~sections[~currentSection].name));
+				Library.at(\vizAddr).tryPerform(\sendMsg, \nowPlaying,
+					~sections[~currentSection].segID);
 				~sections[~currentSection].play(~savedCmds);
 				//"section sequencer: set savedCmds to nil".debug;
 				~savedCmds = nil;
@@ -969,6 +971,7 @@ PR(\sectionSequencer).clone({
 			currentEnvironment.changed(\stop);
 			currentEnvironment.changed(\countoff, nil);
 		} {
+			Library.at(\vizAddr).tryPerform(\sendMsg, \nowPlaying, -1);
 			~sections[~currentSection].stop/*(nil, manualStop)*/;
 			~sections[~currentSection].removeDependant(currentEnvironment);
 				// must force manual stop for last section at end of piece
