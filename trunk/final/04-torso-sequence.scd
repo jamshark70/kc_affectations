@@ -671,7 +671,7 @@
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
-				id: 2110,  // trig id
+				id: 2500,  // trig id
 				init: Func(\nextThingTrig).v,
 				clear: Func(\clearNextTrig).v
 			), 1)
