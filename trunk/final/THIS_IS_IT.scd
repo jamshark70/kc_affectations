@@ -28,16 +28,18 @@
 var	mypath = thisProcess.nowExecutingPath, indices;
 if(BP.exists(\transports)) { BP(\transports).free };
 
-Library.at(\isJamesBox) ?? {
+value {
 	var p = Pipe("hostname", "r"), l;
-	try {
-		if(p.isOpen) {
-			l = p.getLine;
-			if(l.notNil) { Library.put(\isJamesBox, l.contains("dlm")) }
+	Library.at(\isJamesBox) ?? {
+		try {
+			if(p.isOpen) {
+				l = p.getLine;
+				if(l.notNil) { Library.put(\isJamesBox, l.contains("dlm")) }
 				{ Library.put(\isJamesBox, false) };
-		};
-		p.close;
-	} { p.tryPerform(\close) };  // make sure pipe gets closed even on error
+			};
+			p.close;
+		} { p.tryPerform(\close) };  // make sure pipe gets closed even on error
+	};
 };
 
 s = Server.local;
