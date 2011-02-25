@@ -29,8 +29,8 @@ var	mypath = thisProcess.nowExecutingPath, indices;
 if(BP.exists(\transports)) { BP(\transports).free };
 
 Library.at(\isJamesBox) ?? {
+	var p = Pipe("hostname", "r"), l;
 	try {
-		var p = Pipe("hostname", "r"), l;
 		if(p.isOpen) {
 			l = p.getLine;
 			if(l.notNil) { Library.put(\isJamesBox, l.contains("dlm")) }
