@@ -65,7 +65,7 @@
       6. L - pause, poses, multispeed
       7. To corners, all 3 together
 **** DONE Phrasing!!!
-*** DONE Arms [1/3] <2010-12-15 Sun>
+*** DONE Arms [3/3] <2010-12-15 Sun>
 **** New sequence
 ***** +Axial
 ***** +Locomotive + mel
@@ -103,11 +103,11 @@
 ****** Locomotive: Coordinate some notes into rhythm
 ****** Rhythm 4 stacking?
 ****** Rocking
-**** TODO Revisit thin sections: Cradling (use data here!)
+**** DONE Revisit thin sections: Cradling (use data here!)
 ***** Need bass
-**** TODO Fixes [0/2]
-***** TODO Levels: anacrusis too loud, lsolo too loud
-***** TODO VC(\sp) stuck notes
+**** DONE Fixes [2/2]
+***** DONE Levels: anacrusis too loud, lsolo too loud
+***** DONE VC(\sp) stuck notes
 **** DONE Rewrite Laura's solo
 ***** Extend axial notes into locomotive texture - big sweeps going way up!
 ****** Reuse melody, but faster
@@ -116,14 +116,17 @@
 ***** Melody!!!!!
 ***** Rhythm?
 ***** As she leaves, push sounds into distance
-*** TODO Head [0/3] <2010-12-23 Thu>
+*** TODO Head [2/3] <2010-12-23 Thu>
 **** Notes
 ***** Some dips in continuous data
 ***** 24:20 - moving around
 ***** 24:40 - low to ground - laying heads in laps
 ***** Start to disintegrate the rhythms after "metronome" (25:05 in cont. data)
-**** TODO Face: Less squeaky
-**** TODO Pacing: get all the material in faster
+**** TODO Face
+***** Less squeaky in "mouth opens"
+***** Speed up pacing in "emotions"
+****** Chaos is too much, but need more of the pitched stuff to be a bit faster
+**** DONE Pacing: get all the material in faster
 ***** Notes from 10-1122 vid:
       1. head starts, 21:25
       2. voices start, 22:55
@@ -132,7 +135,7 @@
       5. final cadence, 26:05
       6. metronome, 26:15
 
-**** TODO New material for slower movements toward end: reuse some of the face dance stuff
+**** DONE New material for slower movements toward end: reuse some of the face dance stuff
 *** TODO Torso [0/1] <2010-12-26 Sun>
 **** TODO Redo Laura's solo pre-body
 *** TODO Body [0/1] <2011-01-04 Tue>
@@ -302,9 +305,9 @@
 *** H1000-Start of face dance
     1. 1 event trigger for creaking --> door sound
 *** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
-*** H1020-Mouth opens, tongue starts peeking out a bit
-*** H1030-Ilana starts smiling and showing other emotions
-    1. Event trigger to raise the chaos level
+*** H1020-Mouth opens, tongue starts peeking out a bit (2 tongue-out-to-side gestures first)
+*** H1030-Ilana starts smiling and showing other emotions (as she starts to close her mouth)
+    1. (I will probably remove this one) +Event trigger to raise the chaos level+
     2. Event trigger for silence
 *** H1500-Drones start (currently plays automatically)
 
