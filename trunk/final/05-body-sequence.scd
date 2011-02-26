@@ -148,8 +148,8 @@
 	PR(\tlsAff).copy.putAll((
 		name: "B2530-stop low, arm up",
 		segID: 2530,
-		initProcesses: {
-		},
+		// initProcesses: {
+		// },
 		unloadProcesses: { VC(\sp).free; BP(\ffx2).free },
 		seqPattern: {
 			Pn((

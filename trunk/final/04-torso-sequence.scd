@@ -16,7 +16,9 @@
 		seqPattern: {
 			var	headChans = IdentitySet.new;
 			#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8].do { |key|
-				BP(key)[\chan] !? { headChans.add(BP(key)[\chan]) };
+				if(BP.exists(key) and: { BP(key)[\chan].notNil }) {
+					headChans.add(BP(key)[\chan])
+				};
 			};
 			// headChans.add();
 			// "channels to fade out".debug;

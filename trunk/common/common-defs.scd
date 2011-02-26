@@ -797,8 +797,8 @@ Proto {
 		~eventResponder.remove;
 		BP(\segTrig).eventActive(nil, nil, ~eventID);
 		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
-			if(BP(\segTrig).eventTrigsWaiting.isEmpty) { 0 } {
-				BP(\segTrig).eventTrigsWaiting.keys.minItem
+			*if(BP(\segTrig).eventTrigsWaiting.isEmpty) { #[0] } {
+				BP(\segTrig).eventTrigsWaiting.keys
 			}
 		);
 	},
@@ -815,6 +815,7 @@ Proto {
 			// false = not a manual stop, don't kill non-sync commands
 			~stop.(nil, ~isLastSection ? false);
 		}
+		{ inSeg == 100000 } { \dummy }  // 100000 == stop it all, shouldn't handle here
 		{ inSeg > item[\id] } {
 			if((i = topEnvironment[\seq].sections.detectIndex { |sect|
 				sect.segID == inSeg

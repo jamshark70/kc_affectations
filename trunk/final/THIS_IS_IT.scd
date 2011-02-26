@@ -87,8 +87,34 @@ s.waitForBoot {
 				.onClose_(e { ~window = nil });
 
 			~eventTrigsWaiting = IdentityDictionary.new;
+
+			~playStopResp = OSCresponderNode(s.addr, ~message, e { |time, resp, msg|
+				var	sectI, sect, ssq = topEnvironment[\seq], initted;
+				case
+					{ msg[3].inclusivelyBetween(1, 99999) and: { ssq.isRunning.not } } {
+						sectI = ssq.sections.detectIndex { |sct| sct.segID == msg[3] };
+						if(sectI.isNil) {
+							"Segment % doesn't exist; ignored.".format(msg[3]).warn;
+						} {
+							sect = ssq.sections[sectI];
+							initted = sect.isLoaded;
+							ssq.gotoSection(sectI);
+							if(initted) {
+								ssq.play
+							} {
+								fork {
+									2.0.wait;  // maybe not enough, but...
+									ssq.play
+								}
+							};
+						}
+					}
+					{ msg[3] == 100000 and: { ssq.isRunning } } {
+						ssq.stop;
+					};
+			}).add;
 		},
-		userfree: { (e { ~window.close }).defer },
+		userfree: { (e { ~window.close }).defer; ~playStopResp.remove },
 		eventActive: { |cmd, action, eventID(1)|
 			if(cmd.notNil) {
 				if(~eventTrigsWaiting[eventID].isNil) {
