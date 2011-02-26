@@ -14,41 +14,45 @@
 			VC(\tton).free; BP(\tton).free;
 		},
 		seqPattern: {
-			var	headChans = IdentitySet.new;
+			var	headChans = IdentitySet.new,
+				fadeCmds;
 			#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8].do { |key|
 				if(BP.exists(key) and: { BP(key)[\chan].notNil }) {
 					headChans.add(BP(key)[\chan])
 				};
 			};
-			// headChans.add();
-			// "channels to fade out".debug;
-			// headChans.do { |chan| chan.postln };
+			if(headChans.notEmpty) {
+				fadeCmds = [\mixerAutoSynthCmd, 
+					headChans.asArray.collect { |chan|
+						(mixer: chan, name: \ctlPoint, outName: \outbus,
+							value: 0, time: 18, curve: -2.1)
+					}
+				].flop.flat;
+			};
+			if(#[wtrig, cwd].any { |key| BP.exists(key) }) {
+				fadeCmds = fadeCmds ++ [\gcAutoSynthCmd, 
+					BP(#[wtrig, cwd]).collect { |bp|
+						(gc: bp.ampCtl, name: \ctlPoint, outName: \outbus,
+							value: 0, time: 18, curve: -2.1)
+					}
+				].flop.flat
+			};
+			if(fadeCmds.size > 0) {
+				fadeCmds = fadeCmds ++ [	\sync,
+					{
+						BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8]).stop(0);
+						0 // 10
+					}
+				]
+			};
 			Pn((
 				sequence: [
-					{ BP(\hsd).stop(0); 0 },
-					TLSequenceIterator(
-						[\mixerAutoSynthCmd, 
-							headChans.asArray.collect { |chan|
-								(mixer: chan, name: \ctlPoint, outName: \outbus,
-									value: 0, time: 18, curve: -2.1)
-							}
-						].flop.flat
-						++
-						[\gcAutoSynthCmd, 
-							BP(#[wtrig, cwd]).collect { |bp|
-								(gc: bp.ampCtl, name: \ctlPoint, outName: \outbus,
-									value: 0, time: 18, curve: -2.1)
-							}
-						].flop.flat
-						++
-						[	\sync,
-							{
-								BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8]).stop(0);
-								0 // 10
-							}
-							// { BP(\fmt).stop(0); 0 }
-						]
-					).shouldSync_(false),
+					{
+						BP(\hsd).stop(0);
+						if(fadeCmds.size > 0) {
+							TLSequenceIterator(fadeCmds).shouldSync_(false)
+						} { 0 }
+					},
 					bpCmd: (name: \tton, shouldSync: false, prepareBP: { |bp|
 						bp.speedMul.value = 0.1;
 						bp.fshift.value = 0;
