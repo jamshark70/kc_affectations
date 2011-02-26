@@ -123,7 +123,14 @@
 ***** 24:40 - low to ground - laying heads in laps
 ***** Start to disintegrate the rhythms after "metronome" (25:05 in cont. data)
 **** TODO Face
+***** Timings
+****** H1000 - 17:21 (hit event when she rolls eyes up?)
+****** H1010 - 18:15
+****** H1020 - 19:40
+****** H1030 - 20:07
+****** H1500 - 21:03
 ***** Less squeaky in "mouth opens"
+***** Some spaces in "mouth opens" (2 tongue-out things)
 ***** Speed up pacing in "emotions"
 ****** Chaos is too much, but need more of the pitched stuff to be a bit faster
 **** DONE Pacing: get all the material in faster
@@ -182,52 +189,49 @@
   Event cues in a segment are numbered
 ** Feet
 *** F1-Bang!
-*** -Ilana joins
-*** -Laura joins
-*** F10-3 poses
-    1. Second of 3 poses
-    2. Third of 3
-*** -Stephen's pattern (@2:45 in 12-01-10_walking?)
-    1. Hop
-*** F20-slinky (backstage, moving closer and further apart)
-    1. Three or four event cues as desired
-*** F30-Restart Ilana's pattern
-*** F40-Restart Laura's pattern + 3 poses
+*** F10-Ilana joins
+*** F20-Laura joins
     1. First of 3 poses
     2. Second of 3
     3. Third of 3
-*** F50-changing speeds
-*** F55-3 patterns in counterpoint
+*** F30-Stephen pattern (@2:45 in 12-01-10_walking?)
+*** F40-slinky (backstage, moving closer and further apart)
+    1. Three or four event cues as desired
+*** F50-Restart Ilana's pattern
+*** F60-Restart Laura's pattern + 3 poses
+    1. First of 3 poses
+    2. Second of 3
+    3. Third of 3
+*** F70-changing speeds
+*** F80-3 patterns in counterpoint
     (As far as I can see, the hop is gone)
-*** F60-stop(short) when they come to a line and all stop moving
-*** F70-axial -- head bowing or just before is a good spot
-*** F80-walking(swinging)
-*** F90-3 inversions -- first is Laura's slide between Stephen and Ilana
+*** F90-stop(short) when they come to a line and all stop moving
+*** F100-axial -- head bowing or just before is a good spot
+*** F110-walking(swinging)
+*** F120-3 inversions -- first is Laura's slide between Stephen and Ilana
     1. Second of 3 moves
     2. Third of 3
-*** F100-hop/lean -- segment cue on the hop
+*** F130-hop/lean -- segment cue on the hop
     1. (Quickly!) Event cue when they stop and lean
-*** F110-Conflict -- segment cue on the first military turn
-    Note, this advanced automatically in the first version but is now
-    cued
+*** F140-Conflict -- segment cue on the first military turn
+    Note, this advanced automatically in the first version but is now cued
     1. Event cue on second turn
-*** F115-small leans back and forth (see 8:36 in 12-01-10_walking)
-*** F116-military turns
-*** F120-falling - start with Ilana's fall
+*** F150-small leans back and forth (see 8:36 in 12-01-10_walking)
+*** F160-military turns
+*** F170-falling - start with Ilana's fall
     This is a more complicated cue.
     1. (Quickly!) Once during the 3 poses after Ilana falls
     2. When Stephen falls
     3. When they start trading places falling down
     4. When Stephen goes into a handstand with just the feet illuminated
-*** F130-military turns
-*** F140-normal+inversions - when the military turns stop
+*** F180-military turns
+*** F190-normal+inversions - when the military turns stop
     1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
     2. When they scatter to the three corners - next segment cue
        comes quickly!
-*** F150-multispeed - when Laura starts walking VERbY slowly
+*** F200-multispeed - when Laura starts walking VERY slowly
     1. Event cue when Stephen and Ilana come in
-*** F160-Partnering - runs by itself
-
+*** F210-Partnering - runs by itself
 ** Arms
 *** A500 -- first statement of axial theme: when they separate and arms come up
     1. One event cue per arm gesture = one melody note
