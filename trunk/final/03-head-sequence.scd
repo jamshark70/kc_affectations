@@ -656,7 +656,7 @@ t2 = [
 							~gest = Pswitch1([
 								Prand(#[squeak, smoothsqueaks], inf),
 								\bloop, \wet
-							], Pwrand(#[0, 1, 2], #[0.5, 0.4, 0.1], inf)).asStream;
+							], Pwrand(#[0, 1, 2], #[0.3, 0.6, 0.1], inf)).asStream;
 							~deltas = Pseq([
 								Pwhite(0.4, 1.1, { rrand(2, 9) }),
 								Pwhite(2.2, 4.1, { rrand(1, 3) })
@@ -695,9 +695,9 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \sw, shouldSync: false, playWarning: false),
 					gcAutoSynthCmd: (gc: { BP(\sw).pitchProb }, name: \ctlEnv, outName: \outbus,
-						env: Env(#[0.1, 0.95], #[1]), time: 55,
+						env: Env(#[0.35, 0.95], #[1], -1.5), time: 45,
 						connect: 0, shouldSync: false),
-					{	var	e = Env(#[1, 0.1], #[80]).asStream;
+					{	var	e = Env(#[1, 0.18], #[48]).asStream;
 						BP(\sw).noisydelta = Pwhite(3.0, 6.0, inf) * e;
 						BP(\sw).noisytime = (Pkey(\delta) / e).linlin(3.0, 6.0, 4.0, 9.0) * e;
 						BP(\sw).pitcheddelta = Pwhite(1.5, 4.0, inf) * e;
@@ -902,7 +902,7 @@ t2 = [
 		unloadProcesses: {
 			fork {
 				var	oldMstClock = BP(\mstClock);
-				BP(#[traj, fmt, hsd]).free;
+				BP(#[/*traj,*/ fmt, hsd]).free;
 				5.0.wait;
 				if(BP(\mstClock) === oldMstClock) {
 					oldMstClock.free;  // making durned sure this is the last one to go

@@ -409,7 +409,7 @@ BP.all.stop
 
 
 o.do(_.remove);
-o = #['/eventTrig', '/segTrig'].collect { |key|
+o = #['/eventTrig', '/segTrig', '/nowPlaying'].collect { |key|
 	OSCresponderNode(nil, key, { |t, r, m| m.postln }).add
 };
 

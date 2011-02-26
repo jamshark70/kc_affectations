@@ -524,6 +524,8 @@ var lwpLoopParms = { (
 					bpCmd: (name: \st, shouldSync: false, prepareBP: { |bp|
 						bp.gDelta = Pwhite(1.5, 3.0, inf)
 					}),
+					0.05,
+					{ BP(\st).addAutoRun; 0 }
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -911,7 +913,8 @@ var lwpLoopParms = { (
 					{ BP(\st).addAutoRun; 0 },
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
-					{	BP(\st).runGesture((
+					{	BP(\st).removeAutoRun;
+						BP(\st).runGesture((
 							gest: \lauraslide,
 							notesKey: \lauraslide,
 							ampAdjust: 0.15,

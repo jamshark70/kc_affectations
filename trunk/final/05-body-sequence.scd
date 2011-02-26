@@ -796,13 +796,14 @@
 						level: 0, time: 19, curve: -2.1),
 					mixerAutoSynthCmd: (mixer: VC(\sp).env.target, name: \ctlPoint, outName: \outbus,
 						level: 0, time: 19, curve: -2.1),
-					\cmdSync,
-					{ BP.all.stop; VC(\sp).releaseAll; 0 }
+					\cmdSync //,
+					// { BP.all.stop;  0 }
 				],
 				onStop: {
 					BP.keys.do { |key|
 						if(#[segTrig, evTrig].includes(key).not) { BP(key).stop };
 					};
+					VC(\sp).releaseAll;
 				},
 				dur: \sync,
 				id: 2620,  // trig id

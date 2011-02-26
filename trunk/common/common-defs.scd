@@ -797,7 +797,9 @@ Proto {
 		~eventResponder.remove;
 		BP(\segTrig).eventActive(nil, nil, ~eventID);
 		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
-			if(BP(\segTrig).eventTrigsWaiting.isEmpty) { 0 } { ~eventID.neg }
+			if(BP(\segTrig).eventTrigsWaiting.isEmpty) { 0 } {
+				BP(\segTrig).eventTrigsWaiting.keys.minItem
+			}
 		);
 	},
 	func: \dummy
