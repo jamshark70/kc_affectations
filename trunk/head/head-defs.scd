@@ -184,8 +184,11 @@ make: { |name|
 },
 type: \bp) => Fact(\mstClock);
 
+Library.put(\droneVizKeys, Library.at(\defaultVizKeys).copy
+	.put(1, \ratio));
+
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayNotify);
+	~event = (eventKey: \singleSynthPlayNotify/*Data, vizKeys: Library.at(\droneVizKeys)*/);
 	~cl = \mstClock;
 	~alwaysReset = true;
 	~quant = NilTimeSpec.new;
@@ -268,6 +271,7 @@ PR(\abstractProcess).clone {
 			// busywait to reduce scheduling latency for new streams
 			sp.par(Pbind(
 				\instrument, \rest,
+				// \dataToViz, false,
 				\delta, 0.1 * Ptempo()
 			));
 			~initStreams.(sp);
@@ -889,7 +893,8 @@ WrapInstr("analog.sawB", { |freq, gate = 1, detune = 1.003, ffreq = 2000, vsens 
 }, [\freq, NoLagControlSpec(0, 1), \mydetune, \freq, nil, #[0.01, 20.0], #[0.01, 20.0], #[0, 1], #[0.01, 20.0]]);
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthFxPatLock, addAction: \addToHead);
+	~event = (eventKey: \polySynthFxPatLockData, addAction: \addToHead,
+		vizKeys: Library.at(\defaultVizKeys).copy.put(5, \gate));
 
 	~seqKeys = #[t1, a1];
 	~att = 1; // Pkey(\sustain) * 0.3;
@@ -1244,6 +1249,10 @@ keys: #[master, glrvbmc, lcrvbmc, clock108],
 make: { |name|
 	BP(name).free;
 	PR(\bufPerc).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData, grain: true,
+			vizKeys: Library.at(\defaultVizKeys).copy.put(3, \rate),
+			vizPath: #[perc]
+		),
 		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		alwaysReset: true,
 		reset: { ~pbindPreAction.reset },
@@ -1290,7 +1299,8 @@ make: { |name|
 			~argPairs = ~argPairs ++ [
 				ffreq: Pif(Pkey(\bufIndex) > 0, 18000, BPStream(\ffreq)),
 				fdec: ~fdecCtl, 
-				wet: Pif(Pkey(\bufIndex) > 0, 0, ~wetCtl.asMap)
+				wet: Pif(Pkey(\bufIndex) > 0, 0, ~wetCtl.asMap),
+				dataToViz: Pbinop('!=', Pkey(\instrument), \rest)
 			];
 			// sibling processes may not init until I'm done
 			NotificationCenter.notify(name, \ready);
@@ -1348,6 +1358,10 @@ makeBP: { |name|
 		copyKeys: Fact(\copyBufPerc).copyKeys ++ #[fdecCtl, ffLowCtl, ffRangeCtl, wetCtl, distCtl, def, finalLpfCtl],
 		bp: ~source,
 		parms: (
+			event: (eventKey: \singleSynthPlayerData, grain: true,
+				vizKeys: Library.at(\defaultVizKeys).copy.put(3, \rate),
+				vizPath: #[perc]
+			),
 			alwaysReset: true,
 			reset: { ~pbindPreAction.reset },
 			baseIndices: #[2, 6],
@@ -1358,7 +1372,8 @@ makeBP: { |name|
 				~argPairs = [
 					ffreq: BPStream(\ffreq),
 					fdec: ~fdecCtl,
-					wet: ~wetCtl.asMap
+					wet: ~wetCtl.asMap,
+					dataToViz: Pbinop('!=', Pkey(\instrument), \rest)
 				];
 				~event.put(\distance, ~distCtl.asMap).put(\lpFreq, ~finalLpfCtl.asMap);
 			}	
@@ -1377,6 +1392,10 @@ makeBP: { |name|
 	var parms;
 	BP(name).free;
 	parms = (
+		event: (eventKey: \singleSynthPlayerData, grain: true,
+			vizKeys: Library.at(\defaultVizKeys).copy.put(3, \rate),
+			vizPath: #[perc]
+		),
 		alwaysReset: true,
 		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		source: ~source,
@@ -1390,7 +1409,10 @@ makeBP: { |name|
 			~event.put(\distance, ~distCtl.asMap).put(\lpFreq, ~finalLpfCtl.asMap);
 
 			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 2000, \freq);
-			~argPairs = [ffreq: ~ffreqCtl.asMap];
+			~argPairs = [
+				ffreq: ~ffreqCtl.asMap,
+				dataToViz: Pbinop('!=', Pkey(\instrument), \rest)
+			];
 			NotificationCenter.notify(name, \ready);
 		},
 		useGui: { |vpi| ~ffreqCtl => VP(vpi) },
@@ -1432,6 +1454,10 @@ make: { |name|
 makeBP: { |name|
 	BP(name).free;
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData, grain: true,
+			vizKeys: Library.at(\defaultVizKeys).copy.put(3, \rate),
+			vizPath: #[perc]
+		),
 		bufPaths: nil,
 		buffers: ~source.asArray.collect { |bp| BP(bp).buffers }.flat,
 		def: \bufGrainPanFmletDist, //\bufGrainRLPFPanDist,
@@ -1464,7 +1490,10 @@ makeBP: { |name|
 		start: 0,
 		pan: ~pan ? 0,
 		ffreq: 18000,
-		argPairs: [pan: Plazy({ BPStream(\pan) })],
+		argPairs: [
+			pan: Plazy({ BPStream(\pan) }),
+			dataToViz: Pbinop('!=', Pkey(\instrument), \rest)
+		],
 		reset: {
 			var	str;
 			currentEnvironment.env.keys.do { |key|
@@ -1511,9 +1540,13 @@ Library.put(\drum78AccGest, Pfsm([
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthPlayer, instrument: \bufGrainRLPFPanDist //,
-		// printStoppedStream: true,    // debugging
-		// printAllStreamsOnStop: false
+	~event = (eventKey: \polySynthPlayerData, instrument: \bufGrainRLPFPanDist,
+		vizKeys: Library.at(\defaultVizKeys).copy
+			// soundID indicates accent
+			.put(1, \isAccent)
+			.put(3, \rate),
+		vizPath: #[perc],
+		isAccent: 0
 	);
 	~source = #[drum1, drum3];
 	~alwaysReset = true;
@@ -2000,6 +2033,7 @@ PR(\abstractProcess).clone {
 
 	~accEvent = { |ev, delta(Pn(0.1, 1))|
 		Pbind(
+			\isAccent, 1,
 			\instrument, \bufGrainPanFmletDist,
 			\delta, delta,
 			\bufIndex, 0,
@@ -2025,7 +2059,7 @@ PR(\abstractProcess).clone {
 			(key ++ "Stream").asSymbol.envirGet ?? { ~makeStreamForKey.(key) };
 		};
 		// w/o Pif, Event.silent results from Ppar cause this to die
-		Pif(Pfunc({ |ev| ev[\type] == \rest }), Pfunc({ |ev| ev }),
+		Pif(Pfunc({ |ev| ev[\type] == \rest }), Pfunc({ |ev| ev.put(\dataToViz, false) }),
 			Pbind(
 				\bufnum, Pindex(~buffers, Pkey(\bufIndex), inf),
 				\time, Pfunc({ |ev| ~buffers[ev[\bufIndex]].asArray.collect(_.duration) })
@@ -2061,7 +2095,8 @@ make: { |name|
 		lpcPath: "words-ana3.lpc.aif",
 		labelPath: "words-labels.txt",
 		audioPath: "words-mono.aiff",
-		event: (eventKey: \polySynthBusLock),
+		event: (eventKey: \polySynthBusLockData,
+			vizKeys: Library.at(\defaultVizKeys).copy.put(5, \gate)),
 		tun: PR(\counterpoint).tun,
 	
 		userprep: {
@@ -2188,6 +2223,14 @@ make: { |name|
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData,
+			vizKeys: Library.at(\defaultVizKeys).copy
+				.put(1, { BP(~collIndex).keyLookup[~synthKey] })
+				.put(3, { ~freq1.tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+				.put(5, { if(~synthKey == \buzz) { ~amp } { ~normAmp } }),
+			vizPath: #[perc]
+		),
+		keyLookup: (sinb: 0, oscb: 1, buzz: 2),
 		master: ~master,
 		glrvbmc: ~glrvbmc,
 		lcrvbmc: ~lcrvbmc,
@@ -2341,7 +2384,12 @@ make: { |name|
 
 // creaks
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayer);
+	~event = (eventKey: \singleSynthPlayerData,
+		vizKeys: Library.at(\defaultVizKeys).copy
+		.put(0, \cr.hash)
+		.put(3, \rate),
+		soundID: 0,
+		vizPath: #[perc]);
 	~def = \bufGrain2Dist;
 	~dir = topEnvironment[\sampleDir];
 	~path = "head/norm-29690_HerbertBoland_Creak_3.wav";
@@ -2510,7 +2558,9 @@ make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
 		alwaysReset: true,
-		event: (eventKey: \singleSynthPlayNotify).proto_(topEnvironment[\rvbEvent].proto),
+		event: (eventKey: \singleSynthPlayNotifyData, soundID: 0,
+			vizPath: #[perc])
+			.proto_(topEnvironment[\rvbEvent].proto),
 		inChannels: 2,
 		master: topEnvironment[\master],
 		glrvbmc: topEnvironment[\glrvbmc],
@@ -2614,7 +2664,13 @@ make: { |name|
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthBusLock).proto_(topEnvironment[\rvbEvent].proto),
+		event: (eventKey: \polySynthBusLockData,
+			vizKeys: Library.at(\defaultVizKeys).copy
+				.put(1, { BP(~collIndex).keyLookup[~synthKey] })
+				.put(3, { ~freq1.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+				.put(5, \normAmp)
+		).proto_(topEnvironment[\rvbEvent].proto),
+		keyLookup: (noisy: 0, pitched: 1),
 		dir: topEnvironment[\sampleDir],
 		path: "head/questions1.aiff",
 		labelPath: { ~dir +/+ "head/questions1-labels.txt" },

@@ -692,7 +692,7 @@ Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 	};
 } => Func(\dataWrapProtoEvent);
 
-#[default, polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger].do { |key|
+#[default, polySynthPlayNotify, polySynthPlayer, polySynthTrigger, singleSynthPlayNotify, singleSynthPlayer, singleSynthTrigger, polySynthBusLock, polySynthKrBusLock, polySynthFxPatLock].do { |key|
 	\dataWrapProtoEvent.eval(key);
 };
 
