@@ -2,7 +2,189 @@
 #+DRAWERS: ANNOTATION
 #+OPTIONS: d:nil num:nil toc:nil
 
-* Essentials
+* Cue list
+  Segments are in 3rd-level headings (***)
+  Event cues in a segment are numbered
+** Feet
+*** F1-Bang!
+*** F10-Ilana joins
+*** F20-Laura joins
+    :ANNOTATION:
+    The event cues happen when they stop in the three poses backstage right.
+    :END:
+    1. First of 3 poses
+    2. Second of 3
+    3. Third of 3
+*** F30-Stephen pattern (@2:45 in 12-01-10_walking?)
+*** F40-slinky (backstage, moving closer and further apart)
+    1. Three or four event cues as desired
+*** F50-Restart Ilana's pattern
+*** F60-Restart Laura's pattern + 3 poses
+    1. First of 3 poses
+    2. Second of 3
+    3. Third of 3
+*** F70-changing speeds -- Laura starts moving very slowly
+*** F80-3 patterns in counterpoint -- when they split up for the original corners where they entered
+*** F90-stop(short) when they come to a line and all stop moving
+*** F100-axial -- head bowing or just before is a good spot
+*** F110-walking (swinging)
+*** F120-3 inversions -- first is Laura's slide between Stephen and Ilana
+    1. Second of 3 moves
+    2. Third of 3
+*** F130-hop/lean -- segment cue on the hop
+    1. (Quickly!) Event cue when they stop and lean
+*** F140-Conflict -- segment cue on the first military turn
+    1. Event cue on second turn
+*** F150-small leans back and forth (see 8:36 in 12-01-10_walking)
+*** F160-military turns
+*** F170-falling - start with Ilana's fall
+    This is a more complicated cue.
+    1. (Quickly!) Once during the 3 poses after Ilana falls
+    2. When Stephen falls
+    3. When they start trading places falling down
+    4. When Stephen goes into a handstand with just the feet illuminated
+*** F180-military turns
+*** F190-normal+inversions - when the military turns stop
+    1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
+    2. When they scatter to the three corners - next segment cue comes quickly!
+*** F200-multispeed - when Laura starts walking VERY slowly
+    1. Event cue when Stephen and Ilana come in
+*** F210-Partnering - when the motion changes away from simple walking
+** Arms
+*** A500 -- first statement of axial theme: when they separate and arms come up
+    1. One event cue per arm gesture = one melody note
+    :ANNOTATION:
+    Segment trigger fires the first note. Event triggers fire successive notes. The idea is to catch each arm motion. It's okay if you miss one or two -- would add variety to the rhythm.
+    :END:
+*** A510 -- first statement of locomotive theme: when they start moving
+    1. 1-3 event triggers to start a melody playing. (Event triggers during the melody are ignored.)
+    :ANNOTATION:
+    Segment trigger launches. Event triggers cause a melody to play. I haven't thought about what enough movement should make that happen. One event trigger starts the melody and it runs on its own. Event triggers are ignored until the melody stops.
+
+    I'm using y-span / x-span to decide note density and the rate at which the notes rotate around the virtual space.
+    :END:
+*** A520 -- sunrise: when Stephen joins L&I backstage left and arms make an arc
+    :ANNOTATION:
+    Just a segment trigger. This is where Ilana and Laura are to the left (from the audience's point of view), then Steven slides over and joins them, and they all make an arc with their hands from left to right. The segment trigger should happen when they start the arc or just before (probably makes sense to look at Stephen coming over).
+    :END:
+*** A530 -- hand stacking: when the three kneel together
+    :ANNOTATION:
+    Segment trigger. This starts when they kneel to the floor.
+
+    When I detect that the height (y-max) is increasing, the base pitch goes up; when decreasing, it goes down. Timing of the movement may be an issue -- not a good idea to take significantly longer (pitches will go too high), or to take much longer to come down than to go up (too low).
+    :END:
+*** A540 -- partnering: after breaking out of the stacking pose
+    :ANNOTATION:
+    Segment trigger only, when they break out of the hand stacking position.
+    :END:
+*** A550 -- Shiva (axial)
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
+*** A560 -- more partnering: after breaking out of the Shiva pose
+    1. One event trigger -- plays a few Shiva notes.
+    2. (Optional) event trigger for a bit of locomotive material, but only if there's time.
+    :ANNOTATION:
+    Segment trigger to start, like A540, when they move away from the Shiva posture. You should hit one event trigger a few seconds later -- that makes a few Shiva notes play. Some more things happen on their own. One more event trigger is possible, but optional, later, to do a little bit of the locomotive material.
+    :END:
+*** A570 -- axial theme, three levels
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
+*** A580 -- Stephen and Ilana duet: after breaking out of the three-levels pose
+    1. Event trigger for second chord (when S&I are embracing).
+    :ANNOTATION:
+    Segment trigger (as Laura is starting to lie down) makes a bass glissando and one chord. Event trigger makes a second chord. Probably best to trigger that sometime when they're embracing. It plays on its own after that.
+    :END:
+*** A600 -- manipulating Laura: when they pick Laura up
+    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
+    :ANNOTATION:
+    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
+    :END:
+*** A610 -- loco-prep: when Laura disappears behind S&I
+    :ANNOTATION:
+    Segment trigger only. Intended for this to happen when Laura goes behind them.
+    :END:
+*** A620 -- another short locomotive section: when Laura bursts to the front between S&I
+    :ANNOTATION:
+    Segment trigger, should be timed when Laura bursts to the front between Stephen and Ilana.
+    :END:
+*** A630 -- cradling gesture: L&I's entrance from left
+    :ANNOTATION:
+    Just a segment trigger, but I wrote the sequence so that we could cue the materials visually (by event triggers). Let's talk about that.
+    :END:
+*** A640 -- Laura solo: Laura's re-entrance from right
+    :ANNOTATION:
+    Segment trigger, materials triggered by continuous data. Don't worry about it :)
+    :END:
+*** A650 -- fade out to make silence before the face dance
+    :ANNOTATION:
+    This is still left over from October -- I need to fix it so that the fadeout is slow and gradual, maybe controlled by their x position.
+    :END:
+** Head
+*** H1000-Start of face dance
+    1. 1 event trigger for creaking --> door sound
+*** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
+*** H1020-Mouth opens, tongue starts peeking out a bit (2 tongue-out-to-side gestures first)
+*** H1030-Ilana starts smiling and showing other emotions (as she starts to close her mouth)
+    1. (I will probably remove this one) +Event trigger to raise the chaos level+
+    2. Event trigger for silence
+*** H1500-H1650-Drones start (currently plays automatically)
+    :ANNOTATION:
+    These are structured as cues, but in fact they are automatically timed. Each cue in H1530-H1650 represents one phrase of "sung" material.
+
+    Event triggers under #2:
+    ID=1 -- when triggered, this will fade out the drones
+    ID=2 -- when triggered, this starts the disintegration
+    :END:
+    1. Event cue when the three dancers kneel side by side on the floor
+    2. Two event cues that overlap. They may fire in any order.
+       ID=2 -- after breaking out of the "metronome" gesture and going to the floor
+       ID=1 -- at your discretion, sometime after H1650 runs
+
+** Torso
+*** T2000 - hit this about 20-30 seconds before they are in the initial stationary torso pose
+*** T2010 - as Laura and Ilana leave before Stephen's solo (30:20)
+    :ANNOTATION:
+    Hit #1 and #2 as he /starts/ to speed up (31:20), so the musical gesture reaches full steam when he's moving fastest
+    :END:
+    1. Event cue as Stephen speeds up for the hopping gesture
+    2. A second event cue a little later (same action) (31:53)
+*** T2020 - Ilana enters (32:06)
+    1. Event cue for the same motion (32:32) - *before* Laura comes in
+*** T2030 - energy exchanges (32:53)
+*** T2040 - ensemble work when they all rise to stand (33:22)
+*** T2050 - as Ilana is starting to go down to the floor (33:53)
+*** T2060 - when they start moving quickly as an ensemble (34:45)
+*** T2070 - when they start to slow down (35:04)
+*** T2080 - when Ilana goes up onto the platform (OK to hit this as she is heading for the platform) -- let this run through Stephen's shorter solo (35:31)
+*** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
+*** T2100 - Stephen and Laura's duet (37:20-ish)
+
+** Body
+   :ANNOTATION:
+   Cues B2500-B2560 may change considerably, since I need to rewrite this transition.
+   :END:
+*** B2500 - Segment trigger on the first arms axial move.
+    1. Event triggers for successive axial moves (like arm section).
+	When she starts moving arms and torso, slow down the triggers.
+*** B2510 - At the restart of the axial sequence -- very short cue!
+*** B2520 - Locomotive theme, in place. Another very short cue.
+*** B2530 - Hit this when she stops in the triangle shape.
+*** B2540 - Restart axial sequence -- very short, as in 2510.
+*** B2550 - Locomotive in place, short like 2520.
+*** B2560 - Wild arm movements.
+*** B2570 - Stephen touches Laura's arm/shoulder after her solo (42:48)
+    A melody plays here for a bit less than a minute. When that's over, hit the next one.
+*** B2580 - drums 1 -- drums will start after a few seconds -- I can make this more immediate later
+*** B2590 - the first foreshadowing of Ilana's suspension (45:38)
+    :ANNOTATION:
+    It's incredibly hard to describe the "foreshadowing" in words. I want to make an association between lifting Ilana and supporting her by her torso (kind of like she's flying) and the upward arpeggios. These can occur a few seconds in advance of the actual lift, but I really wouldn't like it if they are too late.
+    :END:
+*** B2600 - second foreshadowing (47:05, just before)
+*** B2610 - last suspension (48:17-ish)
 
 
 * Schedules
@@ -155,10 +337,12 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [9/12]
-**** TODO Refactor snare drum stuff in feet sequence
-**** TODO Proper fix for F20
+*** TODO Coding fixes [13/14]
 **** TODO F110 was silent when playing in sequence - couldn't reproduce just now?
+**** DONE Drone data to Lorne
+**** DONE Fix H1540 stop bug
+**** DONE Refactor snare drum stuff in feet sequence
+**** DONE Proper fix for F20
 **** DONE slight break in drums just before drum7/8
 **** DONE BP(\fmt): init filter amps to 1.0
 **** DONE Undo dataIn changes
@@ -183,170 +367,6 @@
 ** Data from Lorne [1/1]
 *** DONE Possible to get average position weighted by velocity?
     E.g., late head section (sparkles)
-
-* Cue list
-  Segments are in 3rd-level headings (***)
-  Event cues in a segment are numbered
-** Feet
-*** F1-Bang!
-*** F10-Ilana joins
-*** F20-Laura joins
-    1. First of 3 poses
-    2. Second of 3
-    3. Third of 3
-*** F30-Stephen pattern (@2:45 in 12-01-10_walking?)
-*** F40-slinky (backstage, moving closer and further apart)
-    1. Three or four event cues as desired
-*** F50-Restart Ilana's pattern
-*** F60-Restart Laura's pattern + 3 poses
-    1. First of 3 poses
-    2. Second of 3
-    3. Third of 3
-*** F70-changing speeds
-*** F80-3 patterns in counterpoint
-    (As far as I can see, the hop is gone)
-*** F90-stop(short) when they come to a line and all stop moving
-*** F100-axial -- head bowing or just before is a good spot
-*** F110-walking(swinging)
-*** F120-3 inversions -- first is Laura's slide between Stephen and Ilana
-    1. Second of 3 moves
-    2. Third of 3
-*** F130-hop/lean -- segment cue on the hop
-    1. (Quickly!) Event cue when they stop and lean
-*** F140-Conflict -- segment cue on the first military turn
-    Note, this advanced automatically in the first version but is now cued
-    1. Event cue on second turn
-*** F150-small leans back and forth (see 8:36 in 12-01-10_walking)
-*** F160-military turns
-*** F170-falling - start with Ilana's fall
-    This is a more complicated cue.
-    1. (Quickly!) Once during the 3 poses after Ilana falls
-    2. When Stephen falls
-    3. When they start trading places falling down
-    4. When Stephen goes into a handstand with just the feet illuminated
-*** F180-military turns
-*** F190-normal+inversions - when the military turns stop
-    1. When Stephen goes into a gymnastic pose on Laura and Ilana's shoulders
-    2. When they scatter to the three corners - next segment cue
-       comes quickly!
-*** F200-multispeed - when Laura starts walking VERY slowly
-    1. Event cue when Stephen and Ilana come in
-*** F210-Partnering - runs by itself
-** Arms
-*** A500 -- first statement of axial theme: when they separate and arms come up
-    1. One event cue per arm gesture = one melody note
-    :ANNOTATION:
-    Segment trigger fires the first note. Event triggers fire successive notes. The idea is to catch each arm motion. It's okay if you miss one or two -- would add variety to the rhythm.
-    :END:
-*** A510 -- first statement of locomotive theme: when they start moving
-    1. 1-3 event triggers to start a melody playing. (Event triggers during the melody are ignored.)
-    :ANNOTATION:
-    Segment trigger launches. Event triggers cause a melody to play. I haven't thought about what enough movement should make that happen. One event trigger starts the melody and it runs on its own. Event triggers are ignored until the melody stops.
-
-    I'm using y-span / x-span to decide note density and the rate at which the notes rotate around the virtual space.
-    :END:
-*** A520 -- sunrise: when Stephen joins L&I backstage left and arms make an arc
-    :ANNOTATION:
-    Just a segment trigger. This is where Ilana and Laura are to the left (from the audience's point of view), then Steven slides over and joins them, and they all make an arc with their hands from left to right. The segment trigger should happen when they start the arc or just before (probably makes sense to look at Stephen coming over).
-    :END:
-*** A530 -- hand stacking: when the three kneel together
-    :ANNOTATION:
-    Segment trigger. This starts when they kneel to the floor.
-
-    When I detect that the height (y-max) is increasing, the base pitch goes up; when decreasing, it goes down. Timing of the movement may be an issue -- not a good idea to take significantly longer (pitches will go too high), or to take much longer to come down than to go up (too low).
-    :END:
-*** A540 -- partnering: after breaking out of the stacking pose
-    :ANNOTATION:
-    Segment trigger only, when they break out of the hand stacking position.
-    :END:
-*** A550 -- Shiva (axial)
-    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
-    :ANNOTATION:
-    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
-    :END:
-*** A560 -- more partnering: after breaking out of the Shiva pose
-    1. One event trigger -- plays a few Shiva notes.
-    2. (Optional) event trigger for a bit of locomotive material, but only if there's time.
-    :ANNOTATION:
-    Segment trigger to start, like A540, when they move away from the Shiva posture. You should hit one event trigger a few seconds later -- that makes a few Shiva notes play. Some more things happen on their own. One more event trigger is possible, but optional, later, to do a little bit of the locomotive material.
-    :END:
-*** A570 -- axial theme, three levels
-    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
-    :ANNOTATION:
-    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
-    :END:
-*** A580 -- Stephen and Ilana duet: after breaking out of the three-levels pose
-    1. Event trigger for second chord (when S&I are embracing).
-    :ANNOTATION:
-    Segment trigger (as Laura is starting to lie down) makes a bass glissando and one chord. Event trigger makes a second chord. Probably best to trigger that sometime when they're embracing. It plays on its own after that.
-    :END:
-*** A600 -- manipulating Laura: when they pick Laura up
-    1. One event cue per arm gesture = one melody note. Segment trigger fires the first note.
-    :ANNOTATION:
-    Like A500. Segment trigger fires the first note. Event triggers fire successive notes.
-    :END:
-*** A610 -- loco-prep: when Laura disappears behind S&I
-    :ANNOTATION:
-    Segment trigger only. Intended for this to happen when Laura goes behind them.
-    :END:
-*** A620 -- another short locomotive section: when Laura bursts to the front between S&I
-    :ANNOTATION:
-    Segment trigger, should be timed when Laura bursts to the front between Stephen and Ilana.
-    :END:
-*** A630 -- cradling gesture: L&I's entrance from left
-    :ANNOTATION:
-    Just a segment trigger, but I wrote the sequence so that we could cue the materials visually (by event triggers). Let's talk about that.
-    :END:
-*** A640 -- Laura solo: Laura's re-entrance from right
-    :ANNOTATION:
-    Segment trigger, materials triggered by continuous data. Don't worry about it :)
-    :END:
-*** A650 -- fade out to make silence before the face dance
-    :ANNOTATION:
-    This is still left over from October -- I need to fix it so that the fadeout is slow and gradual, maybe controlled by their x position.
-    :END:
-** Head
-*** H1000-Start of face dance
-    1. 1 event trigger for creaking --> door sound
-*** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
-*** H1020-Mouth opens, tongue starts peeking out a bit (2 tongue-out-to-side gestures first)
-*** H1030-Ilana starts smiling and showing other emotions (as she starts to close her mouth)
-    1. (I will probably remove this one) +Event trigger to raise the chaos level+
-    2. Event trigger for silence
-*** H1500-Drones start (currently plays automatically)
-
-** Torso
-*** T2000 - getting set for the first torso theme (right around 28:30 in the residency video)
-*** T2010 - as Laura and Ilana leave before Stephen's solo (30:20)
-    1. Event cue as Stephen speeds up for the hopping gesture -- hit this as he starts to speed up (31:20), so the musical gesture reaches full steam when he's moving fastest
-    2. A second event cue a little later (same action) (31:53)
-*** T2020 - Ilana enters (32:06)
-    1. Event cue for the same motion (32:32) - *before* Laura comes in
-*** T2030 - energy exchanges (32:53)
-*** T2040 - ensemble work when they all rise to stand (33:22)
-*** T2050 - as Ilana is starting to go down to the floor (33:53)
-*** T2060 - when they start moving quickly as an ensemble (34:45)
-*** T2070 - when they start to slow down (35:04)
-*** T2080 - when Ilana goes up onto the platform (OK to hit this as she is heading for the platform) -- let this run through Stephen's shorter solo (35:31)
-*** T2090 - Ilana's solo (36:24) - at her first pause with the light on her torso
-*** T2100 - Stephen and Laura's duet (37:20-ish)
-
-** Body
-*** B2500 - Segment trigger on the first arms axial move.
-    1. Event triggers for successive axial moves (like arm section).
-	When she starts moving arms and torso, slow down the triggers.
-*** B2510 - At the restart of the axial sequence -- very short cue!
-*** B2520 - Locomotive theme, in place. Another very short cue.
-*** B2530 - Hit this when she stops in the triangle shape.
-*** B2540 - Restart axial sequence -- very short, as in 2510.
-*** B2550 - Locomotive in place, short like 2520.
-*** B2560 - Wild arm movements.
-*** B2570 - Stephen touches Laura's arm/shoulder after her solo (42:48)
-    A melody plays here for a bit less than a minute. When that's over, hit the next one.
-*** B2580 - drums 1 -- drums will start after a few seconds -- I can make this more immediate later
-*** B2590 - the first foreshadowing of Ilana's suspension (45:38)
-*** B2600 - second foreshadowing (47:05, just before)
-*** B2610 - last suspension (48:17-ish)
 
 * Sample attributions
     September 3, 2010
