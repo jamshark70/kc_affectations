@@ -95,6 +95,8 @@ s.waitForBoot {
 	}).add;
 };
 
+Library.put(\droneVizKeys, Library.at(\defaultVizKeys).copy
+	.put(1, \ratio));
 
 (keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
@@ -104,7 +106,10 @@ make: { |name|
 	BP(name).free;
 	Proto({
 		~fund = 32.midicps;
-		~event = (eventKey: \singleSynthPlayNotify);
+		~event = (eventKey: \singleSynthPlayNotifyData,
+			vizKeys: Library.at(\droneVizKeys).copy.put(1, 1)
+			.put(3, ~fund.explin(20, 20000, -1.0, 1.0))
+		);
 		~quant = NilTimeSpec.new;
 		~initTempo = 0.1;
 		~tempoSpec = #[0.01, 10, \exp].asSpec;
@@ -152,7 +157,7 @@ make: { |name|
 			Pseq([
 				Pfuncn({
 					~goTime = thisThread.beats;
-					0
+					(dataToViz: false, delta: 0, type: \rest)
 				}),
 				Pbind(
 					\instrument, \partial1bgated,
@@ -163,7 +168,8 @@ make: { |name|
 					\sustain, ((~holdPctCtl.asPattern - 1) * 0.5 + 1) * Pkey(\delta),
 					\amp, 1,
 					\egBuf, ~egbuf,
-					\chan, ~chan
+					\chan, ~chan,
+					\dataToViz, Pseq([true, Pn(false, inf)])
 				)
 			])
 		};
@@ -184,11 +190,8 @@ make: { |name|
 },
 type: \bp) => Fact(\mstClock);
 
-Library.put(\droneVizKeys, Library.at(\defaultVizKeys).copy
-	.put(1, \ratio));
-
 PR(\abstractProcess).clone {
-	~event = (eventKey: \singleSynthPlayNotify/*Data, vizKeys: Library.at(\droneVizKeys)*/);
+	// ~event = (eventKey: \singleSynthPlayNotifyData, vizKeys: Library.at(\droneVizKeys));
 	~cl = \mstClock;
 	~alwaysReset = true;
 	~quant = NilTimeSpec.new;
@@ -222,6 +225,7 @@ PR(\abstractProcess).clone {
 		};
 		// HACK
 		~chan = ~chan2;
+		~event = ~event.copy.putAll((eventKey: \singleSynthPlayNotifyData, vizKeys: Library.at(\droneVizKeys)));
 	};
 
 	~freeCleanup = {
@@ -232,6 +236,12 @@ PR(\abstractProcess).clone {
 	~useGui = { |vpi| ~ampCtl => VP(vpi) };
 
 	~stopCleanup = {
+		~activeRatios.do { |ratio|
+			Library.at(\vizAddr).tryPerform(\sendMsg, \note, ~collIndex.hash, ratio, 0.075,
+				(~fundStream.next * ratio).explin(20, 20000, -1.0, 1.0),
+				0, -inf, -inf
+			);
+		};
 		~activeRatios = Set.new;
 	};
 
@@ -271,7 +281,7 @@ PR(\abstractProcess).clone {
 			// busywait to reduce scheduling latency for new streams
 			sp.par(Pbind(
 				\instrument, \rest,
-				// \dataToViz, false,
+				\dataToViz, false,
 				\delta, 0.1 * Ptempo()
 			));
 			~initStreams.(sp);
@@ -289,7 +299,8 @@ PR(\abstractProcess).clone {
 				\delta, ratio.reciprocal,
 				\sustain, Pkey(\delta) * 0.5,
 				\egBuf, ~egbuf,
-				\chan, ~chan
+				\chan, ~chan,
+				\dataToViz, Pseq([true, Pn(false, inf)])
 			);
 		if(pbindf.notNil) {
 			result = Pbindf(result, *pbindf)
@@ -301,6 +312,10 @@ PR(\abstractProcess).clone {
 		// note, this doesn't call endhook if the process is stopped manually
 		// (you should supply stopCleanup to handle it for that case)
 		result = CleanupStream(result.asStream, e {
+			Library.at(\vizAddr).tryPerform(\sendMsg, \note, ~collIndex.hash, ratio, 0.075,
+				(~fundStream.next * ratio).explin(20, 20000, -1.0, 1.0),
+				0, -inf, -inf
+			);
 			~streamEndHook.(result, ratio);
 		});
 	};
@@ -355,6 +370,7 @@ PR(\abstractProcess).clone {
 	};
 } => PR(\hs1);
 
+/*
 PR(\hs1).clone {
 	~alwaysReset = true;
 	~minTop = 2;
@@ -419,6 +435,7 @@ PR(\hs1).clone {
 		});
 	};
 } => PR(\hsSweep);
+*/
 
 PR(\hs1).clone {
 	~minTop = 2;
@@ -459,7 +476,15 @@ PR(\hs1).clone {
 		BP(~fmtProc).initializeAmps;
 	};
 	~stopCleanup = {
-		(~minTop .. ~maxTop).do { |i| ~hStreams[i] = nil };
+		(~minTop .. ~maxTop).do { |i|
+			if(~hStreams[i].notNil) {
+				Library.at(\vizAddr).tryPerform(\sendMsg, \note, ~collIndex.hash, i, 0.075,
+					(~fundStream.next * i).explin(20, 20000, -1.0, 1.0),
+					0, -inf, -inf
+				);
+				~hStreams[i] = nil;
+			};
+		};
 		if(BP.exists(~trajectoryKey)) { BP(~trajectoryKey).notUsedBy(~collIndex) };
 	};
 
