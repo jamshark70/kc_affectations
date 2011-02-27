@@ -1064,7 +1064,7 @@ t2 = [
 								\drumIter1, \done, ~id, e {
 									~endNotify.remove;
 									~doneSignal.remove;
-									~stop.();
+									~stop.((manualStop: false));
 								}
 							);
 						},
@@ -1072,7 +1072,7 @@ t2 = [
 						clearUserSignal: { |parms|
 							var	seq = topEnvironment[\seq];
 							~endNotify.remove;
-							if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) != true }) {
+							if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) == false }) {
 								~subCmdNotScheduled = false;
 								seq.sections[seq.currentSection].currentIterator
 								.playCmd(PR(\subIterCmd).copy, (
@@ -1090,7 +1090,7 @@ t2 = [
 									clearUserSignal: { |parms|
 										var	seq = topEnvironment[\seq];
 										~endNotify.remove;
-										if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) != true }) {
+										if(~subCmdNotScheduled and: { parms.tryPerform(\at, \manualStop) == false }) {
 											~subCmdNotScheduled = false;
 											seq.sections[seq.currentSection].currentIterator
 											.playCmd(PR(\subIterCmd).copy, (
