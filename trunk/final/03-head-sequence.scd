@@ -74,20 +74,20 @@ t2 = [
 		},
 		// waitForNotesCmd, \cmdSync,
 		Quant(3, -0.5),
-		
-		gcAutoSynthCmd: (gc: { BP(\drum1).distCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus, 
+
+		gcAutoSynthCmd: (gc: { BP(\drum1).distCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus,
 			connect: 0, time: 36, env: Env(#[20, 5], #[1], 1)),
 		bpCmd: (name: \drum1, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Pseq(#[3, 0], inf);
 		}),
 		12,
-		gcAutoSynthCmd: (gc: { BP(\drum1).wetCtl }, name: \ctlPoint, /*shouldSync: false,*/ outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum1).wetCtl }, name: \ctlPoint, /*shouldSync: false,*/ outName: \outbus,
 			value: 0.078, time: 30, curve: 0),
 		bpCmd: (name: \drum2, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Pseq(#[0, 2], inf);
 		}),
 		12,
-		
+
 		TLSequenceIterator([
 			{	BP(\drum1).bar = Pseq([3, Prand(BP(\drum1).indices[1], 1)], inf);
 				12
@@ -95,7 +95,7 @@ t2 = [
 			{	BP(\drum2).bar = Prand(BP(\drum2).indices[1], inf);
 				12
 			},
-			
+
 			{	BP(\drum2).bar = Prand(#[1, 2, 3], inf);
 				12
 			}
@@ -104,7 +104,7 @@ t2 = [
 	TLSequenceIterator([
 		{ rrand(5.0, 8.0) * 108/60 },
 		Quant(3, -0.5),
-		gcAutoSynthCmd: (gc: { BP(\drum1).ffRangeCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum1).ffRangeCtl }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus,
 			env: Env(#[0, 14, 0], #[0.6, 0.4], #[6, -2]), time: 30, connect: 0),
 		bpCmd: (name: \drum3, quant: `nil, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.bar = Prand(#[8, 2], inf);
@@ -112,24 +112,24 @@ t2 = [
 		}),
 		mixerAutoSynthCmd: (mixer: { BP(\drum3).chan }, /*shouldSync: false,*/ name: \ctlEnv, outName: \outbus,
 			connect: 0, env: Env([-16.dbamp, drumLevel], #[18], 2.4)),
-		gcAutoSynthCmd: (gc: { BP(\drum3).ffreqCtl }, /*shouldSync: false,*/ name: \ctlPoint, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum3).ffreqCtl }, /*shouldSync: false,*/ name: \ctlPoint, outName: \outbus,
 			value: 18000, time: 30, curve: 5),
-		
+
 		12,
 		{	BP(\drum3).bar = Prand([8, 2], inf) + Prand(#[0, 1, 4], inf);
 			BP(\drum2).bar = 3;
 			12
 		},
-		
+
 		{	BP(\drum3).bar = Prand(BP(\drum3).indices[2], inf);
 			12
 		},
-		
+
 		{	BP(\drum3).bar = Prand(BP(\drum3).indices[[2, 3]].flat, inf);
 			BP(\drum1).bar = 3;
 			12
 		},
-		
+
 		{	BP(\drum3).bar = 15;
 			6
 		},
@@ -152,9 +152,9 @@ t2 = [
 			bp.wetCtl.value = 0.078;
 			bp[\chan].level = drumLevel;
 		}),
-		
+
 		18,
-		gcAutoSynthCmd: (gc: { BP(\drum4).ffRangeCtl }, name: \ctlPoint, outName: \outbus, 
+		gcAutoSynthCmd: (gc: { BP(\drum4).ffRangeCtl }, name: \ctlPoint, outName: \outbus,
 			value: 18, time: 36),
 		loopCmd: (
 			// this way will force quantPhases to reset
@@ -196,7 +196,7 @@ t2 = [
 			BP(\drum7).finalLpfCtl.value = 18000;
 			0
 		},
-		
+
 		bpCmd: (name: #[drum7, drum8], quant: -1, /*shouldSync: false,*/ prepareBP: { |bp|
 			bp.ostFiltCtl.value = 1;
 			bp.fmltDcyCtl.value = 0.25;
@@ -222,7 +222,7 @@ t2 = [
 			}
 		),
 		\cmdSync,
-	
+
 		{
 			var	thisLoop = PR(\loopCmd).copy.putAll((
 				repeats: 2,
@@ -258,7 +258,7 @@ t2 = [
 			BP(\drum7).gest = BP(\drum8).gest;
 			12 //24
 		},
-		
+
 		loopCmd: (// repeats: 3,
 			acc: Prand(#[threeAcc, fiveAcc, sevenAcc], inf),
 			id: \accentLoop,
@@ -284,7 +284,7 @@ t2 = [
 				};
 			}
 		),
-	
+
 		funcCmd: topEnvironment[\trigParms].copy.put(\eventID, 2),
 		\cmdSync,
 		funcCmd: (func: {
@@ -305,9 +305,9 @@ t2 = [
 				oldGest = Library.at(\drum78AccGest),
 				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1),
 				rsyncEnv = Env(#[1, 0], #[90], 1.4).asStream;
-	
+
 	d.reset;
-	
+
 			BP(\drum7).gest = Pseq([
 				Pseq([
 					// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
@@ -375,7 +375,7 @@ t2 = [
 			0
 			// 18
 		},
-	
+
 		{	BP(#[drum4, drum5, drum6]).stop;
 			BP(\drum7).pan = -1;
 			BP(\drum8).pan = 1;
@@ -385,14 +385,14 @@ t2 = [
 			BP(\drum7).finalLpfCtl.value = 18000;
 			0
 		},
-	
+
 		// bpCmd: (name: #[drum7, drum8], quant: -1, /*shouldSync: false,*/ prepareBP: { |bp|
 		// 	bp.ostFiltCtl.value = 1;
 		// 	bp.fmltDcyCtl.value = 0.25;
 		// 	bp.fmltWetCtl.value = 0.1;
 		// 	bp[\chan].level = -7.dbamp;
 		// }),
-	
+
 		funcCmd: (
 			setDoneSignal: {
 				~doneSignal = NotificationCenter.register(\drum7, \disintegrationAdvance, \wait, e{
@@ -402,10 +402,10 @@ t2 = [
 			clearDoneSignal: { ~doneSignal.remove }
 		),
 		\cmdSync,
-	
+
 		gcAutoSynthCmd: (gc: { BP(\drum7).messedUpMulCtl }, name: \ctlEnv, outName: \outbus,
 			env: Env(#[1, 3], #[45])),
-	
+
 		12,
 		[	0.05,
 			{
@@ -565,8 +565,9 @@ t2 = [
 		segID: 1010,
 		initProcesses: {
 			\chuckIf.eval(Fact(\slurps), BP, \wet, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\words), BP, \qw, nil, Library.at(\rvbs));
 		},
-		unloadProcesses: { BP(\wet).free },
+		unloadProcesses: { BP(#[wet, qw]).free },
 		preparePlay: {
 			// kind of hacky, but necessary because...
 			// keeping a reference to the section sequencer in a section
@@ -602,7 +603,33 @@ t2 = [
 								rrand(1.0, 1.8)
 							}
 						]
-					)					
+					),
+					30,
+					// shouldSync: true -- should stop this when going to next segment
+					bpCmd: (name: \qw, shouldSync: true, prepareBP: { |bp|
+						bp.pitchProb.value = 0;
+						bp.noisydelta = Pswitch([
+							Pwhite(1, 8, { rrand(4, 9) }) * 0.25,
+							Plazy({
+								var x = rrand(0.12, 0.19);
+								Pseq([Pn(x, rrand(4, 8)), x*2], 1)
+							}),
+							Pwhite(3.5, 6.5, 1)  // note+rest
+						], Pseq([0, Pwrand(#[0, 1, 2], #[0.75, 0.15, 0.1], inf)]));
+						bp.noisytime = Pwhite(0.3, 0.6, inf);
+						bp.word = Plazy({
+							var	items = ~pts.select { |pt|
+								~questionKeys.includesEqual(pt[\id])
+							};
+							Prand(items, inf)
+						});
+						bp.noiseenv = Env(#[0, 1, 0.5, 0], #[0.05, 0.45, 0.5], -4);
+						bp.wetCtl.value = 0;
+						// reset others?
+					}),
+					20,
+					gcAutoSynthCmd: (gc: BP(\qw).wetCtl, name: \ctlPoint, outName: \outbus,
+						value: 0.75, time: 30)
 				],
 				// onStop: {},
 				dur: \trigger,  // or \sync
@@ -621,7 +648,7 @@ t2 = [
 				if(sect.segID < 1000) { sect.prUnload };
 			};
 
-			\chuckIf.eval(Fact(\words), BP,\sw, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\words), BP, \sw, nil, Library.at(\rvbs));
 		},
 		unloadProcesses: { BP(\sw).free },
 		preparePlay: {
@@ -633,9 +660,11 @@ t2 = [
 		seqPattern: {
 			Pn((
 				sequence: [
-					bpCmd: (name: \sw, shouldSync: false, prepareBP: { |bp|
-						// bp.synth = \noisy;
+					bpCmd: (name: \sw, shouldSync: false, id: \sw, prepareBP: { |bp|
 						bp.pitchProb.value = 0;
+						bp.synth = \noisy;
+						// bp.synth = Plazy({ Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb,
+						// 	\pitched, \noisy);
 						bp.noisydelta = Pwhite(3.0, 6.0, inf);
 						bp.noisytime = Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0);
 						bp.word = Plazy({
@@ -644,13 +673,16 @@ t2 = [
 							};
 							Prand(items, inf)
 						});
+						bp.noiseenv = Env.linen(0.2, sustainTime: 0.45, releaseTime: 0.35);
+						bp.wetCtl.value = 1;
 						// reset others?
 					}),
 					// run in parallel to words
-					{ rrand(7.0, 10.0) },
+					14, // { rrand(7.0, 10.0) },
 					loopCmd: (
 						id: \blooploop,
 						shouldSync: false,
+						dur: 70,
 						setDoneSignal: {
 							// ~doneSignal = nil;
 							~gest = Pswitch1([
@@ -660,7 +692,7 @@ t2 = [
 							~deltas = Pseq([
 								Pwhite(0.4, 1.1, { rrand(2, 9) }),
 								Pwhite(2.2, 4.1, { rrand(1, 3) })
-							], inf).asStream;
+							], inf).asStream * Env(#[1, 5], #[60], 2.4).asStream;
 						},
 						// dur: 40,
 						crKeyStream: ~crKeyStream,
@@ -695,9 +727,9 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \sw, shouldSync: false, playWarning: false),
 					gcAutoSynthCmd: (gc: { BP(\sw).pitchProb }, name: \ctlEnv, outName: \outbus,
-						env: Env(#[0.35, 0.95], #[1], -1.5), time: 45,
+						env: Env(#[0.35, 0.95], #[1], #[-1.5]), time: 40,
 						connect: 0, shouldSync: false),
-					{	var	e = Env(#[1, 0.18], #[48]).asStream;
+					{	var	e = Env(#[1, 0.18], #[30], -1.4).asStream;
 						BP(\sw).noisydelta = Pwhite(3.0, 6.0, inf) * e;
 						BP(\sw).noisytime = (Pkey(\delta) / e).linlin(3.0, 6.0, 4.0, 9.0) * e;
 						BP(\sw).pitcheddelta = Pwhite(1.5, 4.0, inf) * e;
@@ -705,6 +737,10 @@ t2 = [
 						BP(\sw).word = Plazy({
 							Pn(Pser(~pts, { rrand(3, 7) }, { ~pts.size.rand }), inf)
 						});
+						BP(\sw).synth = Pseq([
+							Pn(\pitched, 2),
+							Plazy({ Pif(Pwhite(0.0, 1.0, inf) < ~pitchProb, \pitched, \noisy) })
+						]);
 						0
 					},
 					funcCmd: topEnvironment[\trigParms],
@@ -767,7 +803,7 @@ t2 = [
 		segID: 1500,
 		initProcesses: {
 			\chuckIf.eval(Fact(\mstClock), BP, \mstClock, nil, Library.at(\rvbs));
-			
+
 			\chuckIf.eval(PR(\hs1), BP, \hs, nil, (
 				makeGResponder: 0, removeGResponder: 0
 			).putAll(Library.at(\rvbs)));
@@ -779,6 +815,11 @@ t2 = [
 		seqPattern: {
 			Pn((
 				sequence: [
+					// if event trig was skipped, bloops might keep going
+					funcCmd: (func: {
+						~iterator.findActive(\blooploop).stop;
+						~iterator.findActive(\sw).stop;
+					}),
 					{	BP(\hs).low_(2).high_(24);
 						#[chan, chan2].do { |key| BP(\mstClock)[key].level = -15.dbamp };
 						// topEnvironment[\master].level = ~mVol.value.dbamp;
@@ -972,7 +1013,7 @@ t2 = [
 			\chuckIf.eval(PR(\counterpoint), BP, \cpt, nil,
 				(printStopMsg: false).putAll(Library.at(\rvbs)));
 			0 => BP(\cpt);
-			
+
 			\chuckIf.eval(PR(\cadences), BP, \cd, nil,
 				(parentBP: \cpt, printStopMsg: false).putAll(Library.at(\rvbs)));
 			0 => BP(\cd);
@@ -1331,7 +1372,7 @@ t2 = [
 							value: -8.5.dbamp, time: 3.5, curve: 2.1
 						)
 					]).shouldSync_(false),
-					
+
 					bpCmd: (name: \cpt, prepareBP: { |p|
 						p.seqKeys = #[t2, a2d1, a2d2];
 					}),
@@ -1528,7 +1569,7 @@ t2 = [
 						BP(#[mstClock, hs, hstrig, hswp, hsd, fmt]).stop
 					}
 				),
-			
+
 				{ 32 - BP(\fmt).fadeOut },
 				{ BP(\fmt).doFadeOut; 0 },
 

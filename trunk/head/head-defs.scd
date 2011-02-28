@@ -29,7 +29,7 @@ s.waitForBoot {
 		Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), pan, postAmp));
 	}).add;
 	
-	SynthDef(\simpleLPCfxPan2, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, pan2 = 0, attack = 0.05, decay = 0.05, postAmp = 1|
+	SynthDef(\simpleLPCfxPan2, { |inbus, outbus, lpcbuf, voxdur = 1, start, end = 1, time = 1, amp = 1, freq = 440, noiseMul = 1, hpf = 1600, xfscale = 0.25, lpf = 15000, pan = 0, pan2 = 0, attack = 0.05, decay = 0.05, postAmp = 1, wet = 1|
 		var	src = In.ar(inbus, 1),
 			// note, ar because LPCVals.ar with .kr pos input is broken
 			pos = Line.ar(start, end, time) / voxdur,
@@ -38,8 +38,9 @@ s.waitForBoot {
 			sig = LPCSynth.ar(lpcbuf, XFade2.ar(src, noise, (xfscale * lpcv[2]).madd(2, -1)), pos, amp * lpcv[1]),
 			eg = EnvGen.kr(Env.linen(attack, time - attack - decay, decay), doneAction: 2);
 		sig = LPF.ar(sig, lpf);
-		sig = LeakDC.ar(sig);
-		Out.ar(outbus, Pan2.ar(Limiter.ar(sig * eg), Line.kr(pan, pan2, time), postAmp));
+		sig = Limiter.ar(LeakDC.ar(sig) * eg) * postAmp;
+		sig = XFade2.ar(src, sig, wet.madd(2, -1));
+		Out.ar(outbus, Pan2.ar(sig, Line.kr(pan, pan2, time)));
 	}).add;
 	
 	SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
@@ -2724,13 +2725,15 @@ make: { |name|
 			~pitchProb = GenericGlobalControl(\pitchProb, nil, 0);
 			~preAmp = GenericGlobalControl(\preAmp, nil, 1, #[0.05, 20, exp]);
 			~postAmp = GenericGlobalControl(\postAmp, nil, 2.1, #[0.05, 20, exp]);
+			~normAmpCtl = GenericGlobalControl(\normAmp, nil, 1, \amp);
 			~distBuses = Bus.control(s, 12);
 			~distBusPool = Pseq((0 .. 11) + ~distBuses.index, inf).asStream;
 			~xfscale = GenericGlobalControl(\xfscale, nil, 0.1, #[0.001, 0.4, exp]);
+			~wetCtl = GenericGlobalControl(\lpcwet, nil, 1);
 		},
 		useGui: { |vpi| [~pitchProb, ~preAmp, ~postAmp, ~xfscale].do { |gc| gc => VP(vpi) } },
 		userfree: {
-			[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses, ~xfscale].free;
+			[~lpcbuf, ~noisebuf, ~pitchbufs, ~pitchProb, ~preAmp, ~postAmp, ~distBuses, ~xfscale, ~wetCtl, ~normAmpCtl].free;
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\stopsReceivingFrom, ~chan);
 			};
@@ -2801,7 +2804,8 @@ make: { |name|
 			// filter is sometimes still ringing when 'time' cuts it off
 			\time, Pkey(\time) + 0.1,
 			\attack, BPStream(\lpcAtk),
-			\decay, BPStream(\lpcDcy)
+			\decay, BPStream(\lpcDcy),
+			\wet, Plazy({ Pn(~wetCtl.asMap, inf) })
 		),
 	
 		objects: (
@@ -2817,7 +2821,7 @@ make: { |name|
 					time: Pkey(\delta).linlin(3.0, 6.0, 4.0, 9.0),
 					amp1: BPStream(\preamp),
 					amp2: Pkey(\amp1),
-					normAmp: 7.dbamp, // BPStream(\amp),
+					normAmp: Plazy({ ~normAmpCtl.asPattern * 7.dbamp }), // BPStream(\amp),
 					env: Pfunc({ ~noiseenv }),
 					lpcEv: BPStream(\lpcEv) <> Pfunc({ |ev| ~sanitizeEvent.(ev) })
 				]
@@ -2845,7 +2849,7 @@ make: { |name|
 					time: Pkey(\delta) * Pwhite(1.4, 2.1, inf),
 					amp1: BPStream(\preamp),
 					amp2: Pkey(\amp1),
-					normAmp: 17.dbamp, // BPStream(\amp),
+					normAmp: Plazy({ ~normAmpCtl.asPattern * 17.dbamp }), // BPStream(\amp),
 					beats: Pkey(\freq1).explin(50, 1200, 1.8, 3.6),
 					env: Pfunc({ ~noiseenv }),
 					lpcEv: BPStream(\lpcEv) <> Pfunc({ |ev| ~sanitizeEvent.(ev) })

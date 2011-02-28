@@ -1159,3 +1159,55 @@ BP(#[drum7, drum8]).do { |bp|
 			// };
 		};
 BP(\cwd).pitchedtime.postcs
+
+
+
+// introduce some lpc in H1010
+();
+BP(\sw).free;
+\chuckIf.eval(Fact(\words), BP, \sw, nil, Library.at(\rvbs));
+
+p = BP(\sw);
+p.synth.postcs
+p.pitchProb.value  // 0 by default
+
+p.v.env.keys.asArray.sort.do { |key|
+	if(key.asString.beginsWith("noisy")) { [key, p[key]].postcs };
+}; ""
+
+p.noiseenv.postcs
+p.noiseenv = Env(#[0, 1, 0.5, 0], #[0.05, 0.45, 0.5], -4);
+
+p.noisydelta = Pwhite(1, 8, inf) * 0.25;
+p.noisytime = Pkey(\delta) * Pwhite(0.5, 0.8, inf);
+p.noisytime = Pwhite(0.3, 0.6, inf);
+
+p.noisydelta = Pswitch([
+	Pwhite(1, 8, { rrand(4, 9) }) * 0.25,
+	Plazy({ var x = rrand(0.12, 0.19); Pseq([Pn(x, rrand(4, 8)), x*2], 1) }),
+	Pwhite(3.5, 6.5, 1)  // note+rest
+], Pseq([0, Pwrand(#[0, 1, 2], #[0.75, 0.15, 0.1], inf)])/*.trace(prefix: "delta index: ")*/); //.trace(prefix: "delta: ");
+
+p.wetCtl.gui;
+p.normAmpCtl.gui;
+
+w = GenericGlobalControl(\lpcwet, nil, 1);
+w.gui;
+
+p.event.wet = w.asMap;
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+p.debug = true;
+p.debug = false;
+
+p.reset;
+
+p.use { e = ~eventStream.next(~event.copy) }; e.play;
+
+w.bus.get(_.postln);
+
+e.keys
+e.msgArgs
+
