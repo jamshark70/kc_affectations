@@ -219,7 +219,7 @@
 **** Musical revisions completed <2011-01-07 Fri>
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
-** Musical edits [2/5]
+** Musical edits [3/5]
 *** DONE Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
@@ -298,7 +298,7 @@
 ***** Melody!!!!!
 ***** Rhythm?
 ***** As she leaves, push sounds into distance
-*** TODO Head [2/3] <2010-12-23 Thu>
+*** DONE Head [2/3] <2010-12-23 Thu>
 **** Notes
 ***** Some dips in continuous data
 ***** 24:20 - moving around
@@ -325,10 +325,21 @@
       6. metronome, 26:15
 
 **** DONE New material for slower movements toward end: reuse some of the face dance stuff
-*** TODO Torso [0/1] <2010-12-26 Sun>
-**** TODO Redo Laura's solo pre-body
+*** TODO Torso <2010-12-26 Sun>
 *** TODO Body [0/1] <2011-01-04 Tue>
 **** TODO Recall more cues
+***** F120-3 inversions
+***** 3 poses
+***** Ilana solo bells?
+***** Noisy stuff from torso? maybe rhythmicize
+***** Melodies
+****** Arms axial
+****** Arms rhythmic melody?
+****** S&L duet
+***** Harmonies
+****** Arms partnering
+****** Drones?
+****** Torso held notes
 ** Programming [2/3]
 *** DONE Place to put in IP address/port
 *** DONE Voicer events need different arg handling
