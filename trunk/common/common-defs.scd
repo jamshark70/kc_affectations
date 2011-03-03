@@ -189,7 +189,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 		~isPattern = true;
 	} => PR(\pwxrandn);
 
-	{ |name, ugenFunc, metadata, rates, lagDistance(false)|
+	{ |name, ugenFunc, metadata, rates, lagDistance(false), outClass(Out)|
 		var	findCtl = { |cname|
 			block { |break|
 				UGen.buildSynthDef.children.do { |unit|
@@ -230,7 +230,7 @@ if(Library.at(\affectations, \commonLoaded) != true) {
 
 			distance = distance.clip(distNear, distFar);
 			result = result * distNear;
-			Out.ar(outctl, result / distance);
+			outClass.ar(outctl, result / distance);
 
 	//		lcrvbamt = Select.kr(lcrvbamt < 0, [lcrvbamt, glrvbamt]);
 			result = BHiShelf.ar(result,

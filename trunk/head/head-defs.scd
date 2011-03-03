@@ -43,16 +43,17 @@ s.waitForBoot {
 		Out.ar(outbus, Pan2.ar(sig, Line.kr(pan, pan2, time)));
 	}).add;
 	
+	// gate should be used for quick-release
 	SynthDef(\oscbloop1, { |outbus, bufnum, freq1 = 50, freq2 = 900, fcurve = 0, time = 1, fHoldPct = 0,
 		amp1 = 1, amp2 = 1, noiseBlend = 0.1, noiseFmul = 1, noisePreamp = 1, rq = 1.0,
-		normAmp = 0.5, beats = 0.1|
+		normAmp = 0.5, beats = 0.1, gate = 1|
 		var	freq = EnvGen.kr(Env([freq1, freq1, freq2], [fHoldPct, 1 - fHoldPct], fcurve),
 				timeScale: time),
 			preAmp = Line.kr(amp1, amp2, time),
 			sig = BPF.ar(COsc.ar(bufnum, freq, beats), freq, rq, noisePreamp),
 			postAmp = normAmp / preAmp * (preAmp+1),
 			env = NamedControl.kr(\env, (0 ! 20).overWrite(Env.linen(0.01, 0.98, 0.01).asArray)),
-			eg = EnvGen.kr(env, timeScale: time, doneAction: 2);
+			eg = EnvGen.kr(env, gate, timeScale: time, doneAction: 2);
 		Out.ar(outbus, sig.distort * postAmp * eg);
 	}).add;
 
@@ -570,10 +571,11 @@ PR(\hs1).clone {
 (
 transitionStates: 5,
 //partials: ,	// you can override
+//objects: , 	// you can override
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		chan: BP(\mstClock).chan2,
+		chan: ~chan ?? { BP(\mstClock).chan2 },
 		isFx: true,
 		alwaysReset: true,
 // 		event: (eventKey: \monoSupport),
@@ -610,7 +612,7 @@ make: { |name|
 			)).play;
 		},
 		stopCleanup: { ~doFadeOut.() },
-		objects: (
+		objects: ~objects ?? { (
 			fmtAmps: (
 				def: SynthDef(\ctlEnvSens, { |outbus, levelScale = 1, levelBias = 0, time = 1, connect = 1,
 							sens = 1|
@@ -658,7 +660,7 @@ make: { |name|
 				]
 			)
 */
-		),
+		) },
 // 		recvEventNotify: { |node, event|
 // 			~node = node;
 // 		},

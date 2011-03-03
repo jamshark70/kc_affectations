@@ -2004,7 +2004,7 @@ make: { |name|
 					\delta, 0.5,
 					\amp, (parms[\mainAmp] ? 1) * BPStream(\amp),
 					#[filtDegree, level], BPStream(\kfreq),
-					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(\g).cps(deg + 35) },
+					\filtFreq, Pkey(\filtDegree).collect { |deg| Mode(parms[\mode] ?? { \g }).cps(deg + 35) },
 					\filtAttack, 0.01,
 					\filtDecay, parms[\kdecay] ?? { BPStream(\kdecay) },
 					\filtAmp, BPStream(\kamp),
@@ -2080,6 +2080,11 @@ make: { |name|
 				parms[\yEnds] ?? {
 					parms[\yEnds] = [rrand(0.5, 1.0).linlin(0.0, 1.0, ~distNear, ~distFar), ~distNear]
 				};
+				parms[\delta] ?? {
+					parms[\delta] = (BPStream(\slowDelta)
+						* Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7), parms[\numEv])
+					)
+				};
 				Pbind(
 					\instrument, \pvplayPanDist,
 					\early, 0,
@@ -2091,8 +2096,7 @@ make: { |name|
 						Pfinval(parms[\numEv] /* - 1 */, ~xyPat.(parms)),
 						[#[-1, 0, 1], ~distNear]
 					]),
-					\delta, (BPStream(\slowDelta) * Pgeom.fromEndpoints(1.8, rrand(0.5, 0.7),
-						parms[\numEv])) ++ 0.4,
+					\delta, Pseq([parms[\delta], 0.4], 1),
 					\rate, Pseq([
 						Pfinval(parms[\numEv] /* - 1 */, BPStream(\slowRate).clump(3)),
 						Pwhite(0.04, 0.1, 1)

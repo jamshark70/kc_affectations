@@ -1,3 +1,5 @@
+// just in case... (won't load twice if already loaded)
+(thisProcess.nowExecutingPath.dirname.dirname +/+ "common/common-defs.scd").loadPath;
 
 
 ~clock52 ?? { ~clock52 = TempoClock(52/60) };
@@ -266,6 +268,8 @@ make: { |name|
 
 
 // melody over P4
+if(MBM.exists(0).not) { MIDIBufManager(chan: nil) => MBM.prNew(0) };
+
 MIDIRecBuf(\bodymel, [
 	#[64, 66,  69, 60,  58, 65, 63, 70, 72, 69,
 		74, 67,  70, 60,  58, 65, 63, 66, 57, 59
