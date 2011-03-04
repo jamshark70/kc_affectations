@@ -219,7 +219,7 @@
 **** Musical revisions completed <2011-01-07 Fri>
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
-** Musical edits [3/5]
+** Musical edits [4/5]
 *** DONE Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
@@ -325,7 +325,7 @@
       6. metronome, 26:15
 
 **** DONE New material for slower movements toward end: reuse some of the face dance stuff
-*** TODO Torso <2010-12-26 Sun>
+*** DONE Torso <2010-12-26 Sun>
 *** TODO Body [0/1] <2011-01-04 Tue>
 **** TODO Recall more cues
 ***** F120-3 inversions
@@ -340,6 +340,8 @@
 ****** Arms partnering
 ****** Drones?
 ****** Torso held notes
+**** Ideas
+***** Ilana bells --> noisy vowels
 ** Programming [2/3]
 *** DONE Place to put in IP address/port
 *** DONE Voicer events need different arg handling
@@ -348,8 +350,11 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [13/14]
-**** TODO F110 was silent when playing in sequence - couldn't reproduce just now?
+*** TODO Coding fixes [14/17]
+**** TODO duetm (seg 2100) doesn't make sound
+**** TODO WTF happened at 2020?
+**** TODO End: drums etc. don't fade out if triggering last cue too early
+**** DONE F110 was silent when playing in sequence - couldn't reproduce just now?
 **** DONE Drone data to Lorne
 **** DONE Fix H1540 stop bug
 **** DONE Refactor snare drum stuff in feet sequence
