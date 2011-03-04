@@ -294,11 +294,11 @@
 						bp.delta = Pseq([
 							Pexprand(0.05, 0.2, { rrand(3, 11) }),
 							Pwhite(0.3, 0.7, 1)
-						], inf) * Env(#[1, 4.5], #[15], 5);
+						], inf) * Env(#[1, 4.5], #[25], 5);
 					}),
 					{ TempoClock.default => BP(\sw); 0 },
 					bpCmd: (name: \sw, prepareBP: { |bp|
-						var	slowdown = Env(#[1, 4.5], #[15], 5);
+						var	slowdown = Env(#[1, 4.5], #[25], 5);
 						bp.noisydelta = Pwhite(0.3, 0.6, inf) * slowdown;
 						bp.noisytime = Pkey(\delta).linlin(0.3, 0.6, 0.4, 0.4);
 						bp.noisynormAmp = 1.5;
@@ -398,9 +398,12 @@
 			\chuckIf.eval(PR(\bassline), BP, \bss);
 			VC(\ac) => BP(\bss);
 			topEnvironment[\clock52] => BP(\bss);
-			\chuckIf.eval(Fact(\bodySteps), BP, \bst);
+			// \chuckIf.eval(Fact(\bodySteps), BP, \bst);
+
+			\chuckIf.eval(PR(\lowTonesFmt), BP, \ltf, nil, Library.at(\rvbs));
+			0 => BP(\ltf);
 		},
-		unloadProcesses: { BP(#[ldr, hdr, bss, bst]).free },
+		unloadProcesses: { BP(#[ldr, hdr, bss, /*bst,*/ ltf]).free },
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -425,7 +428,26 @@
 							bpCmd: (name: \bss, quant: 4, shouldSync: false/*, prepareBP: { |bp|
 								bp.calcBar = \makeBassNotes;
 							}*/),
-							16,  // 32; 18.46 - 36.92
+							8,  // 32; 18.46 - 36.92
+							bpCmd: (name: \ltf, shouldSync: false,
+								prepareBP: { |bp|
+									bp.fxamp = 18.dbamp;
+									bp.delta = Pn(1, 1);
+									bp.time = 45;
+									bp.envel = Env.linen(0.25, 0.25, 0.5, 1, \sqr);
+									bp.mode = \a0;
+									bp.degree = #[41, 39, 38, 36, 33];
+								},
+								setDoneSignal: {
+									~doneSignal = Updater(BP(\ltf), e { |obj, what|
+										if(what == \notesEmpty) {
+											obj.stop(0);  // which will also kill the cmd
+										};
+									});
+								},
+								clearDoneSignal: { ~doneSignal.remove }
+							),
+							8,
 							bpCmd: (name: \ldr, quant: 4, shouldSync: false, prepareBP: { |bp|
 								bp.ampCtl.value = 0.4;
 							}),
@@ -474,8 +496,52 @@
 			\chuckIf.eval(PR(\finalSus), BP, \sus);
 			0 => BP(\sus);
 			VC(\sus) => BP(\sus);
+			BP(\sus).printStopMsg = false;
+
+			\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\shimmerpad), VC, \btp, nil, (
+				env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+				fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1),
+				// need some EQ pre-reverb
+				graphInsert: { |sig|
+					var	hishelf = EQSpec1.newSpec(\hishelf,
+						freq: 8705, k: -6.667.dbamp, rq: 1, sr: 44100);
+					sig = HPF.ar(sig, 668);
+					sig = StaticEQ.eqFuncs[\hishelf].(sig, hishelf.k, hishelf.a0);
+				}
+			).putAll(Library.at(\rvbs)));
+			if(BP.exists(\am0).not) { Fact(\shivaBPs).makev(Library.at(\rvbs)) };
+			\chuckIf.eval(PR(\thinChords), BP, \tc);
+			BP(\tc).finalAmp = 0.4;
+			BP(\tc) => VC(\btp);
+			\chuckIf.eval(PR(\shivaTrig), BP, \shivaTrig);
+			BP(#[am0, am1, am2]).do { |bp, i|
+				bp.event.soundID = i;
+				bp.amp = -4.dbamp;
+			};
+			topEnvironment[\clock52] => BP(\shivaTrig);
+			BP(\shivaTrig).printStopMsg = false;
+
+			\chuckIf.eval(Fact(\opening), BP, \op, nil, Library.at(\rvbs));
+			\chuckIf.eval(Fact(\openingSteps), BP, \st);
+			topEnvironment[\clock52] => BP(\st);
+
+			\chuckIf.eval(Fact(\bells), BP, \bel, nil,
+				Library.at(\rvbs).copy.put(\glrvbmc, topEnvironment[\cRvbMc]));
+			topEnvironment[\clock52] => BP(\bel);
+			BP(\bel).printStopMsg = false;
+			BP(\bel).v.put(\reset, {
+				~objects.keysValuesDo { |id, obj|
+					obj[\args].pairsDo { |name, pattern|
+						~makeStreamForKey.((id ++ name).asSymbol)
+					}
+				}
+			});
 		},
-		unloadProcesses: { BP(\sus).free },
+		unloadProcesses: {
+			BP(#[sus, am0, am1, am2, shivaTrig, tc, op, st]).free;
+			VC(#[am, btp]).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
@@ -493,6 +559,7 @@
 					],
 					subIterCmd: (
 						shouldSync: false,
+						id: \sus1sub,
 						subIter: TLSequenceIterator([
 							Quant(8, -0.25),
 							{
@@ -501,7 +568,7 @@
 								BP(\ldr).ampCtl.value = 0.4;
 								0
 							},
-							bpCmd: (name: #[bss, hdr, ldr], shouldSync: false, playWarning: false),
+							bpCmd: (name: #[bss, hdr, ldr], /*shouldSync: false,*/ playWarning: false),
 /***** 42:30 - sus1
 **** 43:47 (0:34) - arms
 **** 44:32 (1:19) - walking
@@ -512,6 +579,11 @@
 							{	var p = BP(\sw);
 								topEnvironment[\clock52] => p;
 								1 => p;
+								p.pfreq = (Paccumbounce(39, 50,
+									Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+									-.x Pseries(0, Pwhite(1, 4, 3))
+								).clump(3)
+								.collect { |deg, ev| Mode(ev[\mode]).cps(deg) };
 								p.pitchedmode = Pwrand(#[d0, e0], #[0.8, 0.2], inf);
 								p.synth = \pitched;
 								p.pitcheddelta = Pdelta(Pwhite(0, 15, inf) * 0.25, 4);
@@ -527,95 +599,122 @@
 								value: 4, time: 24),
 							24,  // 32; 9.23 - 36.923
 
-							{	
-								BP(\acDisp).mod_lev = Pkey(\distance)
-								.linlin(Pkey(\distNear), Pkey(\distFar), 4, 2); //PR(\armsChord).mod_lev;
-								BP(\acDisp).mod_ratio = PR(\armsChord).mod_ratio;
-								BP(\acDisp).amp = -18.dbamp;
-								BP(\acDisp).startAuto = {
-									var	time = ~chordTimeStream.next, proportion = rrand(0.7, 0.85);
-									fork {
-										~rotSpeed.automate({
-												Line.kr(0, 1, time, doneAction: 2);
-												LFDNoise1.kr(Rand(0.8, 1.5)).range(1.8, 3.0)
-											},
-											[time: time],
-											~event[\voicer].tryPerform(\bus).tryPerform(\asMixer)
-												.tryPerform(\fadergroup),
-											\addToHead);
-										s.sync;
-										~angle.automate(\angleAuto,
-											[speedMul: ~speedMul.asMap, speedBus: ~rotSpeed.bus],
-											~rotSpeed.autoSynth, \addAfter);
-										~yxRatio.automate({
-												EnvGen.kr(Env([3, 5, 3], [proportion, 1 - proportion], \sine))
-											}, 
-											nil,
-											~rotSpeed.autoSynth, \addAfter);
-										OSCpathResponder(s.addr, ['/n_end', ~rotSpeed.autoSynth.nodeID], e { |time, resp, msg|
-											resp.remove;
-											if(BP.exists(~collIndex)) {
-												BP(~collIndex).stop(0);
-											};
-										}).add;
-									};
+// shiva recall
+							{	var bp = BP(\shivaTrig);
+								bp.delta = Pwrand(#[0.5, 1, 1.5, 2],
+									#[1, 3, 1, 2.5].normalizeSum, 8);
+								bp.playtc = 0.5.asPattern.coin; //true;
+								bp.reset; bp.v.reset;
+
+								BP(#[am0, am1, am2]).do { |bp|
+									bp.amp = 1; // -4.dbamp;
+									bp.gate = Pexprand(0.1, 0.22, inf);
+									bp.scaleRoot = 9;
+									bp.root = 57;
+									bp.phrases = #[
+										[1, 9, 6],
+										[5, 11, 10, 7, 13],
+										[1, 9, 11, 8]
+									];
+									bp.makeStreamForKey(\degree);
 								};
 								0
 							},
 							loopCmd: (
-								repeats: 2,
-								shouldSync: false,
+								id: \shivaTrig,
+								// shouldSync: false,
+								numEv: Pseq([8, Pwhite(5, 11, inf)]).asStream,
+								deltaBase: Pwrand(#[0.5, 1, 1.5, 2],
+									#[1, 3, 1, 2.5].normalizeSum, inf),
 								cmds: [
-									{ BP(\acDisp).spawnChild(0); rrand(3.5, 6.0) }
+									{ rrand(4, 10) },
+									{	var db = ~deltaBase, numEv = ~numEv;
+										PR(\bpCmd).copy.putAll((
+											name: \shivaTrig,
+											prepareBP: { |bp|
+												bp.delta = Pseq([
+													Pfin(numEv.next - 1, db),
+													rrand(4.5, 6.5)
+												], 1)
+											}
+										))
+									},
+									\cmdSync
 								]
 							),
 
-							16,  // 48; 36.92 - 55.38
-							bpCmd: (name: \bst, shouldSync: false, quant: `nil, dur: 16, prepareBP: { |bp|
-								bp.ampCtl.value = 0.8;
-								bp.filtAmp = 0; // Env(#[0, 1, 0], #[8, 8]);
-								bp.filtDecay = 0.011; // Env(#[0.011, 0.018, 0.011], #[12, 4]);
-								bp.delta = 0.5; // Pwrand(#[0.25, 0.5], #[0.3, 0.7], inf);
-								bp.amp = Env(#[0.05, 1, 0.05], #[10, 6], #[3, -3]);
-							}),
-
-							12,  // 60; 55.38 - 69.23
+							16,
+							{
+								// BP(\bel).lowbellfLow = Pif(
+								// 	Pkey(\delta) < 5,
+								// 	Pexprand(700, 1200, inf),
+								// 	Pexprand(140, 240, inf)
+								// );
+								BP(\bel).lowbellfLow = Pexprand(800, 1250, inf);
+								BP(\bel).lowbellbeaterFilt = Pexprand(6000, 12000, inf);
+								BP(\bel).delta = Pseq([
+									Pwrand(#[0.5, 0.75, 1], #[0.2, 0.4, 0.4],
+										{ rrand(2, 4) }),
+									6
+								], 1);
+								BP(\bel).sustain = Pwhite(5.0, 8.0, inf);
+								BP(\bel).lowbellatten = 0.04;
+								0
+							},
 							loopCmd: (
-								repeats: 2,
-								shouldSync: false,
+								id: \bel,
+								// shouldSync: false,
 								cmds: [
-									{ BP(\acDisp).spawnChild(0); rrand(3.5, 6.0) }
+									bpCmd: (name: \bel, prepareBP: { |bp|
+										bp.makeStreamForKey(\delta);
+										bp.reset;
+									}),
+									\cmdSync,
+									Quant(1),
+									{ rrand(4, 15) }
 								]
 							),
+
+							15,  // 48; 36.92 - 55.38
+							bpCmd: (name: \st, shouldSync: false, quant: `nil, /*dur: 16,*/
+								prepareBP: { |bp|
+									bp.autoRun = false;
+									bp.ampCtl.value = 1.12;
+								}
+							),
+							Quant(-1, -0.1),
+							loopCmd: (
+								id: \stretchSteps,
+								// shouldSync: false,
+								nStrm: Pseq([10, Pwhite(5, 12, inf)]).asStream,
+								cmds: [
+									{	var n = ~nStrm.next,
+											dl = Pseq([Pn(0.5, n), Pseq(#[0.25, 0.5, 0.75], 1)], 1),
+											dur = dl.asStream.all.sum;
+										BP(\st).runGesture((
+											gest: \slowStepStretch,
+											numEv: n+3,
+											delta: dl,
+											yEnds: #[15, 5]
+										), true, \slowStepBody);
+										// BP(\st).endStreamHook = { |stream, id|
+										// 	if(id == \slowStepBody) {
+										// 		~streamEndHook = nil;	// remove me
+										// 		BP(\st).debug("stopping").stop;
+										// 	};
+										// };
+										dur + rrand(4, 10)
+									}
+								]
+							),
+
+							0.1 + 12,  // 60; 55.38 - 69.23
 							4,  // 64; 55.38 - 73.84
 
 							8,  // 72; 73.84 - 83.07
 
-							bpCmd: (name: \bst, shouldSync: false, quant: `nil, dur: 32, prepareBP: { |bp|
-								bp.ampCtl.value = 0.234;
-								bp.filtAmp = 0; // Env(#[0, 1, 0], #[8, 8]);
-								bp.filtDecay = 0.011; // Env(#[0.011, 0.018, 0.011], #[12, 4]);
-								bp.delta = 0.5;
-								bp.amp = Env(#[0.5, 1], #[10], 3);
-							}),
 							
 							8,
-							{	var bp = BP(\bst);
-								bp.delta = Pwrand(#[0.25, 0.5], #[0.4, 0.6], inf);
-								// bp.filtAmp = Pseg(
-								// 	Pseq([0, Pwhite(0.3, 1, inf)], 1),
-								// 	Pwhite(3.0, 9.0, inf),
-								// 	\lin
-								// );
-								// bp.filtDecay = Pseg(
-								// 	Pseq([0.011, Pexprand(0.011, 0.07, inf)], 1),
-								// 	Pwhite(3.0, 9.0, inf),
-								// 	\exp
-								// );
-								bp.filtAmp = Env(#[0, 1, 0.2, 0], #[7, 7, 10]);
-								bp.filtDecay = Env(#[0.011, 0.015, 0.011], #[10, 14], \exp);
-								8
-							},
 
 							// 88; - 101.5 (+18)
 							
@@ -647,27 +746,94 @@
 	PR(\tlsAff).copy.putAll((
 		name: "B2600-suspension 2",
 		segID: 2600,
-		// initProcesses: {
-		// },
-		// unloadProcesses: { BP(\sus).free },
+		initProcesses: {
+			\chuckIf.eval(PR(\noiseFmt), BP, \nf, nil, Library.at(\rvbs));
+		},
+		unloadProcesses: {
+			BP(\nf).free;
+		},
 		seqPattern: {
 			Pn((
 				sequence: [
-					{ BP(\sw).stop(0); BP(#[bss, hdr]).stop(4); 0 },
+					funcCmd: (
+						func: {
+							// #[shivaTrig, bel, stretchSteps].do { |key|
+							// 	~iterator.findActive(key).debug(key).stop;
+							// };
+							~iterator.findActive(\sus1sub).stop;
+							BP(\sw).stop(0);
+							BP(#[bss, hdr, ldr]).stop(DelayTimeSpec(1.5));
+						}
+					),
 					[
 						bpCmd: (name: \sus, prepareBP: { |bp|
 							bp.repeats = 1;
-							bp.phraseDur = 18;
+							bp.phraseDur = 25;
 							bp.degree = Pseq(#[40, 43, 45, 46, 49, 52.5], 1);
 							bp.delta = Pexprand(3.0, 6.0, inf) * 0.35;
 							bp.ampCtl.value = 0.28;
 						}),
-						6,
+						10,
 						gcAutoSynthCmd: (gc: BP(\sus).ampCtl, name: \ctlPoint, outName: \outbus,
-							value: 0, curve: -2.1, time: 12)
+							value: 0, curve: -2.1, time: 15)
 					],
+					bpCmd: (name: \nf,
+						prepareBP: { |bp|
+							bp.fxDelta = Pwhite(0.4, 1.4, inf);
+							bp.fxamp = 18.dbamp;
+							bp.panCtl.watch.automate {
+								SinOsc.kr(SinOsc.kr(0.05).exprange(0.07, 0.75), Rand(0, 2pi))
+							};
+							bp.delta = Pwhite(1.0, 3.0, inf);
+							bp.time = Pkey(\delta) * Pwhite(1.4, 2.5, inf);
+							bp.envel = Env.linen(0.3, 0.4, 0.3, 1, \sqr);
+							bp.patKey = \noiseSrc;
+							bp.event.distFar = 80;
+						},
+						clearDoneSignal: {
+							BP(\nf).panCtl.stopWatching.stopAuto;
+						}
+					),
+					gcAutoSynthCmd: (gc: BP(\nf).hpfCtl, name: \ctlEnv, outName: \outbus,
+						env: Env(#[4500, 1250, 7500], #[11, 24], \exp),
+						connect: 0
+					),
+					gcAutoSynthCmd: (gc: BP(\nf).distCtl, name: \ctlEnv, outName: \outbus,
+						env: Env(#[60, 8, 42], #[11, 24], #[-5, 2.1]),
+						connect: 0
+					),
+
+					9,
+					bpCmd: (name: \ffx2/*, dur: 15*/, shouldSync: false),
+					0.07,
+					funcCmd: (
+						// dur: 12,
+						id: \gsharp,
+						doneSignal: true,
+						shouldSync: false,
+						func: {
+							VC(\sp).env.target.level = -11.dbamp;
+							fork {
+								~nodes = VC(\sp).v.trigger(#[55, 110, 73, 146], 0.05,
+									[glrvbamt: 0, lcrvbamt: 0, freqlag: 7], lat: s.latency);
+								0.05.wait;
+								#[68, 80, 73, 85].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
+							};
+						},
+						clearDoneSignal: {
+							fork {
+								3.5.wait;
+								~nodes.do(_.release);
+								1.5.wait;
+								BP(\ffx2).stop(0);
+							}
+						}
+					),
+
+					3,
 					subIterCmd: (
 						shouldSync: false,
+						id: \sus2sub,
 						subIter: TLSequenceIterator([
 							Quant(8, -0.25),
 							{
@@ -678,7 +844,10 @@
 								BP(\ldr).ampCtl.value = 0.4;
 								0
 							},
-							bpCmd: (name: #[bss, hdr, ldr], shouldSync: false, playWarning: false),
+							bpCmd: (name: #[bss, hdr, ldr], shouldSync: false,
+								playWarning: false,
+								prepareBP: { |bp| bp.reset }
+							),
 
 							bpCmd: (name: \md, shouldSync: false, quant: 4, prepareBP: { |bp|
 								bp.ampCtl.value = 0.2;
@@ -718,35 +887,68 @@
 								bp.pitchedtime = Pwhite(0.4, 0.8, inf);
 							}),
 
-							bpCmd: (name: \ffx2/*, dur: 15*/, shouldSync: false),
-							0.07,
-							funcCmd: (
-								// dur: 12,
-								id: \gsharp,
-								doneSignal: true,
-								shouldSync: false,
-								func: {
-									VC(\sp).env.target.level = -11.dbamp;
-									fork {
-										~nodes = VC(\sp).v.trigger(#[55, 110, 73, 146], 0.05,
-											[glrvbamt: 0, lcrvbamt: 0, freqlag: 7], lat: s.latency);
-										0.05.wait;
-										#[68, 80, 73, 85].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
+							16,
+							bpCmd: (name: \ltf, shouldSync: false,
+								prepareBP: { |bp|
+									bp.fxamp = 18.dbamp;
+									bp.delta = Pwhite(14.0, 25.0, inf);
+									bp.time = Pkey(\delta) * Pwhite(0.7, 1.2, inf);
+									bp.envel = Env.linen(0.25, 0.25, 0.5, 1, \sqr);
+									bp.mode = \a0;
+									// ensure interval between topnotes is at least 5
+									bp.degree = (Penvir((last: 0, sideEffect: { |x| x }), Pwhite(32, 41, inf).select { |num| ~sideEffect.((num absdif: ~last) > 4, ~last = num) }) -.x Pseries(0, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], 5), inf).clump(5));
+									bp.panCtl.watch.automate {
+										SinOsc.kr(SinOsc.kr(0.05).exprange(0.07, 0.75),
+											Rand(0, 2pi))
 									};
 								},
+								// setDoneSignal: {
+								// 	~doneSignal = Updater(BP(\ltf), e { |obj, what|
+								// 		if(what == \notesEmpty) {
+								// 			obj.stop(0);  // which will also kill the cmd
+								// 		};
+								// 	});
+								// },
 								clearDoneSignal: {
-									fork {
-										3.5.wait;
-										~nodes.do(_.release);
-										1.5.wait;
-										BP(\ffx2).stop(0);
-									}
+									// ~doneSignal.remove;
+									BP(\ltf).panCtl.stopWatching.stopAuto;
 								}
 							),
 
+							8,
+							loopCmd: (
+								id: \shivaTrig,
+								// shouldSync: false,
+								numEv: Pwhite(5, 11, inf).asStream,
+								deltaBase: Pwrand(#[0.5, 1, 1.5, 2],
+									#[1, 3, 1, 2.5].normalizeSum, inf),
+								cmds: [
+									{ rrand(4, 10) },
+									{	var db = ~deltaBase, numEv = ~numEv;
+										PR(\bpCmd).copy.putAll((
+											name: \shivaTrig,
+											prepareBP: { |bp|
+												bp.delta = Pseq([
+													Pfin(numEv.next - 1, db),
+													rrand(4.5, 6.5)
+												], 1)
+											}
+										))
+									},
+									\cmdSync
+								]
+							),
+
 							// c. 52 beats
-							60,
-							{ BP(\sw).pitchednormAmp = Env(#[3, 0], #[20.8], -2.1); 0 },
+							36,
+							{
+								BP(\sw).pitchednormAmp = Env(#[3, 0], #[20.8], -2.1);
+								BP(#[am0, am1, am2]).do { |bp|
+									bp.amp = Env(#[1, 0], #[22], -2.1);
+								};
+								BP(\ltf).fxamp = Env([BP(\ltf).fxampStream.next, 0], #[22]);
+								0
+							},
 							// work around a stupid oversight in my lib
 							// you can't \cmdSync to a TLSequenceIterator
 							// because the TLSeq never gets set as the last command... BOOOOO!!
@@ -760,7 +962,7 @@
 								clock108: topEnvironment[\clock52]
 							),
 							\cmdSync,
-							{ BP(#[bss, hdr, ldr, md, sw]).stop(0); 0 }
+							{ BP(#[bss, hdr, ldr, md, sw, ltf]).stop(0); 0 }
 						]).shouldSync_(false),
 						clock108: topEnvironment[\clock52]
 					)
@@ -784,6 +986,14 @@
 			Pn((
 				sequence: [
 					// { BP.all.stop; 0 },
+					funcCmd: (
+						func: {
+							var	iter = ~iterator.findActive(\sus2sub);
+							if(iter.notNil) {
+								iter.subIter.tryPerform(\findActive, \shivaTrig).stop;
+							};
+						}
+					),
 					bpCmd: (name: \sus, prepareBP: { |bp|
 						bp.repeats = 1;
 						bp.phraseDur = 24;
@@ -796,6 +1006,11 @@
 						level: 0, time: 19, curve: -2.1),
 					mixerAutoSynthCmd: (mixer: VC(\sp).env.target, name: \ctlPoint, outName: \outbus,
 						level: 0, time: 19, curve: -2.1),
+					funcCmd: (
+						dur: 10,
+						func: { BP(\ltf).fxamp = Env([BP(\ltf).fxampStream.next, 0], #[10]) },
+						clearDoneSignal: { BP(\ltf).stop }
+					),
 					\cmdSync //,
 					// { BP.all.stop;  0 }
 				],

@@ -2753,7 +2753,7 @@ make: { |name|
 		noiseSlideProb: 0.35,
 		freq2: Pkey(\freq1) * Pif(Pfunc({ ~noiseSlideProb.coin }),
 			Pexprand(0.75, 1.33, inf), 1),
-		fHoldPct: Pwhite(0.15, 0.35, inf),
+		// fHoldPct: Pwhite(0.15, 0.35, inf),
 		fHoldPct: Pwhite(0.35, 0.7, inf),
 		fcurve: Pwhite(2.7, 4.5, inf) * (Pkey(\freq2) - Pkey(\freq1)).sign,
 	// 	fcurve: 0,

@@ -211,7 +211,6 @@ v.panic;
 
 o.remove;
 o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
-
 v.globalControls[\car_buf].watch.automate { TIRand.kr(0, 3, Impulse.kr(2)) };
 v.globalControls[\car_buf].autoSynth.trace
 

@@ -387,6 +387,7 @@ PR(\abstractProcess).clone {
 	~ffreq = Pexprand(2300, 8000, inf);
 	~rq = Pexprand(0.1, 1.0, inf);
 	~root = 67;
+	~scaleRoot = 7;
 
 	~recvEventNotify = { |node| ~node = node };
 	~stopCleanup = { if(~node.notNil) { ~node.release }; ~node = nil };
@@ -399,8 +400,8 @@ PR(\abstractProcess).clone {
 				\singleSynthPlayNotifyData,
 				\singleSynthTriggerData
 			),
-			\root, 7,
-			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + ~root),
+			\root, BPStream(\scaleRoot),
+			\midi, (BPStream(\degree).degreeToKey(#[0, 2, 4, 5, 7, 9, 11]) + BPStream(\root)),
 			\freq, Pkey(\midi).midicps,
 			\delta, BPStream(\dur),
 // 			\legato, BPStream(\legato),
@@ -1541,7 +1542,7 @@ PR(\abstractProcess).clone {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNoteData, soundID: 0);
+	~event = (eventKey: \voicerNote/*, soundID: 0*/);
 	~bpFilter = { |key|
 		key = key.asString;
 		key[..1] == "am" and: { key[2..].every(_.isDecDigit) }
@@ -1551,7 +1552,7 @@ PR(\abstractProcess).clone {
 		~event.proto = topEnvironment[\rvbEvent].proto;
 	};
 	~setBPs = { |bpFilter(~bpFilter)|
-		~bps = BP.all.select { |bp| bpFilter.(bp.collIndex) };
+		~bps = BP.keys.select { |bp| bpFilter.(bp) };
 	};
 
 	~stopCleanup = {
@@ -1560,9 +1561,11 @@ PR(\abstractProcess).clone {
 
 	~mode = \g;
 	~freq = Pfunc { |ev|
-		var	result = Array.new(~bps.size), midi;
-		~bps.do { |bp|
-			if(bp[\node].notNil and: { (midi = bp[\lastEvent].tryPerform(\at, \midi)).notNil }) {
+		var	result = Array.new(~bps.size), midi, bp;
+		~bps.do { |key|
+			if(BP.exists(key) and: {
+				(bp = BP(key))[\node].notNil and: { (midi = bp[\lastEvent].tryPerform(\at, \midi)).notNil } 
+			}) {
 				result.add(midi.mapMode(ev[\mode]));
 			};
 		};
@@ -2089,8 +2092,12 @@ PR(\abstractProcess).clone {
 		~event.ampMul = ~ampMul.asMap;
 		~addedWavetables = IdentityDictionary.new;
 
-		~dataIndices = #[xmin, xmax].collect { |name|
-			BP(\di).busIndex(name) - BP(\di).bus.index
+		if(BP.exists(\di)) {
+			~dataIndices = #[xmin, xmax].collect { |name|
+				BP(\di).busIndex(name) - BP(\di).bus.index
+			};
+		} {
+			~pan = 0;
 		};
 	};
 	~freeCleanup = {

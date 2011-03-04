@@ -189,17 +189,136 @@ p.gestures.oneKlank = { |parms|
 BP(\st).makeStreamForKey(\kfreq);  // reset
 BP(\st).override(\kdecay, Pwhite(0.15, 0.3, 3));
 // original is 4, 7, 6
-BP(\st).override(\kfreq, Ptuple([Pseq([-3, 5, 2], 1), 1]));
+BP(\st).override(\kfreq, Ptuple([Pseq([-3, 5, 2], 1) + 7, 1]));
 BP(\st).runGesture((gest: \oneKlank, numEv: 2, mode: \e));
+
+BP(\st).runGesture((gest: \klankHarmonize, numEv: 2, mode: \e));
+
+BP(\st).chordN = 1;
+BP(\st).nextLowerInt.postcs
 
 p.unOverride(\kdecay); p.unOverride(\kfreq);
 p.listVars
 
 
 // Ilana solo bells?
-// Noisy stuff from torso? maybe rhythmicize
+BP(\bel).free;
+\chuckIf.eval(Fact(\bells), BP, \bel, nil, Library.at(\rvbs).copy.put(\glrvbmc, topEnvironment[\cRvbMc]));
+\chuckIf.eval(Fact(\bellfx), BP, \belfx, nil, (
+	parentChan: BP(\bel).chan
+));
+
+p = BP(\bel);
+
+// lowbell-specific parms
+p.v.env.keys.asArray.sort.do { |key|
+	var	skey = key.asString;
+	if(skey.beginsWith("lowbell") and: { skey.contains("Stream").not }) {
+		(key -> p[key]).postcs
+	}
+}; ""
+
+p = BP(\bel);
+
+p.lowbellfLow = Pexprand(900, 1600, inf);
+
+p.delta = Pwhite(1, 6, inf) * 0.25;
+p.sustain = Pwhite(2.5, 7.0, inf);
+p.sustain = Pwhite(1.2, 3.5, inf);
+
+p.delta.postcs
+
+p.chan.insp
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_go', { |t, r, m| s.sendMsg(\n_trace, m[1]) }).add;
+
+MixerChannel.servers[s][20]
+
+p.event.proto = p.event.proto.copy.put(\glrvbout, ~cRvbMc.inbus);
+
+
+// Noisy stuff from torso? maybe rhythmicize - below under drones
 // Melodies: Arms axial
+// use Shiva basically as is
+BP(#[am0, am1, am2]).free;
+BP(\tc).free;
+
+\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
+\chuckIf.eval(Fact(\shimmerpad), VC, \btp, nil, (
+	env: Env.adsr(0.5, 0.4, 0.8, 1.8, curve: -2),
+	fenv: Env.adsr(0.5, 0.5, 0.1, 3, peakLevel: 1, bias: 1),
+	// need some EQ pre-reverb
+	graphInsert: { |sig|
+		var	hishelf = EQSpec1.newSpec(\hishelf,
+			freq: 8705, k: -6.667.dbamp, rq: 1, sr: 44100);
+		sig = HPF.ar(sig, 668);
+		sig = StaticEQ.eqFuncs[\hishelf].(sig, hishelf.k, hishelf.a0);
+	}
+).putAll(Library.at(\rvbs)));
+if(BP.exists(\am0).not) { Fact(\shivaBPs).makev(Library.at(\rvbs)) };
+\chuckIf.eval(PR(\thinChords), BP, \tc);
+BP(\tc).finalAmp = 0.4;
+BP(\tc) => VC(\btp);
+\chuckIf.eval(PR(\shivaTrig), BP, \shivaTrig);
+BP(#[am0, am1, am2]).do { |bp, i|
+	bp.event.soundID = i;
+	bp.amp = -4.dbamp;
+};
+
+BP(\shivaTrig).delta = Pwrand(#[0.5, 1, 1.5, 2], #[1, 3, 1, 2.5].normalizeSum, inf);
+BP(\shivaTrig).playtc = 0.5.asPattern.coin; //true;
+BP(\shivaTrig).reset; BP(\shivaTrig).v.reset;
+
+
+BP(\am0).at(\node)
+
+BP(#[am0, am1, am2]).do { |bp|
+	bp.scaleRoot = 9;
+	bp.root = 57;
+	bp.phrases = #[
+		[1, 9, 6],
+		[5, 11, 10, 7, 13],
+		[1, 9, 11, 8]
+	];
+	bp.makeStreamForKey(\degree);
+};
+
+thisProcess.interpreter.insp
+
+Object.dependantsDictionary.keys.select(_.isKindOf(BP));
+
+BP(\shivaTrig).dependants
+
+Error.debug = true;
+
+
 // Melodies: Arms rhythmic melody?
+VC(\bmel).free;
+\chuckIf.eval(Fact(\armsmelVC), VC, \bmel, nil, (
+	env: { var length = NamedControl.kr(\length, 0); Env.perc(0.01, length) },
+	// env: Env.adsr(0.01, 2.5, 0.05, 1.2),
+	isMono: false
+).putAll(Library.at(\rvbs)));
+VC(\bmel).v.setArgDefaults([ffreq: 12258]);
+
+BP(\bmel).free;
+\chuckIf.eval(Fact(\bmelBP), BP, \bmel);
+0 => BP(\bmel);
+
+~clock52 => BP(\bmel);
+
+p = BP(\bmel);
+
+p.dur = p.simpleDur; // .asStream * 0.5;
+
+p.dur = PR(\pwxrandn).copy.prep([
+	0.5, 0.75, 1, 1.5, 2,
+	Pn(0.25, { #[1, 2, 3].wchoose(#[0.45, 0.35, 0.2]) })
+], #[2, 1, 0.2, 1.2, 2, 4].normalizeSum, inf).asStream * 0.5;
+
+
+
 // Melodies: S&L duet
 // Harmonies: Arms partnering
 // Harmonies: Drones?
@@ -217,7 +336,6 @@ a.free;
 
 // use oscbloop1 with these?
 // combine torso low tones with formantfx!
-
 (
 PR(\abstractProcess).clone {
 	~event = (eventKey: \monoSupportData);
@@ -225,37 +343,39 @@ PR(\abstractProcess).clone {
 	~fadeOutTime = 3;
 
 	~prep = {
-		~chan = MixerChannel(~collIndex, s, 2, 2);
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
 		~event.put(\chan, ~chan);
+		~event.proto = topEnvironment[\rvbEvent].proto;
 		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
 
 		~pitchbufs = \makeWavetables.eval(8, s, 2048, 48, { |numh| 1 ! numh });
 
 		\addRvbOut.eval(\formantfx2Dist, { |inbus, /*outbus,*/ t_trig = 0, slideTime = 1, gate = 1,
-			amp = 1, fadeIn = 5, fadeOut = 5, pan = 0, topWet = 1|
+			amp = 1, fadeIn = 5, fadeOut = 5, pan = 0, wet = 1|
 			var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
 				amps = NamedControl.kr(\amps, 1 ! 5),
 				qs = NamedControl.kr(\qs, 0.1 ! 5),
 				sig = In.ar(inbus, 1), sig2,
-				wet = Linen.kr(gate, fadeIn, topWet, fadeOut, doneAction: 2);
+				wetenv = Linen.kr(gate, fadeIn, 1, fadeOut, doneAction: 2);
 			ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 			amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 			qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
 			sig2 = BBandPass.ar(sig, ffreqs, qs, amps).sum * amp;
-			sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
+			sig = XFade2.ar(sig, sig2, (wet * wetenv).madd(2, -1));
 			Pan2.ar(sig, pan)
 			// ReplaceOut.ar(outbus, sig);
 		}, nil, nil, nil, ReplaceOut).add;
 
 		~distCtl = GenericGlobalControl(\distance, nil, 10, #[5, 20]);
 		~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+		~wetCtl = GenericGlobalControl(\wet, nil, 1);
 
 		~notes = IdentitySet.new;
 		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
 	};
 
 	~freeCleanup = {
-		[~chan, ~pitchbufs, ~distCtl, ~panCtl].free;
+		[~chan, ~pitchbufs, ~distCtl, ~panCtl, ~wetCtl].free;
 	};
 
 	// notes
@@ -281,7 +401,27 @@ PR(\abstractProcess).clone {
 	~fadeOut = 0.01;
 	~fxDelta = Pexprand(0.1, 0.9, inf); // Pexprand(1.0, 4.0, inf),
 	~formant = Plazy({ Pxrand(~fmtKeys, inf) });
-	~topWet = 1;
+
+	~patKey = \dummy;
+
+	~patterns = Plazy({
+		Pbind(
+			\protoEvent, \polySynthPlayNotifyData,
+			\instrument, \oscbloop1,
+			\mode, BPStream(\mode),
+			\degree, BPStream(\degree),
+			\freq1, BPStream(\freq1),
+			\freq2, Pkey(\freq1),
+			\bufnum, BPStream(\bufnum),
+			\delta, BPStream(\delta),
+			\time, BPStream(\time),
+			\amp1, BPStream(\amp1),
+			\amp2, Pkey(\amp1),
+			\normAmp, BPStream(\normAmp),
+			\beats, BPStream(\beats),
+			\env, Pfunc({ |ev| ~envel.value(ev) })
+		)
+	});
 
 	~asPattern = {
 		Ppar([
@@ -300,33 +440,23 @@ PR(\abstractProcess).clone {
 				\slideTime, BPStream(\slideTime),
 				\inbus, BPStream(\inbus),
 				\amp, BPStream(\fxamp),
-				\topWet, BPStream(\topWet),
 				\fadeIn, BPStream(\fadeIn),
-				\fadeOut, BPStream(\fadeOut)
+				\fadeOut, BPStream(\fadeOut),
+				\distance, ~distCtl.asMap,
+				\pan, ~panCtl.asMap,
+				\wet, ~wetCtl.asMap
 			),
 			// notes
-			Pbind(
-				\protoEvent, \polySynthPlayNotifyData,
-				\instrument, \oscbloop1,
-				\mode, BPStream(\mode),
-				\degree, BPStream(\degree),
-				\freq1, BPStream(\freq1),
-				\freq2, Pkey(\freq1),
-				\bufnum, BPStream(\bufnum),
-				\delta, BPStream(\delta),
-				\time, BPStream(\time),
-				\amp1, BPStream(\amp1),
-				\amp2, Pkey(\amp1),
-				\normAmp, BPStream(\normAmp),
-				\beats, BPStream(\beats),
-				\env, Pfunc({ |ev| ~envel.value(ev) })
+			BPStream(\patterns) <> Pbind(
+				\patKey, BPStream(\patKey),
+				\protoEvent, \singleSynthPlayNotifyData
 			)
 		], 1)
 	};
 
 	~stopCleanup = {
 		if(~notes.notEmpty) {
-			~notes.do { |node| node.release(~fadeOutTime.neg - 1) };
+			~notes.do { |node| node.release(~fadeOutTime) };
 		} {
 			~stopFx.()
 		};
@@ -339,97 +469,226 @@ PR(\abstractProcess).clone {
 	};
 
 	~recvEventNotify = { |node, event|
-		var	upd;
+		// var	upd;
 		node.do { |n|
 			switch(n.defName.asSymbol)
-				{ \oscbloop1 } {
-					~notes.add(n);
+				{ \formantfx2Dist } {
+					~fxnode !? { ~fxnode.free };
+					~fxnode = n;
+				}
+				// default case: it's a note
+				{	~notes.add(n);
 					n.register;
-					upd = Updater(n, e { |obj, what|
+					Updater(n, e { |obj, what|
 						if(what == \n_end) {
-							upd.remove;
+							// upd.remove;
+							obj.releaseDependants;
 							~notes.remove(obj);
 							if(~notes.isEmpty and: { ~isPlaying.not }) { ~stopFx.() };
 						};
 					});
 				}
-				{ \formantfx2Dist } {
-					~fxnode !? { ~fxnode.free };
-					~fxnode = n;
-				};
 		};
 	};
 } => PR(\lowTonesFmt);
 )
 
 BP(\ltf).free;
-PR(\lowTonesFmt) => BP(\ltf);
+PR(\lowTonesFmt).chuck(BP(\ltf), nil, Library.at(\rvbs));
 0 => BP(\ltf);
 
 BP(\ltf).fxDelta = Pwhite(0.4, 1.4, inf);
 BP(\ltf).fxamp = 18.dbamp;
 
-BP(\ltf).degree = Pwhite(30, 39, inf) -.x Pseries(0, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], 3), inf).clump(3);
+BP(\ltf).distCtl => VP(0);
+BP(\ltf).panCtl => VP(0);
 
+BP(\ltf).panCtl.watch.automate { SinOsc.kr(SinOsc.kr(0.05).exprange(0.07, 0.75)) };
+BP(\ltf).panCtl.stopWatching.stopAuto;
+
+BP(\ltf).delta = Pwhite(1.5, 3.0, inf);
+BP(\ltf).time = Pkey(\delta) * Pwhite(2.5, 3.5, inf);
+
+BP(\ltf).mode = \a0;
+BP(\ltf).degree = (Penvir((last: 0, sideEffect: { |x| x }), Pwhite(32, 41, inf).select { |num| ~sideEffect.((num absdif: ~last) > 4, ~last = num) }) -.x Pseries(0, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], 5), inf).clump(5)).trace(prefix: "notes: ");
+
+BP(\ltf).event.proto = ~rvbEvent.proto;
+
+Pwhite(32, 41, inf) -.x Pseries(0, Pwrand(#[1, 2, 3], #[0.2, 0.4, 0.4], 3), inf).clump(3);
+
+BP(\ltf).notes;
+BP(\ltf).notes.clear;
+BP(\ltf).stopFx;
+
+BP(\ltf).envels = [
+	Env.linen(0.15, 0.35, 0.5, 1, \sqr),
+	Env.perc(0.005, 0.995, 1, -4)
+];
+
+BP(\ltf).envel = { ~envels.choose.postcs };
+
+o.remove;
+o = OSCresponderNode(s.addr, '/n_end', { |t, r, m| m[1].debug("node id ended") }).add;
+
+
+// one long-swelling chord
+p = BP(\ltf);
+p.alwaysReset
+
+p.delta = Pn(1, 1);
+p.time = 36; // Pwhite(18.0, 26.0, inf);
+p.envel = Env.linen(0.4, 0.2, 0.4, 1, \sqr);
+
+u.remove;
+u = Updater(BP(\ltf), { |obj, what|
+	if(what == \notesEmpty) { BP(\ltf).debug("stopping").stop(0) };
+});
+
+
+// try noise with formants
 (
-BP(\fmt2).free;
-Fact(\formantfx1).chuck(BP(\fmt2), nil, (
-	chan: n,
-	objects: (
-			fmt: (
-				def: SynthDef(\formantfx2, { |inbus, outbus, t_trig = 0, slideTime = 1, gate = 1,
-						amp = 1, fadeIn = 5, fadeOut = 5|
-					var	ffreqs = NamedControl.kr(\ffreqs, Array.series(5, 400, 400)),
-						amps = NamedControl.kr(\amps, 1 ! 5),
-						qs = NamedControl.kr(\qs, 0.1 ! 5),
-						sig = In.ar(inbus, 2), sig2,
-						wet = Linen.kr(gate, fadeIn, 1, fadeOut, doneAction: 2);
-					ffreqs = ffreqs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
-					amps = amps.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
-					qs = qs.collect { |x| EnvGen.kr(Env([x, x], [slideTime], \exp), t_trig) };
-					sig2 = BBandPass.ar(sig, ffreqs, qs, amps).sum * amp;
-					sig = XFade2.ar(sig, sig2, wet.madd(2, -1));
-					ReplaceOut.ar(outbus, sig);
-				}),
-				args: [
-					protoEvent: Pseq([\singleSynthPlayNotify, Pn(\singleSynthTrigger, inf)]),
-					#[ffreqs, amps, qs], Pnsym(BPStream(\formant), FormantTable),
-					ffreqs: Pkey(\ffreqs) * Pexprand(0.95, 0.95.reciprocal, inf).clump(5),
-					trig: 1,
-					slideTime: Pkey(\delta) * Pwhite(0.4, 0.8, inf),
-					inbus: Plazy({ Pn(~chan.inbus, inf) }),
-					node: Pfunc({ ~node ? 0 }),
-					sustain: inf,
-					amp: 12.5.dbamp,
-					fadeIn: BPStream(\fadeIn),
-					fadeOut: BPStream(\fadeOut)
-				]
+PR(\lowTonesFmt).clone {
+	~prep = {
+		~chan = MixerChannel(~collIndex, s, 2, 2, outbus: ~master);
+		~event.put(\chan, ~chan);
+		~event.proto = topEnvironment[\rvbEvent].proto;
+		[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
+
+		~noisedata = Signal.fill(1024, { 1.0.rand2 });
+		~noisebuf = Buffer.sendCollection(s, ~noisedata.asWavetable, 1, 0.05);
+
+		SynthDef(\noiseSrc, { |outbus, gate = 1, normAmp = 1, time = 1, hpf = 50|
+			var	sig = PinkNoise.ar(normAmp),
+				env = NamedControl.kr(\env, (0 ! 24).overWrite(Env.linen(0.3, 0.4, 0.3).asArray)),
+				eg = EnvGen.kr(env, gate, timeScale: time, doneAction: 2);
+			sig = HPF.ar(sig, hpf);
+			Out.ar(outbus, sig * eg)
+		}).add;
+
+		~distCtl = GenericGlobalControl(\distance, nil, 10, #[5, 20]);
+		~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
+		~wetCtl = GenericGlobalControl(\wet, nil, 1);
+
+		~notes = IdentitySet.new;
+		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
+	};
+	// notes
+	~delta = Pwhite(7.5, 15.0, inf);
+	~time = Pkey(\delta) * Pwhite(1.2, 1.7, inf);
+	~envel = Env.linen(0.3, 0.4, 0.3, 1, \sqr);
+
+	~freq1 = Pexprand(80.0, 250.0, inf);
+	~noiseSlideProb = 0.35;
+	~freq2 = Pkey(\freq1) * Pif(Pfunc({ ~noiseSlideProb.coin }),
+		Pexprand(0.75, 1.33, inf), 1);
+	~fHoldPct = Pwhite(0.35, 0.7, inf);
+	~fcurve = Pwhite(2.7, 4.5, inf) * (Pkey(\freq2) - Pkey(\freq1)).sign;
+	~preamp = 9;
+	~normAmp = 7.dbamp;
+	~noiseenv = Env.linen(0.2, sustainTime: 0.45, releaseTime: 0.35);
+	~hpf = 50;
+
+	~patKey = Penvir((last: nil ! 2, i: Pseq(#[0, 1], inf).asStream),
+		Pif(
+			Pfunc({ ~last.includes(\noiseSrc) }),
+			\oscbloop1,
+			Pwrand(#[oscbloop1, noiseSrc], #[0.8, 0.2], inf)
+		).collect { |name| ~last[~i.next] = name; name }
+	);
+
+	~patterns = Plazy({
+		Psym1(Pkey(\patKey), (
+			noiseSrc: Pbind(
+				// \protoEvent, \polySynthPlayNotifyData,
+				\instrument, \noiseSrc,
+				\delta, BPStream(\delta),
+				\time, BPStream(\time),
+				\normAmp, BPStream(\normAmp),
+				\hpf, BPStream(\hpf),
+				\env, Pfunc({ |ev| ~envel.value(ev) })
+			),
+			oscbloop1: Pbind(
+				\bufnum, ~noisebuf,
+				\instrument, \oscbloop1,
+				\freq1, BPStream(\freq1),
+				\freq2, BPStream(\freq2),
+				\fcurve, BPStream(\fcurve),
+				\fHoldPct, BPStream(\fHoldPct),
+				\delta, BPStream(\delta),
+				\time, BPStream(\time),
+				\amp1, BPStream(\preamp),
+				\amp2, Pkey(\amp1),
+				\normAmp, BPStream(\normAmp),
+				\env, Pfunc({ |ev| ~envel.value(ev) })
 			)
-	)
-));
-BP(\fmt2).v.putAll((
-	recvEventNotify: { |node, event|
-		~node = node;
-	},
-	stopCleanup: { ~node.release; ~node = nil; ~makeStreamForKey.(\fmtprotoEvent) }
-));
-BP(\fmt2).event.put(\chan, n).put(\eventKey, \monoSupport);
+		))
+	});
+} => PR(\noiseFmt);
 )
 
-s.sendMsg(\n_free, *(1102..1200))
+BP(\nf).free;
+PR(\noiseFmt).chuck(BP(\nf), nil, Library.at(\rvbs));
+0 => BP(\nf);
 
-BP(\fmt2).event.eventKey = \monoSupport;
-BP(\fmt2).reset;
+p = BP(\nf);
 
-BP(\fmt2).fmtprotoEventStream.next
-BP(\fmt2).stopCleanup;
-BP(\fmt2).v[\stopCleanup].postcs;
+p.delta = Pwhite(1, 4, inf) * 0.25;
+p.time = max(0.4, Pkey(\delta) * Pexprand(0.7, 2.5, inf));
+p.normAmp = 12.dbamp;
+p.envel = Env.perc(0.01, 0.99);
 
-BP(\fmt2).stopCleanup = 0;
+p.noiseSlideProb = 0.35;
+p.noiseSlideProb = 0;
+p.freq1 = Pexprand(180.0, 500.0, inf);
+p.freq1 = Pwhite(37, 51, inf).collect { |x| Mode(\a0).cps(x) };
 
-s.sendMsg(\n_free, 1093, 1098);
+p.fxDelta = Pwhite(0.4, 1.4, inf);
 
-BP(\fmt2).node.trace
+p.event.debug = false;
+p.event.trace = true;
+
+
+p.patKey = Penvir((last: nil ! 2, i: Pseq(#[0, 1], inf).asStream),
+		Pif(
+			Pfunc({ ~last.includes(\noiseSrc) }),
+			\oscbloop1,
+			Pwrand(#[oscbloop1, noiseSrc], #[0.5, 0.5], inf)
+		).collect { |name| ~last[~i.next] = name; name }
+).trace(prefix: "patkey: ");
+
+// slower works much better with noiseSrc
+p.delta = Pwhite(1.0, 3.0, inf);
+p.time = Pkey(\delta) * Pwhite(1.4, 2.5, inf);
+p.envel = Env.linen(0.3, 0.4, 0.3, 1, \sqr);
+p.patKey = \noiseSrc;
+
+BP(\nf).distCtl => VP(0);
+BP(\nf).panCtl => VP(0);
+BP(\nf).wetCtl => VP(0);
+
+g = GenericGlobalControl(\hpf, nil, 50, \freq);
+g => VP(0);
+
+p.hpf = g.asMap;
+
+g.watch.automate { XLine.kr(7500, 150, 40, doneAction: 2) };
+
+// come down and up faster
+g.watch.automate { EnvGen.kr(Env(#[7500, 150, 3000], #[40, 30], \exp), doneAction: 2) };
+p.patKey = Pswitch1(#[noiseSrc, oscbloop1],
+	(Pwhite(0, 0.999999, inf) + Env(#[0, 0, 1], #[15, 60]).asStream).trunc
+).trace(prefix: "patKey: ");
+
+p.fxDelta = Pwhite(1, 4, inf) * 0.25;
+p.slideTime = 0.12;
+
+p.fxnode.trace
+
+p.v[\asPattern].postcs
+p.listVars
+
+e = p.use { ~patternsStream.next(~event.copy.put(\patKey, \oscbloop1)) };
+e = p.use { ~patternsStream.next(~event.copy.put(\patKey, \noiseSrc)) };
 
 // Harmonies: Torso held notes
 

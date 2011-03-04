@@ -108,7 +108,7 @@
 									if(p[\savesynthStream].isNil) {
 										p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
 										p.override(\delta, Pwhite(0.2, 0.8, 10));
-										p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)).trace, false, e { ~doneSignal = nil; ~stop.() });
+										p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)), false, e { ~doneSignal = nil; ~stop.() });
 									} { ~doneSignal = nil; ~stop.() };
 								}
 							),
@@ -182,7 +182,7 @@
 										BP(#[ssd, ssd2]).do { |p|
 											p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
 											p.override(\delta, Pwhite(0.2, 0.8, 10));
-											p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)).trace, false, e { ~doneSignal = nil; ~stop.() });
+											p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)), false, e { ~doneSignal = nil; ~stop.() });
 										};
 									} { ~doneSignal = nil; ~stop.() };
 								}
@@ -589,7 +589,7 @@
 		glrvbmc: topEnvironment[\cRvbMc],
 		lcrvbmc: topEnvironment[\lcrvbmc],
 		initProcesses: {
-			\chuckIf.eval(Fact(\bells), BP, \bel, nil, Library.at(\rvbs).copy.put(\glrvbmc, topEnvironment[\cRvbMc]).debug("mixers passed into bells"));
+			\chuckIf.eval(Fact(\bells), BP, \bel, nil, Library.at(\rvbs).copy.put(\glrvbmc, topEnvironment[\cRvbMc]));
 			\chuckIf.eval(Fact(\bellfx), BP, \belfx, nil, (
 				parentChan: BP(\bel).chan
 			));

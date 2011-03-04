@@ -1930,7 +1930,7 @@ make: { |name|
 		},
 
 		// external hook to drop a gesture in!
-		runGesture: { |parms, holdForStop = false|
+		runGesture: { |parms, holdForStop = false, holdID|
 			var	stream;
 			if(~isPlaying) {
 				parms ?? { parms = () };
@@ -1941,6 +1941,7 @@ make: { |name|
 					if(holdForStop) {
 						stream = CleanupStream(stream.asStream, e {
 							~streamsToStop.remove(stream);
+							~endStreamHook.(stream, holdID);
 						});
 						~streamsToStop.add(stream);
 					};
@@ -2020,11 +2021,12 @@ make: { |name|
 				)
 			},
 			klankHarmonize: { |parms|
+				parms[\mode] ?? { parms[\mode] = \g };
 				Pbind(
 					\nextLower, BPStream(\nextLowerInt),
 					\chord, Pclump(BPStream(\chordN), BPStream(\chordInt)),
 					\filtFreq, Ptuple([Pkey(\filtDegree), Pkey(\nextLower), Pkey(\chord)], inf)
-						.collect { |item| Mode(\g).cps(item.flat.integrate + 35) }
+						.collect { |item| Mode(parms[\mode]).cps(item.flat.integrate + 35) }
 				)
 				<> ~gestures[\oneKlank].(parms)
 			},

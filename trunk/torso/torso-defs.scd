@@ -28,7 +28,8 @@ make: { |name|
 			#[glrvbmc, lcrvbmc].do { |key|
 				key.envirGet.tryPerform(\receivesSignalFrom, ~chan);
 			};
-			~event.proto = topEnvironment[\rvbEvent].proto;
+			~event.proto = topEnvironment[\rvbEvent].proto.copy
+				.put(\glrvbout, ~glrvbmc.inbus);
 			~event.put(\glrvbamt, 0.395).put(\lcrvbamt, 0.232);
 		},
 		userfree: {
@@ -43,7 +44,7 @@ make: { |name|
 		delta: Pseq([
 			Plazy({
 				var	last;
-				if(~continue.debug("check continue flag") ? true) {
+				if(~continue ? true) {
 					last = rrand(0.9, 1.2);
 					Pgeom.fromEndpoints(rrand(1.8, 2.6), last, rrand(4, 9)) ++ Pn(last*0.5, 1)
 				} { nil.alwaysYield /*BP(~collIndex).stop(0)*/ };
@@ -1632,7 +1633,7 @@ PR(\abstractProcess).clone {
 
 (make: { |name|
 PR(\tposes).chuck(BP(name), nil, (
-	// controlsVCPos: false,  // REENABLE FOR SEQUENCE
+	controlsVCPos: false,  // REENABLE FOR SEQUENCE
 	mode: Pseq([
 		Pn(\a0, { rrand(25, 65) }),
 		Pstutter(Pwhite(6, 10, { rrand(1, 3) }),

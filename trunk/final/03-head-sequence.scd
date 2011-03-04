@@ -27,7 +27,7 @@ PR(\funcCmd).copy.putAll((
 			if(what == \done) {
 				~doneSignal.remove;
 				// "Updater calling ~stop".debug;
-				~stop.()
+				~stop.((activeCmds: cmds))
 			};
 		});
 		~setUserSignal.();
