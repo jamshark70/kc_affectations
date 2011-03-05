@@ -22,7 +22,11 @@ s.doWhenBooted {
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayer),
+		event: (eventKey: \singleSynthPlayerData,
+			soundID: 0,
+			vizKeys: Library.at(\defaultVizKeys).copy
+			.put(3, { ~fLow.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+		),
 		master: ~master, glrvbmc: ~glrvbmc, lcrvbmc: ~lcrvbmc,
 		userprep: {
 			#[glrvbmc, lcrvbmc].do { |key|
@@ -163,8 +167,14 @@ MIDIRecBuf(\waterch, [
 ].asNotes, (type: \ch, mode: \g)) => MBM(0);
 
 PR(\arpeg1).clone {
+	~event = (eventKey: \voicerNoteData,
+		vizKeys: Library.at(\defaultVizKeys).copy
+			.put(3, { ~newFreq.asArray.maxItem.tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+	);
+	~soundID = -1;
 	~superAsPattern = ~asPattern;
 	~asPattern = { |inEvent|
+		~soundID = ~soundID + 1;
  		~preInsertStream !? {
  			inEvent = ~preInsertStream.next(inEvent);
  		};
@@ -191,7 +201,7 @@ PR(\arpeg1).clone {
 					synths.do { |node| node.addDependant(ufunc) };
 				});
 			};
-			ev
+			ev.put(\soundID, ~soundID)
 		};
 	};
 } => PR(\arpeg1PreInsert);
@@ -226,48 +236,6 @@ PR(\arpeg1).clone {
 	BP(name).value.reset;
 	BP(name)
 }, type: \bp) => Fact(\waterch);
-
-
-(//keys: #[master, glrvbmc, lcrvbmc],
-vcKey: \wp,
-make: { |name|
-	BP(name).free;
-	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		chan: VC(~vcKey).env.target,
-		isFx: true,
-		userprep: {
-			~overlap = GenericGlobalControl(\overlap, nil, 0.7, #[0.7, 6.0, \exp]);
-			~event = ~event.copy.put(\addAction, \addToHead);
-		},
-		useGui: { |vp| ~overlap => VP(vp) },
-		userfree: { ~overlap.free },
-		delta: Pwhite(3.0, 8.0, inf),
-		sustain: Plazy { Pkey(\delta) * ~overlap },
-		objects: { (
-			shift: (
-				def: (
-					Instr("busfx.fshift", { |bus, numCh, freq1, freq2, wet1, wet2, wetProp = 0.5, time = 1|
-						var	sig = In.ar(bus, numCh),
-							freq = XLine.kr(freq1, freq2, time),
-							fx = FreqShift.ar(sig, freq),
-							weteg = EnvGen.kr(Env([wet1, wet2, wet1], [wetProp, 1-wetProp], \sin),
-								timeScale: time, doneAction: 2);
-						XFade2.ar(sig, fx, weteg.madd(2, -1))
-					}, [\audioBus, \numChannels, #[0, 900], #[0, 900], nil, nil, nil, #[0.1, 50]]);
-					Patch("busfx.fshift", [nil, 1], ReplaceOut)
-				),
-				args: [
-					time: Pkey(\sustain),
-					freq1: Pwhite(0.0, 900.0, inf),
-					freq2: Pwhite(0.0, 900.0, inf),
-					wet1: 0, wet2: 1,
-					wetProp: Pwhite(0.2, 0.8, inf)
-				]
-			)
-		) }
-	));
-	0 => BP(name);
-}, type: \bp) => Fact(\watershift);
 
 
 // melody synth
@@ -383,7 +351,7 @@ free: {
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData);
 	~continuous = false;
 	~alwaysReset = false;
 	~continuous_ = { |bool = false|
@@ -446,12 +414,14 @@ PR(\abstractProcess).clone {
 		}*/
 	};
 
+	~soundID = -1;
 	~makePhrase = { |ev|
 		// one buslock per phrase; need to know total dur in advance
 		var	phrI = ~phraseIndexStream.next,
 			notes, durs, lock,
 			once = true;
 		if(phrI.notNil) {
+			~soundID = ~soundID + 1;
 			lock = PR(\busLock).copy.prep((numCh: 2, rate: \control));
 			notes = \patRejectLastN.eval(~rewriters[phrI].asStream, 1).all;
 			ev[\noteCount] = notes.size;
@@ -492,7 +462,8 @@ PR(\abstractProcess).clone {
 				\totalDur, durs.sum,
 				\freqlag, BPStream(\freqlag),
 				#[pan, distance], (lock.bus.index + #[0, 1]).collect { |i| ("c" ++ i).asSymbol },
-				\finalAmp, BPStream(\amp)
+				\finalAmp, BPStream(\amp),
+				\soundID, ~soundID
 			)
 		};  // else returns nil, stopping the process
 	};
@@ -918,8 +889,9 @@ make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
 		// event: (eventKey: \singleSynthPlayer),
-		event: (eventKey: \polySynthBusLock,
-			notifyDependents: ProtoEvent(\polySynthPlayNotify).v[\notifyDependents]
+		event: (eventKey: \polySynthBusLockData,
+			notifyDependents: ProtoEvent(\polySynthPlayNotify).v[\notifyDependents],
+			vizKeys: Library.at(\defaultVizKeys).copy.put(3, \center).put(1, 0)
 		),
 		master: topEnvironment[\master],
 		glrvbmc: topEnvironment[\cRvbMc],
@@ -1025,7 +997,14 @@ make: { |name|
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthBusLock),
+		event: (eventKey: \polySynthBusLockData,
+			vizPath: #[perc],
+			vizKeys: Library.at(\defaultVizKeys).copy
+			.put(3, { ~fLow.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+			.put(6, { ~lpcEv[\pan2] })
+			.put(7, { ~lpcEv[\distance2] })
+			.put(1, 0)
+		),
 		master: topEnvironment[\master],
 		glrvbmc: topEnvironment[\cRvbMc],
 		lcrvbmc: topEnvironment[\lcrvbmc],
@@ -1093,7 +1072,10 @@ make: { |name|
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \singleSynthPlayNotify),
+		event: (eventKey: \singleSynthPlayNotifyData,
+			vizPath: #[perc],
+			vizKeys: Library.at(\defaultVizKeys).copy.put(3, \dataValue)
+		),
 		master: topEnvironment[\master],
 		glrvbmc: topEnvironment[\cRvbMc],
 		lcrvbmc: topEnvironment[\lcrvbmc],
@@ -1125,6 +1107,8 @@ make: { |name|
 			};
 			~gcMaps = ~gcs.collect { |gc| gc.asMap };
 			~gcBuses = ~gcs.collect { |gc| gc.index };
+			~gcIndices = IdentityDictionary.new;
+			~gcSpecs.keysDo { |key, i| ~gcIndices.put(key, i) };
 
 			\addRvbOut.eval(\mappedDrone, { |outbus, bufnum, center = 60, width = 10, speed = 4, ffreq = 1000, rq = 0.2,
 				chorCtr = 0.005, chorWidth = 0.003, chorSpeed = 0.02, chorDecay = 0.1,
@@ -1169,7 +1153,8 @@ make: { |name|
 					levels: Ptuple([18, Pwhite(5.0, 11.0, inf), Pwhite(17.5, 20.0, inf)], inf),
 					times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
 					curve: \lin,
-					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
+					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) }) //,
+					// dataValue: Pfunc({ |ev| ev[\levels].last })
 				]
 			),
 			center: (
@@ -1302,7 +1287,10 @@ make: { |name|
 					timeScale: ~timeScale,
 					delta: rrand(2.0, 5.0)
 				).putAll(~gcMaps),
-				~superPattern.()
+				Pfunc({ |ev|
+					ev.put(\soundID, ~gcIndices[ev[\synthKey]])
+						.put(\dataValue, ev[\levels][1])
+				}) <> ~superPattern.()
 			], 1)
 		}
 	));
@@ -1313,7 +1301,7 @@ make: { |name|
 
 // IMPORTANT: pass in [~glrvbmc, ~lcrvbmc] as chuck parms
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthPlayNotify);
+	~event = (eventKey: \polySynthPlayNotifyData);
 	~alwaysReset = true;  // for fx
 
 	~gate = Pexprand(0.08, 0.2, inf);
@@ -1352,6 +1340,7 @@ PR(\abstractProcess).clone {
 		~gcbuspair = Bus.control(s, 2);
 		~distance = GenericGlobalControl(\distance, ~gcbuspair.index.asBus(\control, 1, s), 17, #[5, 20]);
 		~pan = GenericGlobalControl(\pan, (~gcbuspair.index + 1).asBus(\control, 1, s), 0, \bipolar);
+		~event.put(\distance, ~distance.asMap).put(\pan, ~pan.asMap).put(\soundID, 0);
 		~nodes = IdentitySet.new;
 	};
 
@@ -1484,7 +1473,7 @@ make: { |name|
 // poses on chair
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \monoSupport, protoEvent: \polySynthPlayNotify);
+	~event = (eventKey: \monoSupportData, protoEvent: \polySynthPlayNotifyData, soundID: 0);
 	~alwaysReset = true;
 	~requiredKeys = #[vcKey];
 	~resetAllSources = false;
@@ -1493,6 +1482,10 @@ PR(\abstractProcess).clone {
 	~useModGCs = true;
 	~prep = {
 		~ctlBus = Bus.control(s, 3).setn(#[0, 10, 0]);
+
+		// ~event[\vizKeys] = Library.at(\defaultVizKeys).copy
+		// .put(6, ~ctlBus.asMap).put(7, ("c" ++ (~ctlBus.index+1)).asSymbol);
+		~event.put(\pan, ~ctlBus.asMap).put(\distance, ("c" ++ (~ctlBus.index+1)).asSymbol);
 	};
 	~freeCleanup = {
 		if(~controlsVCPos and: { VC.exists(~vcKey) and: { VC(~vcKey).env[\modfx].notNil } }) {
@@ -1589,12 +1582,17 @@ PR(\abstractProcess).clone {
 				if(ev[\freq] != ev[\freq2]) {
 					ev2 = ev.copy
 						.put(\freq, ev[\freq2])
-						.put(\delta, 0.01);
+						.put(\delta, 0.01)
+						.put(\dataToViz, false);
 					ev2.yield;
-					(protoEvent: \polySynthTrigger,
+					(protoEvent: \polySynthTriggerData,
 						node: ev2[\node],
-						freq: ev[\freq], delta: ev[\delta] - 0.01)
-					.parent_(~event.parent)
+						freq: ev[\freq], delta: ev[\delta] - 0.01,
+						pan: ev[\pan], distance: ev[\distance],
+						sustain: ev[\sustain], gate: ev[\gate],
+						collIndex: ~collIndex,
+						soundID: 0
+					).parent_(~event.parent)
 				} { ev }
 			}),
 			~userPattern.(),
@@ -1714,7 +1712,7 @@ PR(\tposes).chuck(BP(name), nil, (
 			Pbind(
 				\instrument, VC(~vcKey).v.nodes[0].defname.asSymbol,
 				\node, Pfunc { ~node ?? { 0 } },
-				\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotify, \singleSynthTrigger),
+				\protoEvent, Pif(Pfunc { ~node.isNil }, \singleSynthPlayNotifyData, \singleSynthTriggerData),
 				\mode, BPStream(\mode),
 				\degree, BPStream(\degree),
 				\freq, Pkey(\degree).collect { |deg, ev| ev[\mode].asMode.cps(deg) },
@@ -1736,7 +1734,7 @@ PR(\tposes).chuck(BP(name), nil, (
 						\schedEventBundleArray.eval(ev[\lag] ? 0,
 							(ev[\timingOffset] ? 0) + (ev[\delta] * ev[\legato]),
 							ev[\server] ?? { Server.default },
-							[~node.releaseMsg], nil, true  // true == suppress error
+							[~node.releaseMsg], true  // true == suppress error
 						);
 						~node = nil;
 					};

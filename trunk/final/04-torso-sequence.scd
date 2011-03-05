@@ -661,6 +661,7 @@
 			));
 			\chuckIf.eval(Fact(\armsmelVC), VC, \am, nil, Library.at(\rvbs));
 			\chuckIf.eval(Fact(\duetMelBP), BP, \duetm);
+			VC(\tmel) => BP(\duetm);
 		},
 		unloadProcesses: { VC(\wp).free; BP(#[wch, wfx]).free },
 		seqPattern: {
