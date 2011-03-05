@@ -2697,6 +2697,8 @@ make: { |name|
 				.put(1, { BP(~collIndex).keyLookup[~synthKey] })
 				.put(3, { ~freq1.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
 				.put(5, \normAmp)
+				.put(6, { ~lpcEv[\pan1] })
+				.put(7, { ~lpcEv[\distance] })
 		).proto_(topEnvironment[\rvbEvent].proto),
 		keyLookup: (noisy: 0, pitched: 1),
 		dir: topEnvironment[\sampleDir],

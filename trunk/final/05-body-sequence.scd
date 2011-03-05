@@ -166,6 +166,9 @@
 								0.05.wait;
 								#[59, 71].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
 							};
+							Library.at(\vizAddr).tryPerform(\sendMsg,
+								\note, \sp.hash, s.latency, 59.midicps.explin(20, 20000, -1, 1),
+								8, 0.15, nil, nil);
 						},
 						clearDoneSignal: { defer(e { ~nodes.do(_.release) }, 1.5) }
 					)
@@ -278,6 +281,9 @@
 								0.05.wait;
 								#[68, 80].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
 							};
+							Library.at(\vizAddr).tryPerform(\sendMsg,
+								\note, \sp.hash, s.latency, 68.midicps.explin(20, 20000, -1, 1),
+								8, 0.15, nil, nil);
 						},
 						clearDoneSignal: {
 							fork {
@@ -367,6 +373,9 @@
 								0.05.wait;
 								#[73, 85].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
 							};
+							Library.at(\vizAddr).tryPerform(\sendMsg,
+								\note, \sp.hash, s.latency, 73.midicps.explin(20, 20000, -1, 1),
+								8, 0.15, nil, nil);
 						},
 						clearDoneSignal: {
 							~iterator.findActive(\gsharp).stop;
@@ -819,6 +828,9 @@
 								0.05.wait;
 								#[68, 80, 73, 85].midicps.do { |f, i| ~nodes[i].set([freq: f], latency: s.latency) }
 							};
+							Library.at(\vizAddr).tryPerform(\sendMsg,
+								\note, \sp.hash, s.latency, 68.midicps.explin(20, 20000, -1, 1),
+								8, 0.15, nil, nil);
 						},
 						clearDoneSignal: {
 							fork {

@@ -556,15 +556,18 @@ Library.put(\defaultVoicerVizKeys, Library.at(\defaultVizKeys).copy.putEach(
 ));
 
 {	var	path, parms, val, addr, server, mapped, getmapped = false;
-	if(~dataToViz ? true and: {
-		(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
-	}) {
+	if(~dataToViz ? true
+		and: { ~instrument != \rest
+			and: {
+				(addr = ~vizAddr ?? { Library.at(\vizAddr) }).notNil
+			}
+		}) {
 		~vizKeys ?? { ~vizKeys = Library.at(\defaultVizKeys) };
 		// don't need string parm names
 		// array: [value | lookup symbol | func]
 		// Lorne should interpret -inf as 'not populated'
 		parms = ~vizKeys.collect { |item|
-			val = (if(item.isSymbol) { item.envirGet }
+			val = (if(item.isSymbol) { item.envirGet.value }
 				{ item.value }) ? -inf;
 			if(val.size > 0) { val[0] } { val };  // NO ARRAYS
 		};

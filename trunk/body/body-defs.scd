@@ -22,7 +22,9 @@ SynthDef(\finalRotate, { |outbus,
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \polySynthKrBusLock);
+	~event = (eventKey: \polySynthKrBusLockData, soundID: 0,
+		vizKeys: Library.at(\defaultVizKeys).copy.put(5, \gate)
+	);
 	~repeats = inf;
 	~requiredKeys = #[vcKey];
 	~resetSources = true;
@@ -208,6 +210,12 @@ make: { |name|
 (make: { |name|
 	BP(name).free;
 	PR(\basicBufferPlayer).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData,
+			vizKeys: Library.at(\defaultVizKeys).copy
+			.put(1, { BP(~collIndex).buffers.indexOf(~buffer) })
+			.put(3, { ~filtFreq.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) }),
+			vizPath: #[perc]
+		),
 		bufPaths: (topEnvironment[\sampleDir] +/+ "head/udu*").pathMatch,
 		master: ~master,
 		inChannels: 2,
@@ -286,6 +294,7 @@ MIDIRecBuf(\bodymel, [
 
 (make: { |name|
 	PR(\mel1).chuck(BP(name), nil, (
+		event: (eventKey: \voicerNoteData, midi: true, soundID: 0),
 		prep: {
 			~posBus = Bus.control(s, 2);
 			~panCtl = GenericGlobalControl(\pan, ~posBus.index.asBus(\control), 0, \bipolar);
@@ -368,6 +377,9 @@ MIDIRecBuf(\bodymel, [
 (make: { |name|
 	BP(name).free;
 	PR(\bufPerc).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData, grain: true,
+			vizPath: #[perc], soundID: 0, pan: 0
+		),
 		bufPaths: [topEnvironment[\sampleDir] +/+ "head/uduSLAP1.wav"],
 		bufCoords: #[[300, -1]],
 		alwaysReset: true,
@@ -429,6 +441,10 @@ MIDIRecBuf(\bodymel, [
 (make: { |name|
 	BP(name).free;
 	PR(\bufPerc).chuck(BP(name), nil, (
+		event: (eventKey: \singleSynthPlayerData, grain: true,
+			vizPath: #[perc], pan: 0,
+			vizKeys: Library.at(\defaultVizKeys).copy.put(1, \bufIndex)
+		),
 		bufPaths: (topEnvironment[\sampleDir] +/+ "head/*FING*.wav").pathMatch,
 		alwaysReset: true,
 		master: topEnvironment[\master],
@@ -464,7 +480,7 @@ MIDIRecBuf(\bodymel, [
 
 
 PR(\abstractProcess).clone {
-	~event = (eventKey: \voicerNote);
+	~event = (eventKey: \voicerNoteData, soundID: 0);
 
 	~prep = {
 		~event.proto = topEnvironment[\rvbEvent].proto;
@@ -548,112 +564,12 @@ PR(\abstractProcess).clone {
 
 
 
-
-(
-keys: #[master, glrvbmc, lcrvbmc],
-make: { |name|
-	BP(name).free;
-
-	PR(\basicBufferPlayer).chuck(BP(name), nil, (
-		event: (
-			eventKey: \polySynthPlayerData,
-			instrument: \bufGrainPanKlankDist,
-			vizPath: #[perc]
-		),
-		soundID: Pseries(0, 1, inf),
-		alwaysReset: true,
-
-		bufPaths: [topEnvironment[\feetdir].dirname +/+ "samples/feet/58454_sinatra314_footsteps_wooden_floor_loop.wav"],
-
-		inChannels: 2,
-		master: ~master,
-		glrvbmc: ~glrvbmc,
-		lcrvbmc: ~lcrvbmc,
-		initAmp: 1,
-
-		def: \bufGrainPanKlankDist,
-		delta: Pwrand(#[0.5, 1.0], #[0.95, 0.05], inf),
-		time: 0.15,
-		rate: 1,
-		start: Pfunc({ |ev| ~pt[ev[\ptIndex]] * ~buffers[0].sampleRate }),
-		amp: 6.dbamp,
-		distance: Pseg(
-			Ppatlace([Pwhite(14.0, 20.0, inf), Pwhite(7.0, 10.0, inf)], inf),
-			Pexprand(2.0, 7.0, inf),
-			\lin
-		),
-		pan: Pseg(
-			Pwhite(0.75, 1.0, inf) * Pseq(#[-1, 1], inf, { 2.rand }),
-			Pexprand(2.0, 7.0, inf),
-			\lin
-		),
-		ffreq: 14000,
-		ptIndex: Pwhite(0, Pfunc({ ~pt.size - 1 }), inf).clump(3),
-		bufIndex: 0,
-		mode: Pwrand(#[d0, e0], #[0.8, 0.2], inf),
-		filtAmp: 0,
-		filtDegree: Pwhite(39, 49, inf),
-		filtFreq: Pfunc({ |ev| ev[\mode].asMode.cps(ev[\filtDegree]) }),
-		filtDecay: 0.011,
-
-		superPattern: PR(\basicBufferPlayer).v[\asPattern],
-		asPattern: {
-			Pbind(
-				\distance, BPStream(\distance),
-				\pan, BPStream(\pan),
-				\ffreq, BPStream(\ffreq),
-				\chorusAmps, #[[0, 0, 0]],
-				\mode, BPStream(\mode),
-				\filtAmp, BPStream(\filtAmp),
-				\filtDegree, BPStream(\filtDegree),
-				\filtFreq, BPStream(\filtFreq),
-				\filtDecay, BPStream(\filtDecay)
-			)
-			<>
-			~superPattern.()
-			<>
-			Pbind(\ptIndex, BPStream(\ptIndex))
-		},
-
-		postMCCreation: { |chan|
-			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\receivesSignalFrom, ~chan));
-
-			~chan.playfx(Instr("busfx.limiter"), [0, 2, 0.99, 0.05]);
-
-			~ampCtl = GenericGlobalControl(\amp, nil, ~initAmp, \amp);
-			~kAmpCtl = GenericGlobalControl(\kAmp, nil, 1, \amp);
-			~ffreqCtl = GenericGlobalControl(\ffreq, nil, 18000, \freq);
-			~event.putAll((
-				// just in case reverb channels don't exist,
-				// push them to hw input buses (to suppress output)
-				glrvbout: ~glrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
-				lcrvbout: ~lcrvbmc.tryPerform(\inbus) ?? { s.options.numOutputBusChannels },
-				chan: ~chan,
-				ampMap: ~ampCtl.asMap
-			));
-			~readLabels.();
-		},
-		useGui: { |vpi| [~ampCtl, ~kAmpCtl, ~ffreqCtl].do { |gc| gc => VP(vpi) } },
-		free: {
-			[~glrvbmc, ~lcrvbmc].do(_.tryPerform(\stopsReceivingFrom, ~chan));
-			[~ampCtl, ~kAmpCtl, ~ffreqCtl, ~shapebuf].free;
-		},
-		processLabels: PR(\steps1).v[\processLabels],
-		readLabels: PR(\steps1).v[\readLabels],
-		labelPath: {
-			~bufPaths[0].dirname
-				+/+ ~bufPaths[0].basename[.. ~bufPaths[0].basename.indexOf($_)]
-				++ "labels3.txt"
-		}
-	));
-	topEnvironment[\clock52] => BP(name);
-	// synths need to run just ahead of the beat to sound on time
-	#[1, -0.07] => BP(name);
-}, type: \bp) => Fact(\bodySteps);
-
-
 PR(\abstractProcess).clone {
-	~event = (eventKey: \monoSupportData);
+	~event = (eventKey: \monoSupportData, soundID: 0,
+		vizKeys: Library.at(\defaultVizKeys).copy
+		.put(3, { ~freq1.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
+		.put(5, \normAmp)
+	);
 	~alwaysReset = true;
 	~fadeOutTime = 3;
 
@@ -684,6 +600,7 @@ PR(\abstractProcess).clone {
 		~distCtl = GenericGlobalControl(\distance, nil, 10, #[5, 20]);
 		~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
 		~wetCtl = GenericGlobalControl(\wet, nil, 1);
+		~event.put(\distance, ~distCtl.asMap).put(\pan, ~panCtl.asMap);
 
 		~notes = IdentitySet.new;
 		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
@@ -833,9 +750,14 @@ PR(\lowTonesFmt).clone {
 		~panCtl = GenericGlobalControl(\pan, nil, 0, \bipolar);
 		~wetCtl = GenericGlobalControl(\wet, nil, 1);
 		~hpfCtl = GenericGlobalControl(\hpf, nil, 50, \freq);
+		~event.put(\distance, ~distCtl.asMap).put(\pan, ~panCtl.asMap);
 
 		~notes = IdentitySet.new;
 		~fmtKeys = FormantTable.keys.select { |k| k.asString.contains("tenor") }.asArray;
+
+		~event.put(\vizPath, [{
+			if(~instrument == \noiseSrc) { \perc } { \note }
+		}]);
 	};
 	~freeCleanup = ~freeCleanup.addFunc { ~hpfCtl.free };
 	// notes
