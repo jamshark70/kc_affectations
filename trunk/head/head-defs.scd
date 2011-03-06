@@ -609,7 +609,7 @@ make: { |name|
 				bus: ~fmtBus.index + (0 .. (~fmtBus.numChannels - 1)),
 				value: 1, time: ~fadeOut, immediateOSC: true,
 				target: ~chan.synthgroup, addAction: \addBefore
-			)).play;
+			)).parent_(ProtoEvent(\polySynthPlayer).parent).play;
 		},
 		stopCleanup: { ~doFadeOut.() },
 		objects: ~objects ?? { (

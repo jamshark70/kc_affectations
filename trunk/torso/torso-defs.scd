@@ -1139,8 +1139,8 @@ make: { |name|
 			ffreq: Pexprand(5.5, 10.0, inf),
 			pan: Pexprand(5.5, 10.0, inf)
 		)),
-		synth: Pwxrand(#[distance, pan, center, ffreq, speed, amp],
-			#[4, 1, 2, 1, 3, 2].normalizeSum, inf),
+		synth: Pwxrand(#[distance, pan, center, ffreq, speed/*, amp*/],
+			#[4, 1, 2, 1, 3/*, 2*/].normalizeSum, inf),
 		objects: { (
 			distance: (
 				def: \ctlEnv,
@@ -1230,7 +1230,7 @@ make: { |name|
 					bus: Pfunc({ |ev| ev[\gc].index }),
 					time: Pkey(\sustain),
 					levels: Ptuple([1, Pwhite(3.dbamp, 8.dbamp, inf), Pwhite(0.8, 1.0, inf)], inf),
-					times: Pwhite(0.2, 0.7, inf).collect { |num| [num, 1-num] },
+					times: Pwhite(0.1, 0.4, inf).collect { |num| [num, 1-num] },
 					curve: \exp,
 					env: Pfunc({ |ev| Env(ev[\levels], ev[\times], ev[\curve]) })
 				]

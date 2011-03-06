@@ -350,8 +350,16 @@
 **** DONE [#A] Check in WeighBag fix - never mind, I wrote my own
 **** DONE Check in voicer releaseNode fix, tell Lorne
 **** DONE Nil:asBus numChannels fix - pending cmake/scons discussion
-*** TODO Coding fixes [14/17]
-**** TODO duetm (seg 2100) doesn't make sound
+*** Mixing [6/6]
+**** DONE klanks in F210 are too loud
+**** DONE some swoops in face dance are WAY too loud
+**** DONE word chords in disintegration are a touch too loud, should fade sooner?
+**** DONE stephen solo hopping things need to fade up, and only then - don't do amp envelope
+**** DONE T2060 is too soft (add 8-10 dB)
+**** DONE slightly less of footsteps in B2590
+*** TODO Coding fixes [15/18]
+**** DONE duetm (seg 2100) doesn't make sound
+**** TODO B2600 shiva sounds don't stop?
 **** TODO WTF happened at 2020?
 **** TODO End: drums etc. don't fade out if triggering last cue too early
 **** DONE F110 was silent when playing in sequence - couldn't reproduce just now?

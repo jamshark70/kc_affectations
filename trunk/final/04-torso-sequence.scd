@@ -106,9 +106,9 @@
 								func: {
 									var p = BP(\ssd);
 									if(p[\savesynthStream].isNil) {
-										p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
-										p.override(\delta, Pwhite(0.2, 0.8, 10));
-										p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)), false, e { ~doneSignal = nil; ~stop.() });
+										p.override(\synth, Pseq([\amp, Pxrand(#[distance, pan, ffreq], 10)], 1));
+										p.override(\delta, Pwhite(0.2, 0.8, 11));
+										p.override(\sustain, Pseq([6, (Pkey(\delta) * Pwhite(1.5, 3.0, 10))], 1), false, e { ~doneSignal = nil; ~stop.() });
 									} { ~doneSignal = nil; ~stop.() };
 								}
 							),
@@ -180,9 +180,9 @@
 									var p = BP(\ssd);
 									if(BP(\ssd)[\savesynthStream].isNil) {
 										BP(#[ssd, ssd2]).do { |p|
-											p.override(\synth, Pxrand(#[distance, pan, ffreq], 10));
-											p.override(\delta, Pwhite(0.2, 0.8, 10));
-											p.override(\sustain, (Pkey(\delta) * Pwhite(1.5, 3.0, 10)), false, e { ~doneSignal = nil; ~stop.() });
+											p.override(\synth, Pseq([\amp, Pxrand(#[distance, pan, ffreq], 10)], 1));
+											p.override(\delta, Pwhite(0.2, 0.8, 11));
+											p.override(\sustain, Pseq([6, (Pkey(\delta) * Pwhite(1.5, 3.0, 10))], 1), false, e { ~doneSignal = nil; ~stop.() });
 										};
 									} { ~doneSignal = nil; ~stop.() };
 								}
@@ -394,6 +394,7 @@
 						], inf);
 						bp.delta = bp.changingDelta;
 						bp.rotSynthDef = bp.originalRotSynthDef;
+						bp.finalAmp = 0.6; // originally 0.16
 						VC(bp.vcKey).env.modfx.set(\distFar, 20);
 
 

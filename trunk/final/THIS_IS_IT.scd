@@ -361,11 +361,14 @@ MIDIPort.init([3]); // linux
 // hook MIDI into OSC-trigger synths
 k.free;
 k = BasicMIDISocket(0, { |num|
-	if(num < 60) {
+	case
+	{ num < 60 } {
 		BP(\segTrig).bus.set(99999);
-	} {
-		BP(\evTrig).bus.set(1);
 	}
+	{ num == 72 } {
+		BP(\evTrig).bus.set(2);
+	}
+	{ BP(\evTrig).bus.set(1) };
 });
 
 PeakMonitor(~master);

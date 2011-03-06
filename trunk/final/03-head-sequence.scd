@@ -306,8 +306,6 @@ t2 = [
 				q1 = BasicTimeSpec(1), qbar = BasicTimeSpec(-1),
 				rsyncEnv = Env(#[1, 0], #[90], 1.4).asStream;
 
-	d.reset;
-
 			BP(\drum7).gest = Pseq([
 				Pseq([
 					// Pn(\ostFilt2, x.asStream.trace(prefix: bp.collIndex ++ " num ost bars: ")),
@@ -343,7 +341,7 @@ t2 = [
 			BP(\wtrig).sustain = (Pkey(\delta) / Ptempo());
 			BP(\wtrig).ffreqTopCtl.value = 18000;
 			BP(\wtrig).distCtl.value = 8;
-			BP(\wtrig).ampCtl.value = 0.8;
+			BP(\wtrig).ampCtl.value = 0.7;
 			BP(\wtrig).playAttack = true;
 			BP(\wtrig).offset = Pseq([
 				0.75,
@@ -521,7 +519,11 @@ t2 = [
 		seqPattern: {
 			Pn((
 				sequence: [
-					{ BP(\bl).synth = Prand(#[sinb, oscb], inf); 0 },
+					{
+						BP(\bl).synth = Prand(#[sinb, oscb], inf);
+						BP(\bl).oscbnormAmp = 0.68;
+						0
+					},
 					loopCmd: (
 						id: \blooploop,
 						setDoneSignal: {

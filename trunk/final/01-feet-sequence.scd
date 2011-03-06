@@ -1068,7 +1068,7 @@ var lwpLoopParms = { (
 					));
 				},
 				{ BP(\st).runGesture((name: \klankHrmSteps, numEv: rrand(4, 7),
-					kdecay: rrand(0.4, 0.9))); 0 }
+					kdecay: rrand(0.4, 0.9), mainAmp: 0.63)); 0 }
 			];
 		},
 		// unloadProcesses: {},

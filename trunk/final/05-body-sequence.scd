@@ -688,7 +688,7 @@
 							bpCmd: (name: \st, shouldSync: false, quant: `nil, /*dur: 16,*/
 								prepareBP: { |bp|
 									bp.autoRun = false;
-									bp.ampCtl.value = 1.12;
+									bp.ampCtl.value = 1;  // 1.12?
 								}
 							),
 							Quant(-1, -0.1),
