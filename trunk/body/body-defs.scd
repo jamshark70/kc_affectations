@@ -759,7 +759,11 @@ PR(\lowTonesFmt).clone {
 			if(~instrument == \noiseSrc) { \perc } { \note }
 		}]);
 	};
-	~freeCleanup = ~freeCleanup.addFunc { ~hpfCtl.free };
+	~superFreeCleanup = ~freeCleanup;
+	~freeCleanup = {
+		~superFreeCleanup.();
+		~hpfCtl.free;
+	};
 	// notes
 	~delta = Pwhite(7.5, 15.0, inf);
 	~time = Pkey(\delta) * Pwhite(1.2, 1.7, inf);

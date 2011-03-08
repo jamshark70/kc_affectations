@@ -1,5 +1,40 @@
 // Affectations: Body controller sequence
 
+var	fades = {
+	[	[\sw, \sw, \pitchednormAmp, Env(#[3, 0], #[20.8], -2.1)],
+		[#[am0, am1, am2], \shivaTrig, \amp, Env(#[1, 0], #[22], -2.1)],
+		[\ltf, \ltf, \fxamp, Env([BP(\ltf).fxampStream.next, 0], #[22])]
+	].do { |info|
+		var bps, checkBP, key, env;
+		#bps, checkBP, key, env = info;
+		bps.do { |bp|
+			if(BP(checkBP)[\isFading] != false) {
+				BP(bp).put(key, env);
+				BP(bp).isFading = true;
+			};
+		};
+	};
+	
+	// work around a stupid oversight in my lib
+	// you can't \cmdSync to a TLSequenceIterator
+	// because the TLSeq never gets set as the last command... BOOOOO!!
+	PR(\subIterCmd).copy.putAll((
+		subIter: TLSequenceIterator(
+			#[bss, hdr, ldr, md].collect { |key|
+				PR(\gcAutoSynthCmd).copy.putAll((
+					gc: BP(key).ampCtl, name: \ctlPoint, outName: \outbus,
+					value: 0, time: 24, curve: -2.1
+				));
+			}
+			++
+			[	\cmdSync,
+				{ BP(#[bss, hdr, ldr, md, sw, ltf]).stop(0); 0 }
+			]
+		),
+		clock108: topEnvironment[\clock52]
+	))
+};
+
 (Document.current.path.dirname.dirname +/+ "/body/body-defs.scd")/*.debug*/.loadPath;
 
 [
@@ -305,6 +340,7 @@
 					{ TempoClock.default => BP(\sw); 0 },
 					bpCmd: (name: \sw, prepareBP: { |bp|
 						var	slowdown = Env(#[1, 4.5], #[25], 5);
+						bp.isFading = false;
 						bp.noisydelta = Pwhite(0.3, 0.6, inf) * slowdown;
 						bp.noisytime = Pkey(\delta).linlin(0.3, 0.6, 0.4, 0.4);
 						bp.noisynormAmp = 1.5;
@@ -446,6 +482,7 @@
 									bp.envel = Env.linen(0.25, 0.25, 0.5, 1, \sqr);
 									bp.mode = \a0;
 									bp.degree = #[41, 39, 38, 36, 33];
+									bp.isFading = false;
 								},
 								setDoneSignal: {
 									~doneSignal = Updater(BP(\ltf), e { |obj, what|
@@ -599,6 +636,7 @@
 								p.pitchedtime = Pexprand(0.4, max(0.4, Pkey(\delta) * 1.2), inf);
 								p.preamp = 9;
 								p.pitchednormAmp = 3;
+								p.isFading = false;
 								// later: p.pitcheddelta = Pwhite(3, 10, inf) * 0.25;
 								0
 							},
@@ -613,6 +651,7 @@
 								bp.delta = Pwrand(#[0.5, 1, 1.5, 2],
 									#[1, 3, 1, 2.5].normalizeSum, 8);
 								bp.playtc = 0.5.asPattern.coin; //true;
+								bp.isFading = false;
 								bp.reset; bp.v.reset;
 
 								BP(#[am0, am1, am2]).do { |bp|
@@ -727,7 +766,9 @@
 
 							// 88; - 101.5 (+18)
 							
-							bpCmd: (name: \sw, shouldSync: false, quant: 4),
+							bpCmd: (name: \sw, shouldSync: false, quant: 4, prepareBP: { |bp|
+								bp.isFading = false;
+							}),
 
 							10000
 
@@ -897,11 +938,13 @@
 							bpCmd: (name: \sw, shouldSync: false, quant: 4, prepareBP: { |bp|
 								bp.pitcheddelta = Pwhite(2, 6, inf) * 0.25;
 								bp.pitchedtime = Pwhite(0.4, 0.8, inf);
+								bp.isFading = false;
 							}),
 
 							16,
 							bpCmd: (name: \ltf, shouldSync: false,
 								prepareBP: { |bp|
+									bp.isFading = false;
 									bp.fxamp = 18.dbamp;
 									bp.delta = Pwhite(14.0, 25.0, inf);
 									bp.time = Pkey(\delta) * Pwhite(0.7, 1.2, inf);
@@ -934,6 +977,7 @@
 								numEv: Pwhite(5, 11, inf).asStream,
 								deltaBase: Pwrand(#[0.5, 1, 1.5, 2],
 									#[1, 3, 1, 2.5].normalizeSum, inf),
+								setDoneSignal: { BP(\shivaTrig).isFading = false },
 								cmds: [
 									{ rrand(4, 10) },
 									{	var db = ~deltaBase, numEv = ~numEv;
@@ -953,28 +997,7 @@
 
 							// c. 52 beats
 							36,
-							{
-								BP(\sw).pitchednormAmp = Env(#[3, 0], #[20.8], -2.1);
-								BP(#[am0, am1, am2]).do { |bp|
-									bp.amp = Env(#[1, 0], #[22], -2.1);
-								};
-								BP(\ltf).fxamp = Env([BP(\ltf).fxampStream.next, 0], #[22]);
-								0
-							},
-							// work around a stupid oversight in my lib
-							// you can't \cmdSync to a TLSequenceIterator
-							// because the TLSeq never gets set as the last command... BOOOOO!!
-							subIterCmd: (
-								subIter: TLSequenceIterator(#[bss, hdr, ldr, md].collect { |key|
-									PR(\gcAutoSynthCmd).copy.putAll((
-										gc: BP(key).ampCtl, name: \ctlPoint, outName: \outbus,
-										value: 0, time: 24, curve: -2.1
-									));
-								}),
-								clock108: topEnvironment[\clock52]
-							),
-							\cmdSync,
-							{ BP(#[bss, hdr, ldr, md, sw, ltf]).stop(0); 0 }
+							fades
 						]).shouldSync_(false),
 						clock108: topEnvironment[\clock52]
 					)
@@ -1006,6 +1029,7 @@
 							};
 						}
 					),
+					fades,
 					bpCmd: (name: \sus, prepareBP: { |bp|
 						bp.repeats = 1;
 						bp.phraseDur = 24;

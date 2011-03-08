@@ -219,7 +219,7 @@
 **** Musical revisions completed <2011-01-07 Fri>
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
-** Musical edits [4/5]
+** Musical edits [5/5]
 *** DONE Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
@@ -326,8 +326,8 @@
 
 **** DONE New material for slower movements toward end: reuse some of the face dance stuff
 *** DONE Torso <2010-12-26 Sun>
-*** TODO Body [0/1] <2011-01-04 Tue>
-**** TODO Recall more cues
+*** DONE Body [1/1] <2011-01-04 Tue>
+**** DONE Recall more cues
 ***** F120-3 inversions
 ***** 3 poses
 ***** Ilana solo bells?
@@ -357,11 +357,13 @@
 **** DONE stephen solo hopping things need to fade up, and only then - don't do amp envelope
 **** DONE T2060 is too soft (add 8-10 dB)
 **** DONE slightly less of footsteps in B2590
-*** TODO Coding fixes [15/18]
+*** TODO Coding fixes [16/18]
 **** DONE duetm (seg 2100) doesn't make sound
 **** TODO B2600 shiva sounds don't stop?
 **** TODO WTF happened at 2020?
-**** TODO End: drums etc. don't fade out if triggering last cue too early
+**** DONE End: drums etc. don't fade out if triggering last cue too early
+***** sw, am0-2, ltf - check Env
+***** bss, hdr, ldr, md - check autosynth
 **** DONE F110 was silent when playing in sequence - couldn't reproduce just now?
 **** DONE Drone data to Lorne
 **** DONE Fix H1540 stop bug
