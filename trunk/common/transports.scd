@@ -109,11 +109,14 @@ PR(\penUtils).clone({
 		currentEnvironment
 	};
 	~background = Color.gray(0.7);
+	~backgroundDisabledBlendColor = Color.white;
 	~thickness = 2;
 	~offset = 2;
 	~draw = { |bounds, pressed = false|
 		var	leftTopColor, rightBottomColor,
-			backColor = if(~enabled) { ~background } { ~background.blend(Color.white, 0.5) };
+			backColor = if(~enabled) { ~background } {
+				~background.blend(~backgroundDisabledBlendColor, 0.5)
+			};
 		if(pressed) {
 			leftTopColor = Color.black;
 			rightBottomColor = Color.white;
@@ -224,8 +227,9 @@ PR(\userButton).clone({
 	~currentState = false;
 	~arrowColor = Color.black;
 	~background = Color.white;
+	~backgroundDisabledBlendColor = Color.gray(0.6);
 	~drawContents = { |bounds|
-		var	mid;
+		var	mid, color = if(~enabled) { ~arrowColor } { ~arrowColor.blend(Color.white, 0.5) };
 		if(~currentState) {
 //			bounds = Rect(bounds.left * 0.25, bounds.top * 0.25,
 //				bounds.width * 0.25, bounds.height * 0.25);
@@ -233,7 +237,7 @@ PR(\userButton).clone({
 			mid = bounds.center;
 			GUI.pen
 				.moveTo(bounds.rightTop)
-				.color_(~arrowColor)
+				.color_(color)
 				.width_(min(bounds.height, bounds.width) * 0.25)
 				.lineTo(Point(mid.x, bounds.bottom))
 				.lineTo(Point(bounds.left, mid.y))
@@ -541,6 +545,19 @@ Proto({
 					"Enter a valid address before clicking".warn;
 				};
 			});
+
+		UserView(parent, ~bigButtonSize@16)
+			.drawFunc_({
+				Pen.color_(Color.gray(0.3))
+					.fillRect(Rect(0, 7, ~bigButtonSize, 3));
+			})
+			.refresh;
+
+		~recordEnable = PR(\checkButton).copy.prep(parent, 20@20)
+			.currentState_(~model.recordingOn)
+			.userAction_(e { |view| ~model.recordingOn = view.currentState });
+		StaticText(parent, (~bigButtonSize - 24) @ 20)
+			.string_("Record audio to disk");
 	};
 	
 	~refreshSections = {
@@ -581,7 +598,7 @@ Proto({
 	~showPlaying = { |bool|
 		defer(e {
 			~playButton.currentState = bool.binaryValue;
-			[~clearAllButton/*, ~toStartButton, ~backSection, ~fwdSection*/].do { |button|
+			[~clearAllButton, ~recordEnable/*, ~toStartButton, ~backSection, ~fwdSection*/].do { |button|
 				button.enabled = bool.not;
 			};
 		});
@@ -611,6 +628,9 @@ Proto({
 			}
 			{ \autoReset } {
 				defer(e { ~autoResetToggle.currentState = modifier });
+			}
+			{ \recording } {
+				defer(e { ~recordEnable.currentState = modifier });
 			};
 	};
 }) => PR(\transports);

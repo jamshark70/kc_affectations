@@ -7,7 +7,7 @@ s.latency = 0.075;
 
 s.waitForBoot {
 
-	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: 1) };
+	~master ?? { ~master = MixerChannel(\master, s, 2, 2, level: -4.dbamp) };
 
 	// don't want reverb on netbook
 	if(screenBounds.height > 600) {
@@ -898,6 +898,12 @@ PR(\tlSection).clone {
 } => PR(\tlsAff);
 
 PR(\sectionSequencer).clone({
+	~recordingOn = false;
+	~recordingOn_ = { |bool(false)|
+		~recordingOn = bool;
+		currentEnvironment.changed(\recording, bool);
+	};
+
 	~startLoadingAt = 0;
 	~gotoSection = { |section|
 		var	toStop = ~sections[~currentSection];
@@ -935,9 +941,17 @@ PR(\sectionSequencer).clone({
 		// debug("<< loadResources");
 	};
 	~countOffAndGo = {
-		var	clock = ~clock.value;
+		var	clock = ~clock.value, master = topEnvironment[\master];
 		~sections.last.isLastSection = true;
 		thisThread.clock.sched(0, ~sectionRoutine = Routine({
+			if(~recordingOn) {
+				if(master.recProxy.notNil) {
+					master.stopRecord;
+					0.2.wait;
+				};
+				master.startRecord;
+				0.2.wait;
+			};
 			~status = \playing;
 			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
 				/*~savedCmds.*/debug("playing section %".format(~sections[~currentSection].name));
@@ -993,6 +1007,13 @@ PR(\sectionSequencer).clone({
 			~loadResources.(~currentSection+1);
 			~sectionRoutine.stop;
 			~sectionRoutine = nil;
+			~clock.value.sched(5.0, e {
+				// if I'm playing, then the recorder doesn't belong to me anymore
+				if(~isRunning.().not) {
+					try { topEnvironment[\master].stopRecord };
+				};
+				nil
+			});
 		};
 // "<< sectionSequencer:stop".debug;
 	};
