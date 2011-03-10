@@ -38,9 +38,10 @@
 				].flop.flat
 			};
 			if(fadeCmds.size > 0) {
-				fadeCmds = fadeCmds ++ [	\sync,
+				fadeCmds = fadeCmds ++ [
+					\sync,
 					{
-						BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8]).stop(0);
+						BP(#[drum1, drum2, drum3, drum4, drum5, drum6, drum7, drum8, wtrig]).stop(0);
 						0 // 10
 					}
 				]
