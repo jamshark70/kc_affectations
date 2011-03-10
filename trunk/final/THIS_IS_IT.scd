@@ -46,7 +46,10 @@ s = Server.local;
 s.waitForBoot {
 	var	cond = Condition.new;
 
-	s.controlBusAllocator.reserve(4000, 96, warn: false);
+	// s.controlBusAllocator.reserve(4000, 96, warn: false);
+	if(s.controlBusAllocator.size != 4000) {
+		s.controlBusAllocator = ContiguousBlockAllocator(4000, 0);
+	};
 
 	(mypath.dirname.dirname +/+ "/common/common-defs.scd").loadPath;
 	NotificationCenter.registerOneShot(\lcrvb, \lcrvbexists, \feetSeq, {
