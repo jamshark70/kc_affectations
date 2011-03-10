@@ -770,10 +770,10 @@ Proto {
 	eventID: 1,
 	setEventResponder: {
 		~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
-			if(m[3] == ~eventID) {
+			// if(m[3] == ~eventID) {
 				r.remove;
 				~stop.();
-			};
+			// };
 		}).add;
 		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
 	},

@@ -135,9 +135,10 @@ s.waitForBoot {
 		},
 		eventTrigAction: {
 			// no id given through GUI: fire earliest (lowest ID) event
-			if(~eventTrigsWaiting.notEmpty) {
-				~eventTrigsWaiting[~eventTrigsWaiting.keys.minItem].[1].value
-			};
+			// if(~eventTrigsWaiting.notEmpty) {
+			// 	~eventTrigsWaiting[~eventTrigsWaiting.keys.minItem].[1].value
+			// };
+			~eventTrigsWaiting.copy.do { |eventTrig| eventTrig[1].value };
 		},
 		eventTrigCmdByID: { |eventID| ~eventTrigsWaiting[eventID][0] },
 		segActive: { |action, segID|

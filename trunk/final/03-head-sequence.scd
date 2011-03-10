@@ -1502,6 +1502,7 @@ t2 = [
 					}),
 					funcCmd: topEnvironment[\trigParms],
 					\cmdSync,
+					{ 4.5 * thisThread.clock.tempo },
 					TLSequenceIterator([
 						gcAutoSynthCmd: (gc: BP(\hsd).tophCtl, name: \ctlPoint, outName: \outbus,
 							value: BP(\hsd).minTop, time: 18),
