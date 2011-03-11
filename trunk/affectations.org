@@ -129,20 +129,13 @@
 *** H1010-Lights come up, Ilana starts rolling her tongue in her mouth
 *** H1020-Mouth opens, tongue starts peeking out a bit (2 tongue-out-to-side gestures first)
 *** H1030-Ilana starts smiling and showing other emotions (as she starts to close her mouth)
-    1. (I will probably remove this one) +Event trigger to raise the chaos level+
-    2. Event trigger for silence
+    1. Event trigger for silence
 *** H1500-H1650-Drones start (currently plays automatically)
     :ANNOTATION:
     These are structured as cues, but in fact they are automatically timed. Each cue in H1530-H1650 represents one phrase of "sung" material.
-
-    Event triggers under #2:
-    ID=1 -- when triggered, this will fade out the drones
-    ID=2 -- when triggered, this starts the disintegration
     :END:
     1. Event cue when the three dancers kneel side by side on the floor
-    2. Two event cues that overlap. They may fire in any order.
-       ID=2 -- after breaking out of the "metronome" gesture and going to the floor
-       ID=1 -- at your discretion, sometime after H1650 runs
+    2. Event cue after breaking out of the "metronome" gesture and going to the floor
 
 ** Torso
 *** T2000 - hit this about 20-30 seconds before they are in the initial stationary torso pose
@@ -342,7 +335,7 @@
 ****** Torso held notes
 **** Ideas
 ***** Ilana bells --> noisy vowels
-** Programming [2/3]
+** Programming [3/3]
 *** DONE Place to put in IP address/port
 *** DONE Voicer events need different arg handling
     - GCs look to control bus - right? (no, if it's not a key) - needed?
@@ -357,10 +350,11 @@
 **** DONE stephen solo hopping things need to fade up, and only then - don't do amp envelope
 **** DONE T2060 is too soft (add 8-10 dB)
 **** DONE slightly less of footsteps in B2590
-*** TODO Coding fixes [16/18]
+*** DONE Coding fixes [19/19]
 **** DONE duetm (seg 2100) doesn't make sound
-**** TODO B2600 shiva sounds don't stop?
-**** TODO WTF happened at 2020?
+**** DONE B2600 shiva sounds don't stop?
+**** DONE WTF happened at 2020?
+**** DONE Remove event trigger ID=2
 **** DONE End: drums etc. don't fade out if triggering last cue too early
 ***** sw, am0-2, ltf - check Env
 ***** bss, hdr, ldr, md - check autosynth
