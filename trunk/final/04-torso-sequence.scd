@@ -54,6 +54,9 @@
 							TLSequenceIterator(fadeCmds).shouldSync_(false)
 						} { 0 }
 					},
+					funcCmd: (
+						func: { ~iterator.findActive(\loop56).stop }
+					),
 					bpCmd: (name: \tton, shouldSync: false, prepareBP: { |bp|
 						bp.speedMul.value = 0.1;
 						bp.fshift.value = 0;

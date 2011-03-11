@@ -157,6 +157,7 @@ t2 = [
 		gcAutoSynthCmd: (gc: { BP(\drum4).ffRangeCtl }, name: \ctlPoint, outName: \outbus,
 			value: 18, time: 36),
 		loopCmd: (
+			id: \loop56,
 			// this way will force quantPhases to reset
 			setDoneSignal: {
 				~quantPhases = Pseq(#[0.25, 1.25, 0.75], inf).trace(prefix: "drum56 phase: ").asStream;
@@ -285,7 +286,33 @@ t2 = [
 			}
 		),
 
-		funcCmd: topEnvironment[\trigParms].copy.put(\eventID, 2),
+		funcCmd: topEnvironment[\trigParms].copy.putAll((
+			eventID: 2,
+			id: \disintegration,
+			setEventResponder: {
+				~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
+					// if(m[3] == ~eventID) {
+					r.remove;
+					~stop.();
+					// };
+				}).add;
+				~autoAdvanceNotify = NotificationCenter.register(~id, \emergencyAdvance, ~id, e {
+					~stop.();
+				});
+				Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
+			},
+			clearDoneSignal: {
+				~doneSignal.tryPerform(\remove);
+				~eventResponder.remove;
+				~autoAdvanceNotify.remove;
+				BP(\segTrig).eventActive(nil, nil, ~eventID);
+				Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
+					*if(BP(\segTrig).eventTrigsWaiting.isEmpty) { #[0] } {
+						BP(\segTrig).eventTrigsWaiting.keys
+					}
+				);
+			}
+		)),
 		\cmdSync,
 		funcCmd: (func: {
 			~iterator.findActive(\accentLoop).stop
@@ -1314,6 +1341,9 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
+					[	7,
+						{ NotificationCenter.notify(\drumIter2, \done); 0 }
+					],
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.p5_(2);
 					}),
@@ -1500,7 +1530,16 @@ t2 = [
 							pat.drop(pat.estimateLength - 1)
 						};
 					}),
-					funcCmd: topEnvironment[\trigParms],
+					funcCmd: (
+						dur: 20,
+						clearDoneSignal: {
+							~iterator.findActive(\droneFades).stop;
+							// for whatever reason, I can't find the event trig cmd
+							// in the sub-iterator, so f'k it, send a message
+							NotificationCenter.notify(\disintegration, \emergencyAdvance);
+						}
+					),
+					funcCmd: topEnvironment[\trigParms].copy.put(\id, \droneFades),
 					\cmdSync,
 					{ 4.5 * thisThread.clock.tempo },
 					TLSequenceIterator([
