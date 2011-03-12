@@ -51,6 +51,7 @@ PR(\funcCmd).copy.putAll((
 		~doneSignal = nil;
 		~clearUserSignal.(parms);
 	},
+	findActive: { |id, thisCmd| ~subIter.findActive(id, thisCmd) },
 	collIndex: \subIterCmd  // chuck => PR doesn't automatically set this
 )) => PR(\subIterCmd);
 
@@ -162,12 +163,19 @@ t2 = [
 			setDoneSignal: {
 				~quantPhases = Pseq(#[0.25, 1.25, 0.75], inf).trace(prefix: "drum56 phase: ").asStream;
 			},
+//			seq: topEnvironment[\seq],
 			cmds: [
 				{
-					PR(\swap56cmd).copy.putAll((quant: [-1, ~quantPhases.next], extraPrep: { |bp|
-						bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
-						bp[\chan].level = drumLevel;
-					}, shouldSync: false))
+					if(topEnvironment[\seq].sections[topEnvironment[\seq].currentSection].segID < 2000) {
+						PR(\swap56cmd).copy.putAll((
+							quant: [-1, ~quantPhases.next], 
+							extraPrep: { |bp|
+								bp.amp = Pseq(#[1, 1 /* finger-amp */], inf);
+								bp[\chan].level = drumLevel;
+							},
+							shouldSync: false)
+						)
+					};
 				},
 				24
 			],
@@ -297,11 +305,13 @@ t2 = [
 					// };
 				}).add;
 				~autoAdvanceNotify = NotificationCenter.register(~id, \emergencyAdvance, ~id, e {
+					"got emergency advance; stopping id=2".debug;
 					~stop.();
 				});
 				Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
 			},
 			clearDoneSignal: {
+				"finishing trigparms id=2".debug;
 				~doneSignal.tryPerform(\remove);
 				~eventResponder.remove;
 				~autoAdvanceNotify.remove;
@@ -368,7 +378,7 @@ t2 = [
 			BP(\wtrig).sustain = (Pkey(\delta) / Ptempo());
 			BP(\wtrig).ffreqTopCtl.value = 18000;
 			BP(\wtrig).distCtl.value = 8;
-			BP(\wtrig).ampCtl.value = 0.7;
+			BP(\wtrig).ampCtl.value = 1.0;
 			BP(\wtrig).playAttack = true;
 			BP(\wtrig).offset = Pseq([
 				0.75,
@@ -1341,9 +1351,10 @@ t2 = [
 				sequence: [
 					bpCmd: (name: \mstClock, shouldSync: false, playWarning: false),
 					bpCmd: (name: #[hsd, fmt], shouldSync: false, playWarning: false),
-					[	7,
+					TLSequenceIterator([
+						7,
 						{ NotificationCenter.notify(\drumIter2, \done); 0 }
-					],
+					]).shouldSync_(false),
 					bpCmd: (name: \cd, prepareBP: { |p|
 						p.p5_(2);
 					}),
@@ -1531,15 +1542,41 @@ t2 = [
 						};
 					}),
 					funcCmd: (
+						func: { ~temp = ~iterator.activeCmds.copy },
 						dur: 20,
 						clearDoneSignal: {
-							~iterator.findActive(\droneFades).stop;
 							// for whatever reason, I can't find the event trig cmd
 							// in the sub-iterator, so f'k it, send a message
-							NotificationCenter.notify(\disintegration, \emergencyAdvance);
+							NotificationCenter.notify(\disintegration, \emergencyAdvance.debug("sending"));
 						}
 					),
-					funcCmd: topEnvironment[\trigParms].copy.put(\id, \droneFades),
+					funcCmd: topEnvironment[\trigParms].copy.putAll((
+						id: \droneFades,
+						setEventResponder: {
+							~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
+								// if(m[3] == ~eventID) {
+								r.remove;
+								~stop.();
+								// };
+							}).add;
+							~autoAdvanceNotify = NotificationCenter.register(\disintegration, \emergencyAdvance, \droneFadesNotTheDrumsForPetesSake, e {
+								"got emergency advance; fading drones".debug;
+								~stop.();
+							});
+							Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
+						},
+						clearDoneSignal: {
+							~doneSignal.tryPerform(\remove);
+							~eventResponder.remove;
+							~autoAdvanceNotify.remove;
+							BP(\segTrig).eventActive(nil, nil, ~eventID);
+							Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
+								*if(BP(\segTrig).eventTrigsWaiting.isEmpty) { #[0] } {
+									BP(\segTrig).eventTrigsWaiting.keys
+								}
+							);
+						}
+					)),
 					\cmdSync,
 					{ 4.5 * thisThread.clock.tempo },
 					TLSequenceIterator([

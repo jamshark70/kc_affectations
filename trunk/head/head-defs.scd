@@ -2956,6 +2956,8 @@ PR(\abstractProcess).clone {
 			~filtXferParmsStream.next(ProtoEvent(\singleSynthPlayer).copy)
 			.put(\inbus, event.lpcEv.inbus)
 			.put(\sustain, ~lastEvent[\sustain])
+			.put(\glrvbamt, 0.3).put(\lcrvbamt, 0.1)
+			.proto_(topEnvironment[\rvbEvent].proto)
 			.play;
 		};
 	};
