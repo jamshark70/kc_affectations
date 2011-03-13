@@ -770,12 +770,14 @@ Proto {
 	eventID: 1,
 	setEventResponder: {
 		~eventResponder = OSCresponderNode(s.addr, '/event', e { |t, r, m|
+			topEnvironment[\seq].logOSCToFile(m);
 			// if(m[3] == ~eventID) {
 				r.remove;
 				~stop.();
 			// };
 		}).add;
 		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig, ~eventID);
+		topEnvironment[\seq].logOSCToFile([\eventTrig, ~eventID], \send);
 	},
 	setDoneSignal: {
 		try {
@@ -796,14 +798,16 @@ Proto {
 		// };
 	},
 	clearDoneSignal: {
+		var outMsg;
 		~doneSignal.tryPerform(\remove);
 		~eventResponder.remove;
 		BP(\segTrig).eventActive(nil, nil, ~eventID);
-		Library.at(\vizAddr).tryPerform(\sendMsg, \eventTrig,
-			*if(BP(\segTrig).eventTrigsWaiting.isEmpty) { #[0] } {
+		outMsg = [\eventTrig]
+			++ if(BP(\segTrig).eventTrigsWaiting.isEmpty) { #[0] } {
 				BP(\segTrig).eventTrigsWaiting.keys
-			}
-		);
+			};
+		Library.at(\vizAddr).tryPerform(\sendMsg, *outMsg);
+		topEnvironment[\seq].logOSCToFile(outMsg, \send);
 	},
 	func: \dummy
 );
@@ -812,6 +816,7 @@ Proto {
 	// var	sbounds = screenBounds;
 	~trigResp = OSCresponderNode(s.addr, '/segment', e { |t, r, m|
 		var	inSeg = m[3], i;
+		topEnvironment[\seq].logOSCToFile(m);
 		case { inSeg == item[\id] or: { inSeg == 99999 } } {
 			r.remove;
 			// stop section, section sequencer will advance
@@ -836,11 +841,13 @@ Proto {
 		};
 	}).add;
 	Library.at(\vizAddr).tryPerform(\sendMsg, \segTrig, item[\id]);
+	topEnvironment[\seq].logOSCToFile([\segTrig, item[\id]], \send);
 	BP(\segTrig).segActive(e { ~stop.(nil, ~isLastSection ? false) }, item[\id]);
 } => Func(\nextThingTrig);
 
 {	~trigResp.remove;
 	Library.at(\vizAddr).tryPerform(\sendMsg, \segTrig, 0);
+	topEnvironment[\seq].logOSCToFile(#[segTrig, 0], \send);
 	BP(\segTrig).segActive(nil);
 	~currentTriggerItem = nil;  // what a horrendous, god-awful hack
 	~cleanupTrigger.(nil, (manualStop: ~isLastSection ? false));
@@ -898,6 +905,8 @@ PR(\tlSection).clone {
 } => PR(\tlsAff);
 
 PR(\sectionSequencer).clone({
+	~oscLoggingOn = true;
+
 	~recordingOn = false;
 	~recordingOn_ = { |bool(false)|
 		~recordingOn = bool;
@@ -952,11 +961,13 @@ PR(\sectionSequencer).clone({
 				master.startRecord;
 				0.2.wait;
 			};
+			if(~oscLoggingOn) { ~openOSCLogFile.() };
 			~status = \playing;
 			while { ~isRunning.() and: { ~currentSection < ~sections.size } } {
 				/*~savedCmds.*/debug("playing section %".format(~sections[~currentSection].name));
 				Library.at(\vizAddr).tryPerform(\sendMsg, \nowPlaying,
 					~sections[~currentSection].segID);
+				~logOSCToFile.([\nowPlaying, ~sections[~currentSection].segID], \send);
 				~sections[~currentSection].play(~savedCmds);
 				//"section sequencer: set savedCmds to nil".debug;
 				~savedCmds = nil;
@@ -992,11 +1003,13 @@ PR(\sectionSequencer).clone({
 			currentEnvironment.changed(\countoff, nil);
 		} {
 			Library.at(\vizAddr).tryPerform(\sendMsg, \nowPlaying, -1);
+			~logOSCToFile.(#[nowPlaying, -1], \send);
 			~sections[~currentSection].stop/*(nil, manualStop)*/;
 			~sections[~currentSection].removeDependant(currentEnvironment);
 				// must force manual stop for last section at end of piece
 				// but this didn't work
 			if(lastSection ? false) { ~sections.last.stop(nil, true) };
+			~closeOSCLogFile.();
 			~status = \idle;
 			~currentSection = ~startingSection;
 			currentEnvironment.changed(\stop);
@@ -1046,6 +1059,21 @@ PR(\sectionSequencer).clone({
 					}
 				};
 			}
+		};
+	};
+	~openOSCLogFile = {
+		~closeOSCLogFile.();
+		~oscLogStart = SystemClock.beats;
+		~oscLogFile = File(Platform.userAppSupportDir +/+ "aff_osc_log_%.txt"
+			.format(Date.getDate.stamp), "w");
+	};
+	~closeOSCLogFile = {
+		if(~oscLogFile.notNil) { ~oscLogFile.close };
+		~oscLogFile = nil;
+	};
+	~logOSCToFile = { |msg, type(\recv)|
+		if(~oscLogFile.notNil) {
+			~oscLogFile <<< [(SystemClock.beats - ~oscLogStart), type, msg] << $\n;
 		};
 	};
 }) => PR(\affSectSeq);
