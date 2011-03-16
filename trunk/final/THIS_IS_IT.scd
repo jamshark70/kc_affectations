@@ -1,6 +1,3 @@
-// last bug: lastGesture is nil? how?
-// fade out lpcs?
-
 // Affectations
 // Main process loader
 
@@ -8,19 +5,6 @@
 // instead of having one massive navigation-hell file for the whole piece.
 
 // BP.loadGui;  // <-- this is for James's development work - no need in the performance
-
-
-
-// Reproduced the drum7/drum8 stop issue once. Grrrrrrr.
-// I think keepGoing = false could be the issue.
-// Maybe fixed by adding a tolerance to PnNilSafe.
-
-// Something weird happened. I replayed from F1520 and the master level bus value changed
-// without updating ~master. Something is using bus 0 wrongly.
-
-
-// fade out drone and 'int' toward end of drum section
-// go into torso section earlier, maybe 28:20 something (Laura moves fwd/back)
 
 
 // this block loads everything: cursor on open-paren, then ctrl-alt-x
