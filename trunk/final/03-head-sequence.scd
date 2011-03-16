@@ -457,11 +457,18 @@ t2 = [
 				value: 300, time: 140, curve: -2.1),
 			gcAutoSynthCmd: (gc: { BP(\wtrig).ampCtl }, name: \ctlPoint, outName: \outbus,
 				value: 0, time: 150, curve: -2.1,
-				stopAction: { BP(\wtrig).playAttack = false }
+				stopAction: { if(BP.exists(\wtrig)) { BP(\wtrig).playAttack = false } }
 			),
 			70,
-			gcAutoSynthCmd: (gc: { BP(\cwd).ampCtl }, name: \ctlPoint, outName: \outbus,
-				value: 0, time: 125, curve: -2.1),
+			{
+				if(BP.exists(\cwd)) {
+					PR(\gcAutoSynthCmd).copy.putAll((
+						gc: { BP(\cwd).ampCtl },
+						name: \ctlPoint, outName: \outbus,
+						value: 0, time: 125, curve: -2.1
+					))
+				} { 0 }
+			}
 		],
 		gcAutoSynthCmd: (gc: { BP(\drum7).distCtl }, name: \ctlEnv, outName: \outbus,
 			env: Env(#[5, 20], #[120]))

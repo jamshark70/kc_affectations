@@ -46,41 +46,78 @@
 					}
 				]
 			};
+			fadeCmds.postln;
 			Pn((
 				sequence: [
 					{
 						BP(\hsd).stop(0);
 						if(fadeCmds.size > 0) {
-							TLSequenceIterator(fadeCmds).shouldSync_(false)
+							TLSequenceIterator(fadeCmds) //.shouldSync_(false)
 						} { 0 }
 					},
 					funcCmd: (
 						func: { ~iterator.findActive(\loop56).stop }
 					),
-					bpCmd: (name: \tton, shouldSync: false, prepareBP: { |bp|
-						bp.speedMul.value = 0.1;
-						bp.fshift.value = 0;
-						bp.distance.value = 17;
-					}),
-					gcAutoSynthCmd: (gc: { VC(\tton).v.globalControls[\ffreq] },
-						name: \ctlEnv, outName: \outbus,
-						env: Env(#[800, 7000, 1000], #[0.5, 0.5], \exp),
-						time: 140
+					subIterCmd: (
+						clock108: TempoClock.default, //thisThread.clock,
+						shouldSync: false,
+						id: \ttonCmd,
+						subIter: TLSequenceIterator([
+							bpCmd: (name: \tton, shouldSync: false, prepareBP: { |bp|
+								bp.speedMul.value = 0.1;
+								bp.fshift.value = 0;
+								bp.distance.value = 17;
+							}),
+							gcAutoSynthCmd: (gc: { VC(\tton).v.globalControls[\ffreq] },
+								name: \ctlEnv, outName: \outbus,
+								env: Env(#[800, 7000, 1000], #[0.5, 0.5], \exp),
+								time: 140
+							),
+							10,
+							gcAutoSynthCmd: (gc: { BP(\tton).fshift },
+								name: \ctlEnv, outName: \outbus,
+								env: Env(#[0, 60], #[1], 6),
+								time: 60
+							),
+							30,
+							gcAutoSynthCmd: (gc: { BP(\tton).speedMul },
+								name: \ctlEnv, outName: \outbus,
+								env: Env(#[0.1, 0.7], #[1], \exp),
+								time: 45
+							)
+						])
 					),
-					10,
-					gcAutoSynthCmd: (gc: { BP(\tton).fshift },
-						name: \ctlEnv, outName: \outbus,
-						env: Env(#[0, 60], #[1], 6),
-						time: 60
-					),
-					30,
-					gcAutoSynthCmd: (gc: { BP(\tton).speedMul },
-						name: \ctlEnv, outName: \outbus,
-						env: Env(#[0.1, 0.7], #[1], \exp),
-						time: 45
-					)
+					\sync,
+					{ "T2000-finished sync".debug; 0 }
 				],
 				// onStop: { BP(\tton).stop(0) },
+				// dur: \trigger,  // or \sync
+				dur: \sync,
+				id: 2001  // trig id
+				// init: Func(\nextThingTrig).v,
+				// clear: Func(\clearNextTrig).v
+			), 1)
+		}
+	)),
+
+
+	PR(\tlsAff).copy.putAll((
+		name: "T2001-dummy wait for solo",
+		segID: 2001,
+		initProcesses: {
+			\chuckIf.eval(Fact(\torsoSolo), BP, \ssd);
+		},
+		unloadProcesses: { BP(\ssd).free },
+		seqPattern: {
+			Pn((
+				sequence: [
+					funcCmd: (
+						setDoneSignal: { ~doneSignal = true },
+						func: { "waiting for T2010 trigger".debug }
+					),
+					\sync
+				],
+				// onStop: {},
 				dur: \trigger,  // or \sync
 				id: 2010,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -92,15 +129,29 @@
 	PR(\tlsAff).copy.putAll((
 		name: "T2010-stephen solo",
 		segID: 2010,
-		initProcesses: {
-			\chuckIf.eval(Fact(\torsoSolo), BP, \ssd);
-		},
-		unloadProcesses: { BP(\ssd).free },
+		// initProcesses: {},
+		// unloadProcesses: {},
 		seqPattern: {
 			Pn((
 				sequence: [
 					bpCmd: (name: \ssd, shouldSync: false),
-					[15, { BP(\tton).stop(0); 0 }],
+					// [	15, 
+						funcCmd: (
+							dur: 15,
+							clearDoneSignal: {
+								var cmd = ~iterator.findActive(\ttonCmd);
+								cmd.debug("trying to stop ttonCmd - found");
+								if(cmd.respondsTo(\listVars)) { cmd.listVars };
+								cmd.tryPerform(\subIter).tryPerform(\activeCmds).do { |subc|
+									if(subc.respondsTo(\listVars)) { subc.listVars }
+									{ subc.dump }
+								};
+								cmd.stop;
+								// BP(\tton).stop(0);
+								// 0
+							}
+						),
+					// ],
 					loopCmd: (
 						cmds: [
 							funcCmd: topEnvironment[\trigParms],
@@ -120,7 +171,13 @@
 						]
 					)
 				],
-				// onStop: {},
+				onStop: e {
+					var	cmd;
+					if((cmd = ~savedCmds.detect { |cmd| cmd.tryPerform(\id) == \ttonCmd })
+					.notNil) {
+						cmd.stop;
+					};
+				},
 				dur: \trigger,  // or \sync
 				id: 2020,  // trig id
 				init: Func(\nextThingTrig).v,
@@ -133,10 +190,6 @@
 		name: "T2020-plus Ilana",
 		segID: 2020,
 		initProcesses: {
-			topEnvironment[\seq].sections.do { |sect|
-				if(sect.segID < 2000) { sect.prUnload };
-			};
-
 			\chuckIf.eval(Fact(\torsoSolo), BP, \ssd2, nil, (
 				gcSpecs: (
 					distance: #[5, 20],
@@ -208,6 +261,10 @@
 		name: "T2030-energy-exch",
 		segID: 2030,
 		initProcesses: {
+			topEnvironment[\seq].sections.do { |sect|
+				if(sect.segID < 2000) { sect.prUnload };
+			};
+
 			\chuckIf.eval(Fact(\torsoDrone), BP, \td);
 			\chuckIf.eval(Fact(\nrgThrows), BP, \thr);
 			BP(\td).sustain = Pkey(\delta) + Pwhite(5.0, 8.5, inf);
