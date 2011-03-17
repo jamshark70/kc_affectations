@@ -1,10 +1,22 @@
 // Affectations: Body controller sequence
 
 var	fades = {
-	[	[\sw, \sw, \pitchednormAmp, Env(#[3, 0], #[20.8], -2.1)],
-		[#[am0, am1, am2], \shivaTrig, \amp, Env(#[1, 0], #[22], -2.1)],
-		[\ltf, \ltf, \fxamp, Env([BP(\ltf).fxampStream.next, 0], #[22])]
-	].do { |info|
+	var fadeSpecs = [
+		[\sw, \sw, \pitchednormAmp, Env(#[3, 0], #[20.8], -2.1)],
+		[#[am0, am1, am2], \shivaTrig, \amp, Env(#[1, 0], #[22], -2.1)]
+	];
+	// fxampStream *should* be there if the segments played through
+	// according to the timing in the choreography
+	// but, we can't guarantee that the cue operator will not royally screw up
+	// and advance out of BOTH segments that use \ltf too quickly
+	// if that happens, A/ the show is f'cked and B/ BP(\ltf).fxampStream.next will throw an error
+	// I am not sure which is worse
+	if(BP(\ltf).v[\fxampStream].notNil) {
+		fadeSpecs = fadeSpecs.add([
+			\ltf, \ltf, \fxamp, Env([BP(\ltf).fxampStream.next, 0], #[22])
+		]);
+	};
+	fadeSpecs.do { |info|
 		var bps, checkBP, key, env;
 		#bps, checkBP, key, env = info;
 		bps.do { |bp|
@@ -1044,7 +1056,12 @@ var	fades = {
 						level: 0, time: 19, curve: -2.1),
 					funcCmd: (
 						dur: 10,
-						func: { BP(\ltf).fxamp = Env([BP(\ltf).fxampStream.next, 0], #[10]) },
+						func: {
+							// extra insurance to make sure this REALLY fades out in time
+							if(BP(\ltf).v[\fxampStream].notNil) {
+								BP(\ltf).fxamp = Env([BP(\ltf).fxampStream.next, 0], #[10])
+							};
+						},
 						clearDoneSignal: { BP(\ltf).stop }
 					),
 					\cmdSync //,
