@@ -140,13 +140,8 @@
 							dur: 15,
 							clearDoneSignal: {
 								var cmd = ~iterator.findActive(\ttonCmd);
-								cmd.debug("trying to stop ttonCmd - found");
-								if(cmd.respondsTo(\listVars)) { cmd.listVars };
-								cmd.tryPerform(\subIter).tryPerform(\activeCmds).do { |subc|
-									if(subc.respondsTo(\listVars)) { subc.listVars }
-									{ subc.dump }
-								};
-								cmd.stop;
+								if(cmd.notNil) { cmd.stop }
+								{ "could not find \\ttonCmd to stop it".warn };
 								// BP(\tton).stop(0);
 								// 0
 							}
