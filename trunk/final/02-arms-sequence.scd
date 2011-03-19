@@ -186,14 +186,33 @@
 				// 		Pseries(40, Pwrand(#[-1, -2, -3], #[1, 4, 3].normalizeSum, inf), inf)
 				// 	)
 				// ]))
-				root: Pwhile1({ |inval, next| next >= 21 },
-					Pseries(
-						26,
-						Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf)
-							* sign(Pkey(\ymax) - Pkey(\prevymax)),
-						inf
-					)
-				)
+				// root: Pwhile1({ |inval, next| next >= 21 },
+				// 	Pseries(
+				// 		26,
+				// 		Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf)
+				// 			* sign(Pkey(\ymax) - Pkey(\prevymax)),
+				// 		inf
+				// 	)
+				// )
+				// previous version, was possible to stop very early
+				// if sign() was negative at the start
+				// now, don't consider stop condition until an upper threshold is reached
+				root: Prout({ |inval|
+					var	x = 26,
+						incrStream = (Pwrand(#[1, 2, 3], #[1, 4, 3].normalizeSum, inf)
+							* sign(Pkey(\ymax) - Pkey(\prevymax))).asStream,
+						dontStopYet = true;
+					while { dontStopYet or: { x >= 21 } } {
+						inval = x.yield;
+						x = x + incrStream.next(inval);  // inval needed for Pkey
+						if(dontStopYet) {
+							case
+								{ x > 35 } { dontStopYet = false }
+								// hover around the low bound but don't stay in the same place
+								{ x < 21 } { x = x - incrStream.next(inval) };
+						};
+					};
+				})
 			));
 			VC(\ac) => BP(\stack);
 			0 => BP(\stack);
@@ -211,7 +230,7 @@
 		seqPattern: {
 			Pn((
 				sequence: [
-					{ BP(\di).setStartTime(10, 31); 0 },
+					{ BP(\di).setStartTime(10, 27); 0 },
 					bpCmd: Library.at(\diparms),
 					bpCmd: (id: \stack, name: \stack)
 				],
