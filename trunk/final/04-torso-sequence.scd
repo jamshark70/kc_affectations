@@ -142,7 +142,7 @@
 								var cmd = ~iterator.findActive(\ttonCmd);
 								if(cmd.notNil) { cmd.stop }
 								{ "could not find \\ttonCmd to stop it".warn };
-								// BP(\tton).stop(0);
+								BP(\tton).stop(0);
 								// 0
 							}
 						),
@@ -172,6 +172,7 @@
 					.notNil) {
 						cmd.stop;
 					};
+					BP(\tton).stop(0);  // just in case...
 				},
 				dur: \trigger,  // or \sync
 				id: 2020,  // trig id
