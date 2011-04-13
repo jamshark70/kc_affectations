@@ -982,7 +982,7 @@
 				sequence: [
 					{
 						BP.keys.do { |bpk|
-							if(#[di, segTrig, evTrig].includes(bpk).not) { BP(bpk).stop(0) };
+							if(#[di, segTrig, evTrig, osclog].includes(bpk).not) { BP(bpk).stop(0) };
 						};
 						0
 					}
