@@ -1180,6 +1180,8 @@ Proto {
 // filename: "arms/hands-1_data2.wav",
 filename: "vizdata/Affectations_KC1-VelMod.wav",
 playTestFile: false,
+numCh: 12,
+outCh: 28,
 readFrame: 0,
 frameRate: 30,
 showViz: true,
@@ -1187,8 +1189,8 @@ make: { |name|
 	BP(name).free;
 	PR(\dataIn).chuck(BP(name), nil, (
 		alwaysReset: true,
-		numCh: 12,
-		outCh: 28,
+		numCh: ~numCh ? 12,
+		outCh: ~outCh ? 28,
 		bus: ~bus,
 		recvBus: ~recvBus,
 		path: topEnvironment[\sampleDir] +/+ ~filename,
