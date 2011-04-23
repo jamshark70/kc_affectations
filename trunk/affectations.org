@@ -1,8 +1,9 @@
 #+STARTUP: hidestars
 #+DRAWERS: ANNOTATION
 #+OPTIONS: d:nil num:nil toc:nil
+#+EXPORT_SELECT_TAGS: Cues
 
-* Cue list
+* Cue list							       :Cues:
   Segments are in 3rd-level headings (***)
   Event cues in a segment are numbered
 ** Feet
@@ -212,7 +213,7 @@
 **** Musical revisions completed <2011-01-07 Fri>
 **** Gestural recognition driving the whole cue list <2011-02-04 Fri>
 **** Shows start <2011-03-10 Thu>
-** Musical edits [5/5]
+** Musical edits [4/5]
 *** DONE Feet [2/2] <2010-12-05 Sun>
 **** DONE Distinguish locomotive themes?
 ***** Stephen: S-curve
@@ -319,7 +320,21 @@
 
 **** DONE New material for slower movements toward end: reuse some of the face dance stuff
 *** DONE Torso <2010-12-26 Sun>
-*** DONE Body [1/1] <2011-01-04 Tue>
+*** TODO Body [1/2] <2011-01-04 Tue>
+**** TODO New contrasting material
+***** Timing table
+| cue                       | time    | notes                                     |
+|---------------------------+---------+-------------------------------------------|
+| touch                     | 0:00    |                                           |
+| bass                      | 0:26    | WAY early                                 |
+| would like 1st chord here | c. 1:50 |                                           |
+| 1st chord is really here  | 2:15    |                                           |
+| foreshadowing             | c. 3:25 |                                           |
+| foreshadowing             | c. 4:25 |                                           |
+| starts to get boring      | c. 5:00 |                                           |
+| 2nd chord                 | 5:50    | bass/drums started sooner than I expected |
+| 3rd chord                 | 7:50    |                                           |
+
 **** DONE Recall more cues
 ***** F120-3 inversions
 ***** 3 poses
