@@ -482,7 +482,7 @@ Proto({
 			});
 
 		UserView(parent, ~bigButtonSize@16)
-			.drawFunc_({
+			.drawFunc_(e {
 				Pen.color_(Color.gray(0.3))
 					.fillRect(Rect(0, 7, ~bigButtonSize, 3));
 			})
@@ -523,8 +523,8 @@ Proto({
 				} {
 					flashString.value("WRONG FORMAT", Color.red);
 				};
-			})
-			.tryPerform(\focusLostAction_, { |view| view.doAction })
+			});
+		~ipField.tryPerform(\focusLostAction_, { |view| view.doAction })
 			.tryPerform(\focusGainedAction_, { |view| view.background_(Color.white) });
 
 		if(savedAddr.notNil) {
@@ -547,7 +547,7 @@ Proto({
 			});
 
 		UserView(parent, ~bigButtonSize@16)
-			.drawFunc_({
+			.drawFunc_(e {
 				Pen.color_(Color.gray(0.3))
 					.fillRect(Rect(0, 7, ~bigButtonSize, 3));
 			})
