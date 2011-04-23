@@ -484,8 +484,11 @@
    4. Check out and build sc.
       mkdir ~/share
       cd ~/share
-      git clone git://github.com/jamshark70/sc34-affectations.git sc.git
-      cd sc.git/common
+      git clone --recursive git://supercollider.git.sourceforge.net/gitroot/supercollider/supercollider sc.git
+      cd sc.git
+      git checkout 3.4
+      cd common
+      scons -c
       scons
       sudo scons install
    5. Check out and build sc3-plugins (r444).
