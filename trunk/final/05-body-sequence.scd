@@ -308,6 +308,15 @@ var	fades = {
 		initProcesses: {
 			\chuckIf.eval(Fact(\messyDrums), BP, \md, nil, (master: topEnvironment[\master]));
 			\chuckIf.eval(Fact(\words), BP, \sw, nil, Library.at(\rvbs));
+			BP(\sw).v[\asPattern] = {
+				~basePattern.value.collect({ |ev|
+					if(ev[\synthKey] != \rest) {
+						~getUserArgs.(ev);
+					};
+					~lastEvent = ev;
+					ev
+				});
+			};
 		},
 		unloadProcesses: { BP(#[md, sw]).free },
 		seqPattern: {
@@ -451,6 +460,10 @@ var	fades = {
 		segID: 2580,
 		initProcesses: {
 			\chuckIf.eval(Fact(\lowdrum), BP, \ldr);
+			if(BP(\ldr).v[\origArgPairs].isNil) {
+				BP(\ldr).origArgPairs = BP(\ldr).argPairs;
+			};
+			BP(\ldr).leadTime = 0.01;
 			\chuckIf.eval(Fact(\hidrum), BP, \hdr);
 			\chuckIf.eval(PR(\bassline), BP, \bss);
 			VC(\ac) => BP(\bss);
@@ -468,20 +481,33 @@ var	fades = {
 						shouldSync: false,
 						subIter: TLSequenceIterator([
 							Quant(1),
-							{ thisThread.clock.beatsPerBar = 4; 0 },
+							{
+								thisThread.clock.beatsPerBar = 4;
+								// just for now...
+								BP(\bss).leadTime = 0;
+								0
+							},
 							bpCmd: (name: \bss, dur: 3, quant: 4, prepareBP: { |bp|
 								bp.calcBar = \simpleBassLine;
+								bp.mode = \d;
+								bp.lastMode = \d;
 								bp.densityCtl.value = 1;
 								bp.ampCtl.value = -7.5.dbamp;
 							}),
 							bpCmd: (name: \hdr, quant: 4, shouldSync: false, prepareBP: { |bp|
-								bp.densityCtl.value = 0
+								bp.densityCtl.value = 0;
+								bp.pbindPreAction = \hidrumgen;
+								bp.divCycle = 0.125;
+								bp.rates = 1;
+								bp.def = \bufGrainPanFiltDist;
+								bp.distanceCtl.value = 5;
 							}),
 							gcAutoSynthCmd: (gc: BP(\hdr).ampCtl, name: \ctlEnv, outName: \outbus,
 								env: Env(#[0, 0.5], #[16], 3.5), time: 1, connect: 0),
 							7.75,  // 8; 0 - 9.23
 							bpCmd: (name: \bss, dur: 3, quant: 4),
-							8,  // 16; 9.23 - 18.46
+							7.5,  // 16; 9.23 - 18.46
+							{ BP(\bss).leadTime = 0.2; 0 },
 							bpCmd: (name: \bss, quant: 4, shouldSync: false/*, prepareBP: { |bp|
 								bp.calcBar = \makeBassNotes;
 							}*/),
@@ -508,6 +534,11 @@ var	fades = {
 							8,
 							bpCmd: (name: \ldr, quant: 4, shouldSync: false, prepareBP: { |bp|
 								bp.ampCtl.value = 0.4;
+								bp.argPairs = bp.origArgPairs;
+								bp.pbindPreAction = \lowdrumgen;
+								bp.divCycle = 0.25;
+								bp.playBar = Pseq(#[1, 0], inf).asStream;
+								bp.distanceCtl.value = 5;
 							}),
 							16,  // 48; 36.92 - 55.38
 							{ BP(\bss).calcBar = \makeBassNotes; BP(\bss).densityCtl.value = 0; 8 },
@@ -595,10 +626,16 @@ var	fades = {
 					}
 				}
 			});
+
+			\chuckIf.eval(Fact(\armsChordVC), VC, \ac2, nil, Library.at(\rvbs));
+			\chuckIf.eval(PR(\chordAcc), BP, \ac2);
+			VC(\ac2) => BP(\ac2);
+			4 => BP(\ac2);
+			topEnvironment[\clock52] => BP(\ac2);
 		},
 		unloadProcesses: {
-			BP(#[sus, am0, am1, am2, shivaTrig, tc, op, st]).free;
-			VC(#[am, btp]).free;
+			BP(#[sus, am0, am1, am2, shivaTrig, tc, op, st, ac2]).free;
+			VC(#[am, btp, ac2]).free;
 		},
 		seqPattern: {
 			Pn((
@@ -619,7 +656,7 @@ var	fades = {
 						shouldSync: false,
 						id: \sus1sub,
 						subIter: TLSequenceIterator([
-							Quant(8, -0.25),
+							Quant(8, -0.5),
 							{
 								BP(\bss).ampCtl.value = -7.5.dbamp;
 								BP(\hdr).ampCtl.value = 0.5;
@@ -656,7 +693,7 @@ var	fades = {
 							8,  // 8; 0 - 9.23
 							gcAutoSynthCmd: (gc: BP(\bss).densityCtl, name: \ctlPoint, outName: \outbus,
 								value: 4, time: 24),
-							24,  // 32; 9.23 - 36.923
+							16,  // 32; 9.23 - 36.923
 
 // shiva recall
 							{	var bp = BP(\shivaTrig);
@@ -725,12 +762,12 @@ var	fades = {
 								id: \bel,
 								// shouldSync: false,
 								cmds: [
+									Quant(1),
 									bpCmd: (name: \bel, prepareBP: { |bp|
 										bp.makeStreamForKey(\delta);
 										bp.reset;
 									}),
 									\cmdSync,
-									Quant(1),
 									{ rrand(4, 15) }
 								]
 							),
@@ -768,19 +805,155 @@ var	fades = {
 								]
 							),
 
-							0.1 + 12,  // 60; 55.38 - 69.23
-							4,  // 64; 55.38 - 73.84
-
-							8,  // 72; 73.84 - 83.07
-
-							
-							8,
+							0.1 + 4,  // 60; 55.38 - 69.23
 
 							// 88; - 101.5 (+18)
 							
 							bpCmd: (name: \sw, shouldSync: false, quant: 4, prepareBP: { |bp|
 								bp.isFading = false;
 							}),
+
+							31.5,  // need to be half-beat before barline
+
+							// faster stuff
+							funcCmd: (func: {
+								var	cmd;
+								#[shivaTrig, bel, stretchSteps].do { |key|
+									if((cmd = ~iterator.findActive(key)).notNil) {
+										cmd.stop
+									} {
+										"Could not find % loopCmd to stop it".format(cmd).warn;
+									};
+								};
+								BP(\sw).stop(0);
+							}),
+							{
+								var bp;
+								bp = BP(\ldr);
+								bp.pbindPreAction = \ldrFasterGen;
+								// bp.densityCtl.value = 1;
+								bp.divCycle = 0.125;
+								bp.argPairs = [
+									numPoly: Pwhite(1, 4, inf),
+									freq: Pif(Pkey(\amp) >= 1,
+										40.midicps * Pif(Pfunc({ ~clock.beatInBar == 0 }), 1, Pwhite(2, 9, inf).degreeToKey(#[0, 2, 3, 5, 7, 9, 10], 12).midiratio),
+										50.midicps
+										* Pn(Pseries(0, Pwrand(#[1, 2, 3], #[0.2, 0.5, 0.3], inf), Pkey(\numPoly).asStream)
+											.degreeToKey(#[0, 2, 4, 5, 7, 9, 11], 12).midiratio.clump(Pkey(\numPoly)), inf)
+									) * Pfunc({
+										if(BP.exists(\bss).not or: { BP(\bss).v[\lastMode].isNil }) {
+											1
+										} {
+											// crap, most of the contrasting modes are 0-transposed
+											// so root is always 0 despite pitch class content
+											// dodgy workaround in 3... 2... 1...
+											(BP(\bss).lastMode.asString
+												.reject(_.isDecDigit).asSymbol.asMode
+												.root - 2
+											).midiratio
+										}
+									}),
+									freqenv: Pif(Pkey(\amp) >= 1, Pfunc({ ~slideEnv }), Pwrand([`(Env.one), Pfuncn({ Env([1, rrand(1.25, 1.5)], #[0.05], 6) })], #[0.8, 0.2], inf)),
+									preamp: 4.23,
+									distance: Plazy({ Pn(~distanceCtl.asMap, inf) }),
+									ampMap: Plazy({ Pn(~ampCtl.asMap, inf) })
+								];
+
+								bp = BP(\hdr);
+								bp.pbindPreAction = \hidrumrollgen;
+								bp.densityCtl.value = 2;
+								bp.runProbCtl.value = 0.05;
+								bp.rollProbCtl.value = 0.05;
+								bp.divCycle = 1/16;  // 64ths
+								bp.usedKeys = #[bufs, pans, def, times];
+
+								bp = BP(\bss);
+								bp.calcBar = \fasterBassNotes;
+								bp.mode = Pclutch(Pfunc({ ~contrastingModes.choose }),
+									Pdiff(Pkey(\barCount)) > 0)
+									.collect { |mode| ~lastMode = mode };
+								bp.densityCtl.value = 1;
+								bp.mod_lev = Pkey(\gate).linexp(0.1, 0.8, 2.2, 5.3);
+
+								0
+							},
+
+							16,
+							{
+								PR(\gcAutoSynthCmd).copy.putAll((
+									gc: BP(\hdr).densityCtl, name: \ctlPoint, outName: \outbus,
+									value: 10.1, time: 24 / thisThread.clock.tempo
+								))
+							},
+							{
+								BP(\hdr).rollProbCtl.value = 0.25;
+								PR(\gcAutoSynthCmd).copy.putAll((
+									gc: BP(\hdr).runProbCtl, name: \ctlPoint, outName: \outbus,
+									value: 0.6, time: 24 / thisThread.clock.tempo
+								))
+							},
+							{
+								PR(\gcAutoSynthCmd).copy.putAll((
+									gc: BP(\bss).densityCtl, name: \ctlPoint, outName: \outbus,
+									value: 4.1, time: 24 / thisThread.clock.tempo
+								))
+							},
+							\cmdSync,
+
+							{
+								BP(\ldr).pbindPreAction = \ldrAccents;
+								BP(\ldr).divCycle = 0.125;
+								BP(\hdr).pbindPreAction = \hdrAccents;
+								BP(\hdr).usedKeys = #[bufs, pans, def, times, rates];
+								BP(\hdr).divCycle = 0.125;
+								BP(\bss).calcBar = \singleBassNotes;
+								0
+							},
+							bpCmd: (name: \sw, quant: #[4, -0.15], prepareBP: { |bp|
+// var bp = BP(\sw);
+								bp.pfreq = (Paccumbounce(39, 50,
+									Pwrand(#[-2, -1, 1, 2], #[0.2, 0.2, 0.3, 0.3], inf), inf)
+									-.x Pseries(0, Pwhite(1, 4, 3))
+								).clump(3)
+								.collect { |deg, ev| Mode(ev[\mode]).cps(deg) };
+								bp.pitchedmode = Pfunc({ BP(\bss).v[\lastMode] ? \d });
+								bp.synth = \pitched;
+								bp.pitcheddelta = PnNilSafe(Plazy({
+									var	d = BP(\bss).durs;
+									if(d.isEmpty) {
+										Pn(4, 1)
+									} {
+										Pdelta(Pseq(d ++ #[4], 1), 4)
+									}
+								}), inf);
+								bp.pitchedtime = Pexprand(0.6, 1.0, inf);
+								bp.preamp = 9;
+								bp.pitchednormAmp = 5;
+								bp.isFading = false;
+								bp.pitchedprotoEvent = PnNilSafe(Plazy({
+									Pif(
+										Pseq(BP(\bss).freqs).collect { |f| f.isNumber },
+										\polySynthBusLockData, \dummy
+									)
+								}), inf);
+							}),
+							bpCmd: (name: \ac2, quant: 4, prepareBP: { |bp|
+								bp.mod_lev = Pexprand(4.5, 7.0, inf);
+								bp.amp = Plazy({ Env(#[0.16, 0.3], #[32]) });  // be sure it's treated as a pattern
+								bp.distance = Plazy({ Env(#[12, 20], #[32]) });
+								bp.glrvbamtCtl.value = 0.15;
+							}),
+							gcAutoSynthCmd: (gc: BP(\ac2).glrvbamtCtl, name: \ctlEnv, outName: \outbus,
+								env: Env(#[0.15, 0.67], #[32]), connect: 0),
+							gcAutoSynthCmd: (gc: BP(\ldr).distanceCtl, name: \ctlPoint, outName: \outbus,
+								value: 18.5, time: 32 * 60/52),
+							gcAutoSynthCmd: (gc: BP(\hdr).distanceCtl, name: \ctlPoint, outName: \outbus,
+								value: 12.5, time: 32 * 60/52),
+							{
+								BP(\ldr).argPairs = BP(\ldr).argPairs.copy
+								.put(5, Pif(Pkey(\amp) >= 1, Pfunc({ ~slideEnv }), Pwrand([`(Env.one), Pfuncn({ Env([1, rrand(1.25, 1.5)], #[0.05], 6) })], #[0.95, 0.05], inf)));
+								0
+							},
 
 							10000
 
@@ -900,16 +1073,39 @@ var	fades = {
 						shouldSync: false,
 						id: \sus2sub,
 						subIter: TLSequenceIterator([
-							Quant(8, -0.25),
+							{	var q = Quant(8, -0.25).asTLItem;
+								if(q <= 4) { q = q + 8 };
+								q
+							},
 							{
 								BP(\hdr).densityCtl.value = 12;
 								BP(\hdr).ampCtl.value = 0.5;
+								BP(\hdr).pbindPreAction = \hidrumgen;
+								BP(\hdr).divCycle = 0.125;
+								BP(\hdr).usedKeys = #[bufs, pans];
+								BP(\hdr).rates = 1;
+								BP(\hdr).rollProbCtl.value = 0.1;
+								BP(\hdr).def = {
+									#[bufGrainPanFiltDist, bufRollPanDist].wchoose(#[0.88, 0.12])
+								} ! 20;
+								BP(\hdr).distanceCtl.value = 5;
+
 								BP(\bss).densityCtl.value = 5;
 								BP(\bss).ampCtl.value = -7.5.dbamp;
-								BP(\ldr).ampCtl.value = 0.4;
+								BP(\bss).calcBar = \makeBassNotes;
+								BP(\bss).mode = \d;
+								BP(\bss).lastMode = \d;
+								BP(\bss).mod_lev = Pkey(\gate).linexp(0.1, 0.8, 2.2, 5.3);
+
+								BP(\ldr).ampCtl.value = 0.5;
+								BP(\ldr).pbindPreAction = \lowdrumgen;
+								BP(\ldr).divCycle = 0.25;
+								BP(\ldr).argPairs = BP(\ldr).origArgPairs;
+								BP(\ldr).playBar = 1;
+								BP(\ldr).distanceCtl.value = 5;
 								0
 							},
-							bpCmd: (name: #[bss, hdr, ldr], shouldSync: false,
+							bpCmd: (name: #[bss, hdr, ldr], quant: 4, shouldSync: false,
 								playWarning: false,
 								prepareBP: { |bp| bp.reset }
 							),
@@ -989,7 +1185,10 @@ var	fades = {
 								numEv: Pwhite(5, 11, inf).asStream,
 								deltaBase: Pwrand(#[0.5, 1, 1.5, 2],
 									#[1, 3, 1, 2.5].normalizeSum, inf),
-								setDoneSignal: { BP(\shivaTrig).isFading = false },
+								setDoneSignal: {
+									BP(\shivaTrig).printStopMsg = true;
+									BP(\shivaTrig).isFading = false
+								},
 								cmds: [
 									{ rrand(4, 10) },
 									{	var db = ~deltaBase, numEv = ~numEv;

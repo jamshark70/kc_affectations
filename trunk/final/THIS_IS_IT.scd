@@ -13,9 +13,10 @@ var	mypath = thisProcess.nowExecutingPath, indices;
 if(BP.exists(\transports)) { BP(\transports).free };
 
 value {
-	var p = Pipe("hostname", "r"), l;
+	var p, l;
 	Library.at(\isJamesBox) ?? {
 		try {
+			p = Pipe("hostname", "r");
 			if(p.isOpen) {
 				l = p.getLine;
 				if(l.notNil) { Library.put(\isJamesBox, l.contains("dlm")) }
@@ -152,7 +153,7 @@ s.waitForBoot {
 	(mypath.dirname +/+ "[0-9]*.scd").pathMatch.sort
 	.do { |path|
 		var	result = path.loadPath;
-		if(result.isNil) { Error("Section % failed to load".format(path.basename)).throw };
+		if(result.debug("loadpath result").isNil) { Error("Section % failed to load".format(path.basename)).throw };
 		indices = indices.add(~sections.size);
 		~sections = ~sections ++ result;
 	};

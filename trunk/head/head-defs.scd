@@ -2688,11 +2688,14 @@ make: { |name|
 
 
 // words
+// I need rests... instrument: \rest will still generate LPC synth, not good, so...
+ProtoEvent.composite(#[polySynthBusLockData, dummy]) => ProtoEvent(\words);
+
 (keys: #[master, glrvbmc, lcrvbmc],
 make: { |name|
 	BP(name).free;
 	PR(\basicSynthChooser).chuck(BP(name), nil, (
-		event: (eventKey: \polySynthBusLockData,
+		event: (eventKey: \words,
 			vizKeys: Library.at(\defaultVizKeys).copy
 				.put(1, { BP(~collIndex).keyLookup[~synthKey] })
 				.put(3, { ~freq1.asArray[0].tryPerform(\explin, 20, 20000, -1.0, 1.0) })
@@ -2811,6 +2814,7 @@ make: { |name|
 			\decay, BPStream(\lpcDcy),
 			\wet, Plazy({ Pn(~wetCtl.asMap, inf) })
 		),
+		syncdelta: 1,
 	
 		objects: (
 			noisy: (
@@ -2827,6 +2831,7 @@ make: { |name|
 					amp2: Pkey(\amp1),
 					normAmp: Plazy({ ~normAmpCtl.asPattern * 7.dbamp }), // BPStream(\amp),
 					env: Pfunc({ ~noiseenv }),
+					protoEvent: \polySynthBusLockData,
 					lpcEv: BPStream(\lpcEv) <> Pfunc({ |ev| ~sanitizeEvent.(ev) })
 				]
 			),
@@ -2856,6 +2861,7 @@ make: { |name|
 					normAmp: Plazy({ ~normAmpCtl.asPattern * 17.dbamp }), // BPStream(\amp),
 					beats: Pkey(\freq1).explin(50, 1200, 1.8, 3.6),
 					env: Pfunc({ ~noiseenv }),
+					protoEvent: \polySynthBusLockData,
 					lpcEv: BPStream(\lpcEv) <> Pfunc({ |ev| ~sanitizeEvent.(ev) })
 				]
 			)
