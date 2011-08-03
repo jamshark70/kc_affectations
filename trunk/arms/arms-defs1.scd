@@ -2529,7 +2529,11 @@ PR(\abstractProcess).clone {
 	~mode = \g0;
 	~yx = Pfunc({ BP(~trigKey).median.clip(0, 12) });
 	~attackTimeScale = Pif(Pkey(\newesp), 0.1, 1);
-	~decayTimeScale = Pkey(\freq).linlin(19, 53, 1, 3.5);
+	~decayTimeScale = Pif(
+		Pfunc({ |ev| ev[\freq] != #[] }),
+		Pkey(\freq).linlin(19, 53, 1, 3.5),
+		1
+	);
 	// ~randomizer = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, 5));
 	// ~base = Pif(Pkey(\newesp), 0, Pkey(\yx).linlin(0, 12, 0, Pfunc({ |ev| ev[\degrees].size - 6 })));
 	~randomizer = Pkey(\yx).linlin(0, 12, 0, 5);
